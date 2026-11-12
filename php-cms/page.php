@@ -81,7 +81,7 @@ require_once __DIR__ . '/includes/header.php';
   <article class="card">
     <small style="color:var(--text-muted);"><?= e($page['subtitle']) ?> · Updated <?= e($page['updated_at']) ?></small>
     <h1 style="font-family:'Playfair Display',serif;margin-top:0.25rem;"><?= e($page['title']) ?></h1>
-    <div><?= $page['content_html'] ?></div>
+    <div class="cms-prose"><?= $page['content_html'] ?></div>
 
     <?php if (!empty($page['attached_pdf_url'])): ?>
       <div class="card" style="margin-top:1.5rem;background:var(--surface-bg);">

@@ -1406,7 +1406,7 @@ export function AdminDashboard({
                   notify('err', (err as Error).message);
                 }
               }}
-              className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4"
+              className="xl:col-span-8 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4"
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold">
@@ -1570,7 +1570,7 @@ export function AdminDashboard({
               </div>
             </form>
 
-            <div className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="xl:col-span-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 font-bold text-sm">
                 {pageFilterCat === 'all'
                   ? `All Micro-Pages (${state.pages.length})`

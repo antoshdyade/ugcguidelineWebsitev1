@@ -141,21 +141,26 @@ export function createSeedDatabase(): CmsDatabase {
         subtitle: 'UGC Section 5(a) · Vision, Mission & Heritage since 1998',
         contentHtml: `
           <h2>Institutional Profile</h2>
-          <p><strong>Shri Vithal College of Engineering &amp; Research (SVCOER)</strong>, Pandharpur is an Autonomous Engineering Institute established in 1998 under the Shri Vithal Education &amp; Research Trust. Inspired by academic rigor and rural-to-global technological empowerment, the institute offers AICTE-approved Undergraduate (B.Tech), Postgraduate (M.Tech, MBA, MCA), and Doctoral (Ph.D.) programs.</p>
-          <table>
+          <p><strong>SVERI&rsquo;s College of Engineering, Pandharpur (Autonomous)</strong> is a premier engineering institute established in <strong>1998</strong> under <strong>Shri Vitthal Education &amp; Research Institute (SVERI)</strong>. Conferred <strong>UGC Autonomous Status from Academic Year 2024&ndash;25</strong> and affiliated to <strong>Punyashlok Ahilyadevi Holkar Solapur University, Solapur</strong>, the institute offers AICTE-approved Undergraduate (B.Tech), Postgraduate (M.Tech, MBA, MCA), and Doctoral (Ph.D.) programs.</p>
+          <table class="cms-table cms-table-navy">
             <thead><tr><th>Particulars</th><th>Institutional Record</th></tr></thead>
             <tbody>
-              <tr><td>Name of Institution</td><td>Shri Vithal College of Engineering &amp; Research (Autonomous)</td></tr>
-              <tr><td>Year of Establishment</td><td>1998 (Autonomous Status Conferred by UGC in 2021)</td></tr>
+              <tr><td>Name of Institution</td><td>SVERI&rsquo;s College of Engineering, Pandharpur (Autonomous)</td></tr>
+              <tr><td>Sponsoring Trust</td><td>Shri Vitthal Education &amp; Research Institute (SVERI)</td></tr>
+              <tr><td>Year of Establishment</td><td>1998 (Autonomous Status effective AY 2024&ndash;25)</td></tr>
               <tr><td>Affiliating University</td><td>Punyashlok Ahilyadevi Holkar Solapur University, Solapur</td></tr>
-              <tr><td>AISHE Code</td><td>C-15892</td></tr>
-              <tr><td>NAAC Accreditation</td><td>Grade 'A+' (CGPA 3.42 / 4.00, Cycle 2)</td></tr>
-              <tr><td>Campus Area</td><td>25.4 Acres (Barrier-free green campus)</td></tr>
+              <tr><td>DTE Institute Code</td><td>06220 (Maharashtra State CET Cell)</td></tr>
+              <tr><td>NAAC Accreditation</td><td>Grade &lsquo;A+&rsquo; (CGPA 3.46 / 4.00)</td></tr>
+              <tr><td>Contact &amp; Address</td><td>Gopalpur-Ranjani Road, P.B. No. 54, Gopalpur, Pandharpur &ndash; 413304 · +91-02186-216063</td></tr>
             </tbody>
           </table>
           <h3>Vision &amp; Mission</h3>
-          <p><strong>Vision:</strong> To be recognized among the premier engineering institutions fostering ethically grounded, industry-ready technologists and researchers.</p>
-          <p><strong>Mission:</strong> Impart outcome-based technical education, nurture interdisciplinary research and entrepreneurship, and uphold complete institutional transparency in alignment with NEP 2020.</p>
+          <p><strong>Vision:</strong> To be nationally recognized among the best institutes in India for excellence in technical education.</p>
+          <ul>
+            <li>To impart value-based technical education through innovation and excellence, empowering individuals to become leaders in their fields to create a positive impact.</li>
+            <li>To create an ambiance of academic excellence, research, and life skills by fostering a learning environment that empowers individuals to achieve their full potential.</li>
+            <li>To foster strong relationships amongst all stakeholders by inculcating a personal touch and mutual respect in all interactions.</li>
+          </ul>
         `,
         attachedPdfUrl: UGC_PDF_URL,
         attachedPdfLabel: 'UGC Guidelines on Public Self-Disclosure (NEP 2020)',
@@ -241,10 +246,10 @@ export function createSeedDatabase(): CmsDatabase {
           <table>
             <thead><tr><th>Agency</th><th>Program / Scope</th><th>Status / Grade</th><th>Validity Period</th></tr></thead>
             <tbody>
-              <tr><td>NAAC</td><td>Institutional (Cycle 2)</td><td>A+ Grade (CGPA 3.42)</td><td>2023 – 2028</td></tr>
-              <tr><td>NBA</td><td>B.Tech CSE, Mechanical, Civil, E&amp;TC</td><td>Accredited (Tier-II)</td><td>2024 – 2027</td></tr>
-              <tr><td>NIRF</td><td>Engineering Category</td><td>Rank Band 151–200</td><td>2026 Cycle</td></tr>
-              <tr><td>ISO 9001:2015</td><td>Academic &amp; Administrative QMS</td><td>Certified</td><td>Active</td></tr>
+              <tr><td>NAAC</td><td>Institutional Accreditation</td><td>A+ Grade (CGPA 3.46 / 4.00)</td><td>Active</td></tr>
+              <tr><td>NBA</td><td>Core B.Tech Engineering Programs</td><td>Accredited</td><td>Active</td></tr>
+              <tr><td>NIRF</td><td>Engineering Category</td><td>Ranked (151–200 Band)</td><td>Active</td></tr>
+              <tr><td>UGC Autonomy</td><td>Autonomous Institute (PAHSUS Solapur)</td><td>Conferred from AY 2024–25</td><td>Active</td></tr>
             </tbody>
           </table>
         `,
@@ -261,11 +266,11 @@ export function createSeedDatabase(): CmsDatabase {
         subtitle: 'UGC Section 5(a) · Statutory Extensions of Approval',
         contentHtml: `
           <h2>Regulatory Approvals</h2>
-          <p>SVCOER holds continuous statutory approvals from all apex regulatory bodies:</p>
+          <p>SVERI&rsquo;s College of Engineering, Pandharpur holds continuous statutory approvals from all apex regulatory bodies:</p>
           <ul>
-            <li><strong>UGC 2(f) &amp; 12(B):</strong> Included under Section 2(f) and 12(B) of the UGC Act, 1956 (Ref: F.8-112/2018-CPP-I/C).</li>
-            <li><strong>AICTE Approval:</strong> Extension of Approval (EoA) for Academic Year 2026–27 (Permanent ID: 1-49281724).</li>
-            <li><strong>Government of Maharashtra &amp; DTE:</strong> Institute Code EN-6220.</li>
+            <li><strong>UGC 2(f), 12(B) &amp; Autonomous Status:</strong> Conferred Autonomous Status effective from AY 2024&ndash;25 under Punyashlok Ahilyadevi Holkar Solapur University, Solapur.</li>
+            <li><strong>AICTE Approval:</strong> Approved by All India Council for Technical Education (AICTE), New Delhi (Permanent ID: 1-49281724).</li>
+            <li><strong>Government of Maharashtra &amp; DTE:</strong> DTE Institute Code <strong>06220</strong>.</li>
           </ul>
         `,
         isPublished: true,
@@ -326,11 +331,11 @@ export function createSeedDatabase(): CmsDatabase {
         categorySlug: 'about-hei',
         slug: 'sponsoring-body',
         title: 'Sponsoring Body Details',
-        subtitle: 'UGC Section 5(a) · Shri Vithal Education & Research Trust',
+        subtitle: 'UGC Section 5(a) · Shri Vitthal Education & Research Institute (SVERI)',
         contentHtml: `
-          <h2>Shri Vithal Education &amp; Research Trust (SVERT)</h2>
-          <p>Established in 1994 as a non-profit charitable educational trust registered under the Bombay Public Trusts Act, 1950 (Reg. No. E-1042/Solapur) and Societies Registration Act, 1860, SVERT is dedicated to delivering accessible, high-calibre engineering and management education.</p>
-          <p><strong>Registered Office:</strong> Gopalpur-Ranjani Road, Pandharpur, Dist. Solapur – 413304, Maharashtra.</p>
+          <h2>Shri Vitthal Education &amp; Research Institute (SVERI)</h2>
+          <p>Established as a charitable educational trust, <strong>Shri Vitthal Education &amp; Research Institute (SVERI)</strong> founded its flagship Engineering College in 1998 to deliver accessible, high-calibre technical and management education rooted in innovation and ethics.</p>
+          <p><strong>Registered Office:</strong> Gopalpur-Ranjani Road, P.B. No. 54, Gopalpur, Pandharpur &ndash; 413304, Dist. Solapur, Maharashtra · Tel: +91-02186-216063.</p>
         `,
         isPublished: true,
         sortOrder: 9,
@@ -414,15 +419,18 @@ export function createSeedDatabase(): CmsDatabase {
         subtitle: 'UGC Section 5(c) · Sanctioned Intake, Duration & NEP 2020 Honours Tracks',
         contentHtml: `
           <h2>Academic Programs Offered (AY 2026–27)</h2>
-          <table>
-            <thead><tr><th>Program Level</th><th>Discipline</th><th>Duration</th><th>Sanctioned Intake</th><th>Accreditation</th></tr></thead>
+          <table class="cms-table cms-table-navy">
+            <thead><tr><th>Program Level</th><th>Discipline</th><th>Duration</th><th>Sanctioned Intake</th><th>Accreditation / Recognition</th></tr></thead>
             <tbody>
-              <tr><td>B.Tech</td><td>Computer Science &amp; Engineering</td><td>4 Years</td><td>180</td><td>NBA Accredited</td></tr>
+              <tr><td>B.Tech</td><td>Computer Science &amp; Engineering (CSE)</td><td>4 Years</td><td>180</td><td>NBA Accredited</td></tr>
+              <tr><td>B.Tech</td><td>Electronics &amp; Telecommunication Engg. (E&amp;TC)</td><td>4 Years</td><td>120</td><td>NBA Accredited</td></tr>
               <tr><td>B.Tech</td><td>Mechanical Engineering</td><td>4 Years</td><td>120</td><td>NBA Accredited</td></tr>
-              <tr><td>B.Tech</td><td>Civil Engineering</td><td>4 Years</td><td>60</td><td>NBA Accredited</td></tr>
-              <tr><td>B.Tech</td><td>Electronics &amp; Telecommunication Engg.</td><td>4 Years</td><td>120</td><td>NBA Accredited</td></tr>
-              <tr><td>M.Tech</td><td>CSE / Structural / Design Engg.</td><td>2 Years</td><td>54</td><td>AICTE Approved</td></tr>
-              <tr><td>Ph.D.</td><td>Engineering &amp; Technology Research Centre</td><td>3–5 Years</td><td>As per PAHSUS</td><td>Recognized Centre</td></tr>
+              <tr><td>B.Tech</td><td>Civil Engineering</td><td>4 Years</td><td>120</td><td>NBA Accredited</td></tr>
+              <tr><td>B.Tech</td><td>Electrical Engineering</td><td>4 Years</td><td>60</td><td>AICTE Approved</td></tr>
+              <tr><td>B.Tech</td><td>Electronics &amp; Computer Engineering</td><td>4 Years</td><td>60</td><td>AICTE Approved</td></tr>
+              <tr><td>M.Tech</td><td>CSE / Structural / Design / E&amp;TC Engg.</td><td>2 Years</td><td>54</td><td>AICTE Approved</td></tr>
+              <tr><td>MBA / MCA</td><td>Master of Business Administration &amp; Computer Applications</td><td>2 Years</td><td>60 + 60</td><td>AICTE Approved</td></tr>
+              <tr><td>Ph.D. Centres</td><td>CSE, E&amp;TC, Mechanical Design &amp; Civil Engineering</td><td>3–5 Years</td><td>As per PAHSUS</td><td>Recognized Research Centres</td></tr>
             </tbody>
           </table>
         `,
@@ -564,9 +572,9 @@ export function createSeedDatabase(): CmsDatabase {
           <table>
             <thead><tr><th>Role / Designation</th><th>Officer Name</th><th>Contact &amp; Desk</th></tr></thead>
             <tbody>
-              <tr><td>Controller of Examinations (CoE)</td><td>Dr. M. S. Kumbhar</td><td>coe@svcoer.edu.in · +91 2186 225085 (Ext. 112)</td></tr>
-              <tr><td>Deputy CoE (Confidential &amp; Question Bank)</td><td>Prof. R. S. Bhosale</td><td>exam.cell@svcoer.edu.in · Ext. 113</td></tr>
-              <tr><td>Assistant CoE (ABC / DigiLocker NAD &amp; Results)</td><td>Prof. S. A. More</td><td>abc.nad@svcoer.edu.in · Ext. 114</td></tr>
+              <tr><td>Controller of Examinations (CoE)</td><td>Dr. M. S. Kumbhar</td><td>coe@coe.sveri.ac.in · +91-02186-216063 (Ext. 112)</td></tr>
+              <tr><td>Deputy CoE (Confidential &amp; Question Bank)</td><td>Prof. R. S. Bhosale</td><td>exam.cell@coe.sveri.ac.in · Ext. 113</td></tr>
+              <tr><td>Assistant CoE (ABC / DigiLocker NAD &amp; Results)</td><td>Prof. S. A. More</td><td>abc.nad@coe.sveri.ac.in · Ext. 114</td></tr>
             </tbody>
           </table>
           <h3>Key Commitments</h3>
@@ -723,9 +731,9 @@ export function createSeedDatabase(): CmsDatabase {
           <h2>Admission Procedure</h2>
           <p>Admissions to First Year B.Tech and Direct Second Year (Lateral Entry) are conducted transparently through the Centralized Admission Process (CAP) of the State CET Cell, Government of Maharashtra, based on MHT-CET / JEE (Main) merit.</p>
           <ul>
-            <li><strong>Step 1:</strong> Register on Maharashtra State CET Cell CAP Portal (DTE Code: EN-6220).</li>
+            <li><strong>Step 1:</strong> Register on Maharashtra State CET Cell CAP Portal (DTE Code: 06220).</li>
             <li><strong>Step 2:</strong> Document Verification at Scrutiny Centre &amp; Option Form submission.</li>
-            <li><strong>Step 3:</strong> Seat Allotment confirmation &amp; reporting at SVCOER Admission Cell with original certificates.</li>
+            <li><strong>Step 3:</strong> Seat Allotment confirmation &amp; reporting at SVERI Admission Cell with original certificates.</li>
           </ul>
         `,
         isPublished: true,
@@ -834,7 +842,8 @@ export function createSeedDatabase(): CmsDatabase {
               <tr><td>Recruiting Companies Visited</td><td>84 Corporates</td><td>76 Corporates</td><td>71 Corporates</td></tr>
             </tbody>
           </table>
-          <p><strong>Key Recruiters:</strong> TCS, Infosys, Persistent Systems, Bosch, Tata Motors, Bharat Forge, L&amp;T Construction, Capgemini, Cognizant, Cummins India.</p>
+          <p>Backed by over <strong>250+ visiting recruiters</strong>, structured Communication Improvement Programs (CIP), and dedicated language laboratories, SVERI prepares students for leading technology and core engineering careers.</p>
+          <p><strong>Key Recruiters:</strong> TCS (Digital &amp; Ninja), Infosys, Accenture, Deloitte, Wipro, Tech Mahindra, Hexaware, Bharat Forge, Mahindra &amp; Mahindra, Atlas Copco.</p>
         `,
         isPublished: true,
         sortOrder: 1,
@@ -951,8 +960,8 @@ export function createSeedDatabase(): CmsDatabase {
           <table>
             <thead><tr><th>Role</th><th>Officer Name &amp; Designation</th><th>Contact Email &amp; Phone</th></tr></thead>
             <tbody>
-              <tr><td>Central / Public Information Officer (PIO)</td><td>Shri S. G. Kulkarni, Registrar</td><td>pio.rti@svcoer.edu.in · +91 2186 225084</td></tr>
-              <tr><td>First Appellate Authority (FAA)</td><td>Dr. B. P. Ronge, Principal</td><td>principal@svcoer.edu.in · +91 2186 225083</td></tr>
+              <tr><td>Central / Public Information Officer (PIO)</td><td>Shri S. G. Kulkarni, Registrar</td><td>pio.rti@coe.sveri.ac.in · +91-02186-216062</td></tr>
+              <tr><td>First Appellate Authority (FAA)</td><td>Dr. B. P. Ronge, Principal</td><td>principal@coe.sveri.ac.in · +91-02186-216063</td></tr>
             </tbody>
           </table>
         `,
@@ -1001,10 +1010,10 @@ export function createSeedDatabase(): CmsDatabase {
         roleTitle: 'Principal & Director',
         name: 'Dr. B. P. Ronge',
         qualification: 'Ph.D. (Mechanical Engg.), M.Tech (IIT)',
-        email: 'principal@svcoer.edu.in',
-        phone: '+91 2186 225083',
+        email: 'principal@coe.sveri.ac.in',
+        phone: '+91-02186-216063',
         photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
-        bio: 'Over 28 years of academic leadership, AICTE/UGC accreditation governance, and rural engineering institution building.',
+        bio: 'Leading SVERI’s College of Engineering, Pandharpur (Autonomous) in academic quality, NAAC A+ accreditation governance, and NEP 2020 institutional transformation.',
         committeeGroup: 'statutory',
         sortOrder: 1,
       },
@@ -1270,13 +1279,13 @@ export function createSeedDatabase(): CmsDatabase {
         name: 'Civil Engineering',
         shortName: 'Civil',
         establishedYear: 2001,
-        intakeCapacity: 60,
-        nbaStatus: 'NBA Accredited (2024–2027)',
+        intakeCapacity: 120,
+        nbaStatus: 'NBA Accredited',
         hodName: 'Dr. Suhas V. Patwardhan',
         hodMessage:
-          'Civil Engineering at SVCOER focuses on climate-resilient infrastructure, GIS surveying, and active regional soil/concrete testing consultancy.',
+          'Civil Engineering at SVERI focuses on climate-resilient infrastructure, GIS surveying, and active regional soil/concrete testing consultancy.',
         overview:
-          'Offering B.Tech Civil Engineering and M.Tech in Structural Engineering with NABL-aligned material testing laboratory serving PWD and municipal bodies.',
+          'Offering B.Tech Civil Engineering (120 intake) and M.Tech in Structural Engineering / Ph.D. Research Centre with NABL-aligned material testing laboratory serving PWD and municipal bodies.',
         vision: 'To engineer resilient, sustainable infrastructure through applied research and field consultancy.',
         mission: 'Train socially responsible civil engineers fluent in BIM, Geomatics, and Structural Safety.',
         heroImageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
@@ -1327,12 +1336,12 @@ export function createSeedDatabase(): CmsDatabase {
         shortName: 'E&TC',
         establishedYear: 1998,
         intakeCapacity: 120,
-        nbaStatus: 'NBA Accredited (2024–2027)',
+        nbaStatus: 'NBA Accredited',
         hodName: 'Dr. Vandana P. Chavan',
         hodMessage:
           'From VLSI chip design and Embedded RTOS to 5G RF systems, our E&TC students build production hardware from semester two.',
         overview:
-          'Equipped with Cadence VLSI tools, Texas Instruments Embedded Systems Centre, and RF Anechoic measurement bench.',
+          'Equipped with Cadence VLSI tools, Texas Instruments Embedded Systems Centre, Ph.D. Research Centre, and RF Anechoic measurement bench.',
         vision: 'To excel in semiconductor design, embedded intelligence, and next-generation communication systems.',
         mission: 'Empower students with hardware-software co-design expertise aligned to India Semiconductor Mission.',
         heroImageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
@@ -1375,6 +1384,140 @@ export function createSeedDatabase(): CmsDatabase {
           },
         ],
       },
+      {
+        id: 5,
+        slug: 'electrical',
+        code: 'ELEC',
+        name: 'Electrical Engineering',
+        shortName: 'Electrical',
+        establishedYear: 2010,
+        intakeCapacity: 60,
+        nbaStatus: 'AICTE Approved',
+        hodName: 'Dr. M. R. Joshi',
+        hodMessage:
+          'Preparing power system, smart grid, and electric vehicle drive engineers with strong laboratory and industrial field exposure.',
+        overview:
+          'Offers B.Tech in Electrical Engineering (60 intake) with dedicated High Voltage, Power Electronics, PLC/SCADA, and Renewable Microgrid laboratories.',
+        vision: 'To build competent electrical engineers driving clean energy transition and industrial automation.',
+        mission: 'Integrate hands-on power systems training with EV powertrain and smart grid research.',
+        heroImageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+        subPages: [
+          {
+            id: 51,
+            departmentId: 5,
+            slug: 'about',
+            title: 'About Department',
+            contentHtml:
+              '<h2>Electrical Engineering Department</h2><p>B.Tech Electrical Engineering (Sanctioned Intake: 60) equips students in power generation, drives, PLC automation, and solar microgrids.</p>',
+            sortOrder: 1,
+            isPublished: true,
+            updatedAt: '2026-09-18',
+          },
+          {
+            id: 52,
+            departmentId: 5,
+            slug: 'syllabus',
+            title: 'Syllabus & Curriculum',
+            contentHtml:
+              '<h2>NEP 2020 Autonomous Syllabus</h2><p>Covers Power Systems, Industrial Drives, EV Battery Management, and SCADA Automation.</p>',
+            sortOrder: 2,
+            isPublished: true,
+            updatedAt: '2026-09-18',
+          },
+        ],
+        faculty: [
+          {
+            id: 1041,
+            departmentId: 5,
+            name: 'Dr. M. R. Joshi',
+            designation: 'Professor & Head of Department',
+            qualification: 'Ph.D. (Electrical Engg.)',
+            specialization: 'Smart Grids & Power Electronics',
+            email: 'hod.elec@svcoer.edu.in',
+            experienceYears: 18,
+            photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+            isHod: true,
+            sortOrder: 1,
+          },
+        ],
+        labs: [
+          {
+            id: 2041,
+            departmentId: 5,
+            name: 'Power Systems & EV Drives Lab',
+            areaSqFt: 1650,
+            equipmentSummary: 'MATLAB Simulink RT, Three-Phase Synchronous Machines, PLC Bench',
+            incharge: 'Dr. M. R. Joshi',
+          },
+        ],
+      },
+      {
+        id: 6,
+        slug: 'electronics-computer',
+        code: 'ECS',
+        name: 'Electronics & Computer Engineering',
+        shortName: 'ECS',
+        establishedYear: 2022,
+        intakeCapacity: 60,
+        nbaStatus: 'AICTE Approved',
+        hodName: 'Prof. P. S. Sawant',
+        hodMessage:
+          'Bridging embedded hardware architecture with modern software engineering, cloud IoT, and edge AI development.',
+        overview:
+          'Offers B.Tech in Electronics & Computer Engineering (60 intake) combining firmware, ARM/RISC-V systems, full-stack software, and edge computing.',
+        vision: 'To develop versatile engineers fluent across silicon-to-cloud system stacks.',
+        mission: 'Deliver project-based interdisciplinary training in Embedded IoT, Linux Kernel, and Cloud APIs.',
+        heroImageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+        subPages: [
+          {
+            id: 61,
+            departmentId: 6,
+            slug: 'about',
+            title: 'About Department',
+            contentHtml:
+              '<h2>Electronics &amp; Computer Engineering</h2><p>B.Tech Electronics &amp; Computer Engineering (Sanctioned Intake: 60) unifies digital electronics, embedded Linux, and enterprise software engineering.</p>',
+            sortOrder: 1,
+            isPublished: true,
+            updatedAt: '2026-09-20',
+          },
+          {
+            id: 62,
+            departmentId: 6,
+            slug: 'syllabus',
+            title: 'Syllabus & Curriculum',
+            contentHtml:
+              '<h2>NEP 2020 Hybrid Curriculum</h2><p>Core courses include Embedded C/RTOS, Computer Architecture, Full-Stack Web Systems, and Edge AI.</p>',
+            sortOrder: 2,
+            isPublished: true,
+            updatedAt: '2026-09-20',
+          },
+        ],
+        faculty: [
+          {
+            id: 1051,
+            departmentId: 6,
+            name: 'Prof. P. S. Sawant',
+            designation: 'Associate Professor & Head of Department',
+            qualification: 'M.Tech (Embedded Systems & CSE)',
+            specialization: 'IoT Edge Computing & Embedded Linux',
+            email: 'hod.ecs@svcoer.edu.in',
+            experienceYears: 14,
+            photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+            isHod: true,
+            sortOrder: 1,
+          },
+        ],
+        labs: [
+          {
+            id: 2051,
+            departmentId: 6,
+            name: 'Embedded Computing & Cloud IoT Lab',
+            areaSqFt: 1300,
+            equipmentSummary: 'ARM Cortex Kits, Raspberry Pi Edge Clusters, Oscilloscopes',
+            incharge: 'Prof. P. S. Sawant',
+          },
+        ],
+      },
     ],
 
     sliders: [
@@ -1382,7 +1525,7 @@ export function createSeedDatabase(): CmsDatabase {
         id: 1,
         title: 'Empowering Engineering Excellence Under NEP 2020',
         caption:
-          'Autonomous Institution · NAAC A+ (CGPA 3.42) · 4 NBA Accredited B.Tech Programs · 100% Transparent UGC Public Self-Disclosure.',
+          'Autonomous Institution (AY 2024–25) · NAAC A+ (CGPA 3.46) · NBA Accredited B.Tech Programs · DTE Code 06220 · UGC Public Self-Disclosure.',
         imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
         ctaLabel: 'Explore Admissions & FRA Fee Structure',
         ctaLink: '/page/prospectus-fee-structure',
@@ -1424,7 +1567,7 @@ export function createSeedDatabase(): CmsDatabase {
       },
       {
         id: 2,
-        text: 'First Year B.Tech & Direct Second Year CAP Admissions 2026–27 Open (DTE Code: EN-6220)',
+        text: 'First Year B.Tech & Direct Second Year CAP Admissions 2026–27 Open (DTE Code: 06220)',
         linkUrl: '/page/admission-process',
         badgeText: 'Admissions',
         isActive: true,
@@ -1662,8 +1805,8 @@ export function createSeedDatabase(): CmsDatabase {
         officerName: 'Dr. B. P. Ronge',
         designation: 'Principal & Director',
         extension: '101',
-        directPhone: '+91 2186 225083',
-        email: 'principal@svcoer.edu.in',
+        directPhone: '+91-02186-216063',
+        email: 'principal@coe.sveri.ac.in',
       },
       {
         id: 2,
@@ -1671,8 +1814,8 @@ export function createSeedDatabase(): CmsDatabase {
         officerName: 'Shri S. G. Kulkarni',
         designation: 'Registrar & PIO',
         extension: '102',
-        directPhone: '+91 2186 225084',
-        email: 'registrar@svcoer.edu.in',
+        directPhone: '+91-02186-216062',
+        email: 'coe@coe.sveri.ac.in',
       },
       {
         id: 3,
@@ -1680,7 +1823,7 @@ export function createSeedDatabase(): CmsDatabase {
         officerName: 'Prof. S. M. Pawar',
         designation: 'Admission Coordinator',
         extension: '108',
-        directPhone: '+91 2186 225090',
+        directPhone: '+91-9545553888',
         email: 'admissions@svcoer.edu.in',
       },
       {
@@ -1689,8 +1832,8 @@ export function createSeedDatabase(): CmsDatabase {
         officerName: 'Dr. M. S. Kumbhar',
         designation: 'Controller of Examinations',
         extension: '112',
-        directPhone: '+91 2186 225085',
-        email: 'coe@svcoer.edu.in',
+        directPhone: '+91-02186-216061',
+        email: 'coe@coe.sveri.ac.in',
       },
       {
         id: 5,
@@ -1795,63 +1938,63 @@ export function createSeedDatabase(): CmsDatabase {
     ],
 
     settings: {
-      trustName: "Shri Vithal Education & Research Trust's",
-      institutionName: "Shri Vithal College of Engineering & Research (Autonomous)",
-      shortCode: 'SVCOER',
+      trustName: 'Shri Vitthal Education & Research Institute (SVERI)',
+      institutionName: "SVERI's College of Engineering, Pandharpur (Autonomous)",
+      shortCode: 'SVERI',
       logoUrl: '',
-      affiliation: 'Affiliated to PAHSUS Solapur · Approved by AICTE · Recognized u/s 2(f) & 12(B) of UGC Act',
+      affiliation: 'Affiliated to PAHSUS Solapur · Approved by AICTE · Autonomous Status (AY 2024–25) · NAAC A+ (3.46)',
       aicteCode: '1-49281724',
-      dteCode: 'EN-6220',
-      address: 'Gopalpur–Ranjani Road, Pandharpur, Dist. Solapur – 413304, Maharashtra, India',
-      phone: '+91 2186 225083',
-      email: 'principal@svcoer.edu.in',
-      emergencyHelpline: '+91 2186 225099',
+      dteCode: '06220',
+      address: 'Gopalpur-Ranjani Road, P.B. No. 54, Gopalpur, Pandharpur – 413304, Dist. Solapur, Maharashtra, India',
+      phone: '+91-02186-216063',
+      email: 'principal@coe.sveri.ac.in',
+      emergencyHelpline: '+91-9545553888',
       antiRaggingHelpline: '1800-180-5522',
       defaultPaletteId: 'royal-navy',
       primaryColor: '#0F294A',
       secondaryColor: '#B45309',
       aboutSummary:
-        'Established in 1998, Shri Vithal College of Engineering & Research (Autonomous) is a premier NEP 2020 engineering campus empowering rural and urban scholars through NAAC A+ accredited programs, funded research labs, and complete UGC public self-disclosure transparency.',
+        "Established in 1998 under Shri Vitthal Education & Research Institute (SVERI), SVERI's College of Engineering, Pandharpur (Autonomous from AY 2024–25) is NAAC A+ (CGPA 3.46) accredited, offers NBA-accredited UG programs alongside MBA, MCA & Ph.D. centres, and upholds complete UGC public self-disclosure transparency.",
       aboutImageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
       visionText:
-        'To emerge as a globally respected autonomous engineering institution driving inclusive technological innovation, academic excellence, and ethical societal transformation under NEP 2020.',
+        'To be nationally recognized among the best institutes in India for excellence in technical education.',
       missionItems: [
-        'Deliver outcome-based engineering education with multidisciplinary minors, research internships, and barrier-free access.',
-        'Foster funded R&D, industrial consultancy, and entrepreneurship incubation addressing regional and national challenges.',
-        'Maintain 100% institutional governance transparency aligned with UGC Public Self-Disclosure norms.',
+        'To impart value-based technical education through innovation and excellence, empowering individuals to become leaders in their fields to create a positive impact.',
+        'To create an ambiance of academic excellence, research, and life skills by fostering a learning environment that empowers individuals to achieve their full potential.',
+        'To foster strong relationships amongst all stakeholders by inculcating a personal touch and mutual respect in all interactions.',
       ],
       highlightsStats: [
         { label: 'Placement Rate', value: '91.1%' },
-        { label: 'Highest Package', value: '18.5 LPA' },
-        { label: 'NAAC Grade', value: 'A+ (3.42)' },
-        { label: 'NBA Accredited', value: '4 Depts' },
+        { label: 'Recruiters', value: '250+' },
+        { label: 'NAAC Grade', value: 'A+ (3.46)' },
+        { label: 'DTE Code', value: '06220' },
         { label: 'Global Alumni', value: '11,500+' },
       ],
       approvedBodies: [
-        { name: 'AICTE New Delhi', url: '/page/recognition-approvals' },
-        { name: 'UGC 2(f) & 12(B)', url: '/page/recognition-approvals' },
-        { name: 'NAAC A+ Accredited', url: '/page/accreditation-ranking' },
+        { name: 'AICTE New Delhi', url: '/page/recognition-approval' },
+        { name: 'UGC Autonomous', url: '/page/recognition-approval' },
+        { name: 'NAAC A+ (3.46)', url: '/page/accreditation-ranking' },
         { name: 'PAHSUS Solapur', url: '/page/affiliating-university' },
-        { name: 'DTE Maharashtra', url: '/page/admission-process' },
+        { name: 'DTE Code 06220', url: '/page/admission-process' },
       ],
       recruiters: [
-        'TCS',
+        'TCS (Digital & Ninja)',
         'Infosys',
-        'Persistent Systems',
-        'Bosch India',
-        'Tata Technologies',
+        'Accenture',
+        'Deloitte',
+        'Wipro',
+        'Tech Mahindra',
+        'Hexaware',
         'Bharat Forge',
-        'L&T Construction',
-        'Capgemini',
-        'Cognizant',
-        'Cummins India',
+        'Mahindra & Mahindra',
+        'Atlas Copco',
       ],
       accreditationHighlights: [
-        'UGC Autonomous Status',
-        'NAAC A+ Accredited (3.42)',
-        'NBA Accredited (4 Programs)',
-        'NIRF Ranked (151–200 Band)',
-        'AICTE Approved · ISO 9001:2015',
+        'Autonomous Status (AY 2024–25)',
+        'NAAC A+ Accredited (CGPA 3.46)',
+        'NBA Accredited Core Programs',
+        'NIRF Ranked · DTE Code 06220',
+        'AICTE Approved · 250+ Recruiters',
       ],
       topBarLinks: [
         { label: 'Quick Links', url: '/quick-links' },

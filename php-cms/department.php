@@ -100,7 +100,7 @@ require_once __DIR__ . '/includes/header.php';
       </table>
     <?php else: ?>
       <h2 style="margin-top:0;"><?= e($activeSubPage['title'] ?? 'About Department') ?></h2>
-      <div><?= $activeSubPage['content_html'] ?? '<p>' . e($dept['overview']) . '</p>' ?></div>
+      <div class="cms-prose"><?= $activeSubPage['content_html'] ?? '<p>' . e($dept['overview']) . '</p>' ?></div>
     <?php endif; ?>
   </section>
 </div>

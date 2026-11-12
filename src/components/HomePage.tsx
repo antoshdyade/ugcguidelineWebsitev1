@@ -454,7 +454,7 @@ export function HomePage({
             </h2>
           </div>
 
-          <div className="rounded-lg p-4 border-l-4 bg-stone-50 dark:bg-slate-800/70" style={{ borderColor: 'var(--secondary-color)' }}>
+          <div className="rounded-lg p-4 border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/40 dark:bg-slate-800/70">
             <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-slate-400 mb-1">
               Our Vision
             </h3>
@@ -627,7 +627,7 @@ export function HomePage({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {departments.map((dept) => (
             <article
               key={dept.id}

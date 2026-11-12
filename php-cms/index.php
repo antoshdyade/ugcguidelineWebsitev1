@@ -158,7 +158,7 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
 <?php if (!empty($hs['showDepartments']) && $depts): ?>
 <section style="margin-top:2rem;">
   <h2 style="font-family:'Playfair Display',serif;"><?= e($hs['departmentsTitle'] ?? 'Academic Department Microsites') ?></h2>
-  <div class="grid-4">
+  <div class="grid-3">
     <?php foreach ($depts as $d): ?>
       <article class="card">
         <small style="color:var(--text-muted);"><?= e($d['code']) ?> · Est. <?= e((string)$d['established_year']) ?> · Intake <?= e((string)$d['intake_capacity']) ?></small>

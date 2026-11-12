@@ -247,32 +247,34 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 INSERT INTO site_settings (id, trust_name, institution_name, short_code, affiliation, aicte_code, dte_code, address, phone, email, emergency_helpline, anti_ragging_helpline, about_summary, about_image_url, vision_text, mission_text, recruiters, home_sections_json, highlights_json, approved_bodies_json)
 VALUES (
   1,
-  'Shri Vithal Education & Research Trust''s',
-  'Shri Vithal College of Engineering & Research (Autonomous)',
-  'SVCOER',
-  'Affiliated to PAHSUS Solapur · Approved by AICTE · Recognized u/s 2(f) & 12(B) of UGC Act',
+  'Shri Vitthal Education & Research Institute (SVERI)',
+  'SVERI''s College of Engineering, Pandharpur (Autonomous)',
+  'SVERI',
+  'Affiliated to PAHSUS Solapur · Approved by AICTE · Autonomous Status (AY 2024-25) · NAAC A+ (3.46)',
   '1-49281724',
-  'EN-6220',
-  'Gopalpur-Ranjani Road, Pandharpur, Dist. Solapur - 413304, Maharashtra, India',
-  '+91 2186 225083',
-  'principal@svcoer.edu.in',
-  '+91 2186 225099',
+  '06220',
+  'Gopalpur-Ranjani Road, P.B. No. 54, Gopalpur, Pandharpur - 413304, Dist. Solapur, Maharashtra, India',
+  '+91-02186-216063',
+  'principal@coe.sveri.ac.in',
+  '+91-9545553888',
   '1800-180-5522',
-  'Established in 1998, Shri Vithal College of Engineering & Research (Autonomous) empowers rural and urban engineering scholars through NAAC A+ accredited programs, funded R&D labs, and transparent UGC NEP 2020 public disclosures.',
+  'Established in 1998 under Shri Vitthal Education & Research Institute (SVERI), SVERI''s College of Engineering, Pandharpur (Autonomous from AY 2024-25) is NAAC A+ (CGPA 3.46) accredited and upholds full UGC NEP 2020 public disclosures.',
   'assets/images/hero_campus.jpg',
-  'To emerge as a globally respected autonomous engineering institution driving inclusive technological innovation and ethical societal transformation under NEP 2020.',
-  'Deliver outcome-based engineering education with multidisciplinary minors and barrier-free access.\nFoster funded R&D, industrial consultancy, and entrepreneurship incubation.\nMaintain 100% institutional governance transparency aligned with UGC Public Self-Disclosure norms.',
-  'TCS\nInfosys\nPersistent Systems\nBosch India\nTata Technologies\nBharat Forge\nL&T Construction\nCapgemini',
+  'To be nationally recognized among the best institutes in India for excellence in technical education.',
+  'To impart value-based technical education through innovation and excellence, empowering individuals to become leaders in their fields to create a positive impact.\nTo create an ambiance of academic excellence, research, and life skills by fostering a learning environment that empowers individuals to achieve their full potential.\nTo foster strong relationships amongst all stakeholders by inculcating a personal touch and mutual respect in all interactions.',
+  'TCS (Digital & Ninja)\nInfosys\nAccenture\nDeloitte\nWipro\nTech Mahindra\nHexaware\nBharat Forge\nMahindra & Mahindra\nAtlas Copco',
   '{"showTicker":1,"showSlider":1,"showStatsAndRecognitions":1,"showAboutAndDownloads":1,"showApprovedAndVision":1,"showLeadershipDesk":1,"showExaminationSpotlight":1,"showDepartments":1,"showCategoriesDirectory":1,"showEventsAndRecruiters":1,"examSpotlightTitle":"Autonomous Examination Portal (CoE)","departmentsTitle":"Academic Departments","categoriesTitle":"Statutory Self-Disclosure & Autonomous Portals"}',
-  '[{"label":"Years of Excellence","value":"28+"},{"label":"Placement Track","value":"91.1%"},{"label":"NBA Accredited Depts","value":"4"},{"label":"Faculty Doctorates","value":"68"}]',
-  '[{"name":"AICTE New Delhi","subtitle":"Statutory Technical Approval","href":"page.php?slug=act-statutes-moa"},{"name":"UGC 2(f) & 12(B)","subtitle":"Recognized Autonomous Institution","href":"page.php?slug=about-overview"},{"name":"NAAC A+ Grade","subtitle":"CGPA 3.42 Institutional Cycle","href":"page.php?slug=accreditation-ranking"},{"name":"PAHSUS Solapur","subtitle":"Affiliating University","href":"page.php?slug=about-overview"}]'
+  '[{"label":"Placement Track","value":"91.1%"},{"label":"Recruiters","value":"250+"},{"label":"NAAC A+ Grade","value":"3.46"},{"label":"DTE Code","value":"06220"}]',
+  '[{"name":"AICTE New Delhi","subtitle":"Statutory Technical Approval","href":"page.php?slug=act-statutes-moa"},{"name":"UGC Autonomous","subtitle":"Autonomous from AY 2024-25","href":"page.php?slug=about-overview"},{"name":"NAAC A+ Grade","subtitle":"CGPA 3.46 / 4.00","href":"page.php?slug=accreditation-ranking"},{"name":"PAHSUS Solapur","subtitle":"Affiliating University","href":"page.php?slug=about-overview"}]'
 );
 
 INSERT INTO departments (id, slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission) VALUES
-(1, 'computer-science', 'CSE', 'Computer Science & Engineering', 'CSE', 1998, 180, 'NBA Accredited (2024-2027)', 'Dr. Anjali K. Deshpande', 'NBA accredited flagship computing department with AI/GPU cluster and 94% placements.', 'To nurture globally competitive computing professionals.', 'Deliver outcome-based technical education and funded AI research.'),
-(2, 'mechanical', 'MECH', 'Mechanical Engineering', 'Mechanical', 1998, 120, 'NBA Accredited (2024-2027)', 'Dr. Rajendra B. Kulkarni', 'Founding department featuring Tata CIII Robotics Lab and CNC Centre.', 'To excel in sustainable manufacturing and robotics.', 'Cultivate hands-on design thinking and industrial consultancy.'),
-(3, 'civil', 'CIVIL', 'Civil Engineering', 'Civil', 2001, 60, 'NBA Accredited (2024-2027)', 'Dr. Suhas V. Patwardhan', 'Structural engineering and NABL-aligned material testing consultancy.', 'To engineer resilient, sustainable infrastructure.', 'Train socially responsible civil engineers.'),
-(4, 'entc', 'ENTC', 'Electronics & Telecommunication Engineering', 'E&TC', 1998, 120, 'NBA Accredited (2024-2027)', 'Dr. Vandana P. Chavan', 'VLSI chip design, Texas Instruments Embedded Centre, and 5G RF Lab.', 'To excel in semiconductor design and embedded intelligence.', 'Empower students with hardware-software co-design expertise.');
+(1, 'computer-science', 'CSE', 'Computer Science & Engineering', 'CSE', 1998, 180, 'NBA Accredited', 'Dr. Anjali K. Deshpande', 'NBA accredited flagship computing department with 180 B.Tech intake, AI/GPU cluster & Ph.D. Research Centre.', 'To nurture globally competitive computing professionals.', 'Deliver outcome-based technical education and funded AI research.'),
+(2, 'mechanical', 'MECH', 'Mechanical Engineering', 'Mechanical', 1998, 120, 'NBA Accredited', 'Dr. Rajendra B. Kulkarni', 'Founding department with 120 B.Tech intake, Tata CIII Robotics Lab, CNC Centre & Ph.D. Centre.', 'To excel in sustainable manufacturing and robotics.', 'Cultivate hands-on design thinking and industrial consultancy.'),
+(3, 'civil', 'CIVIL', 'Civil Engineering', 'Civil', 2001, 120, 'NBA Accredited', 'Dr. Suhas V. Patwardhan', 'Offers B.Tech Civil Engineering (120 intake), M.Tech Structural & Ph.D. Centre with material testing consultancy.', 'To engineer resilient, sustainable infrastructure.', 'Train socially responsible civil engineers.'),
+(4, 'entc', 'ENTC', 'Electronics & Telecommunication Engineering', 'E&TC', 1998, 120, 'NBA Accredited', 'Dr. Vandana P. Chavan', 'Offers B.Tech E&TC (120 intake), VLSI chip design, Embedded Centre & Ph.D. Research Centre.', 'To excel in semiconductor design and embedded intelligence.', 'Empower students with hardware-software co-design expertise.'),
+(5, 'electrical', 'ELEC', 'Electrical Engineering', 'Electrical', 2010, 60, 'AICTE Approved', 'Dr. M. R. Joshi', 'B.Tech Electrical Engineering (60 intake) with Power Systems, EV Drives & PLC/SCADA automation labs.', 'To develop competent electrical engineers driving clean energy.', 'Integrate hands-on power systems training with EV & smart grid research.'),
+(6, 'electronics-computer', 'ECS', 'Electronics & Computer Engineering', 'ECS', 2022, 60, 'AICTE Approved', 'Prof. P. S. Sawant', 'B.Tech Electronics & Computer Engineering (60 intake) combining embedded hardware, RTOS, cloud IoT & full-stack software.', 'To develop versatile engineers across silicon-to-cloud stacks.', 'Deliver project-based training in Embedded IoT, Linux & Cloud APIs.');
 
 -- Default RBAC Passwords (real bcrypt hashes; also re-initializable via setup.php):
 -- admin@svcoer.edu.in   / Admin@123
@@ -297,25 +299,25 @@ INSERT INTO categories (id, slug, name, short_label, ugc_code, description, show
 (8, 'information-corner', 'Information Corner', 'Info Corner', 'Section 5(h)', 'RTI CPIO/Appellate, Circulars, Announcements, Newsletters, Events, Jobs, Reservation Roster & Study in India.', 1, 1, 9);
 
 INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_published, sort_order, updated_at) VALUES
-(1, 'about-overview', 'About Us: Institutional Overview', 'UGC Section 5(a)', '<h2>Institutional Profile</h2><p>Shri Vithal College of Engineering &amp; Research (Autonomous), established in 1998, is accredited with NAAC A+ (CGPA 3.42) and recognized under UGC 2(f) &amp; 12(B).</p>', 1, 1, '2026-10-15'),
-(1, 'act-statutes-moa', 'Act, Statutes & MoA', 'UGC Section 5(a)', '<h2>Statutory Governance Instruments</h2><p>Governed by UGC Autonomous Colleges Regulations 2023 and Maharashtra Public Trust Act.</p>', 1, 2, '2026-10-10'),
+(1, 'about-overview', 'About Us: Institutional Overview', 'UGC Section 5(a)', '<h2>Institutional Profile</h2><p>SVERI''s College of Engineering, Pandharpur (Autonomous), established in 1998 under Shri Vitthal Education &amp; Research Institute (SVERI), holds NAAC A+ (CGPA 3.46 / 4.00), Autonomous status from AY 2024&ndash;25, and DTE Institute Code 06220 under Punyashlok Ahilyadevi Holkar Solapur University, Solapur.</p>', 1, 1, '2026-10-15'),
+(1, 'act-statutes-moa', 'Act, Statutes & MoA', 'UGC Section 5(a)', '<h2>Statutory Governance Instruments</h2><p>Governed by UGC Autonomous Colleges Regulations 2023 and Maharashtra Public Trust Act under Shri Vitthal Education &amp; Research Institute (SVERI).</p>', 1, 2, '2026-10-10'),
 (1, 'institutional-development-plan', 'Institutional Development Plan (IDP)', 'UGC Section 5(a)', '<h2>NEP 2020 Strategic Roadmap</h2><p>10-year roadmap covering Academic Bank of Credits, Interdisciplinary Minors, and Research Incubation.</p>', 1, 3, '2026-09-22'),
-(1, 'accreditation-ranking', 'Accreditation & Ranking (NAAC, NBA, NIRF)', 'UGC Section 5(a)', '<h2>NAAC A+ · NBA 4 Programs · NIRF 151-200</h2><p>Institutional quality benchmarks verified by IQAC.</p>', 1, 4, '2026-10-02'),
+(1, 'accreditation-ranking', 'Accreditation & Ranking (NAAC, NBA, NIRF)', 'UGC Section 5(a)', '<h2>NAAC A+ (CGPA 3.46) · NBA Accredited · NIRF 151-200</h2><p>Institutional quality benchmarks verified by IQAC.</p>', 1, 4, '2026-10-02'),
 (1, 'annual-accounts-audit', 'Annual Accounts & Audit Reports', 'UGC Section 5(a)', '<h2>Audited Financial Statements</h2><p>Balance Sheet, Income &amp; Expenditure, and Receipts &amp; Payments certified by Statutory Auditors.</p>', 1, 5, '2026-09-30'),
 (2, 'statutory-officers', 'Statutory Officers & Administrative Leadership', 'UGC Section 5(b)', '<h2>Key Statutory Officers</h2><p>Complete profiles of Principal, Registrar, Finance Officer, Controller of Examinations, CVO, and Ombudsperson.</p>', 1, 1, '2026-10-05'),
 (2, 'governing-bodies', 'Governing Body, Academic Council & Committees', 'UGC Section 5(b)', '<h2>Governing Body Composition</h2><p>Includes Trust Chairperson, Principal, UGC Nominee, State Govt Nominee, and Industry Representatives.</p>', 1, 2, '2026-09-28'),
-(3, 'academic-programs', 'Details of Academic Programs', 'UGC Section 5(c)', '<h2>UG, PG &amp; Doctoral Programs</h2><p>B.Tech (CSE, Mechanical, Civil, E&amp;TC), M.Tech, and Ph.D. programs aligned with NEP 2020.</p>', 1, 1, '2026-10-08'),
-(3, 'iqac', 'Internal Quality Assurance Cell (IQAC)', 'UGC Section 5(c)', '<h2>IQAC Quality Mandate</h2><p>Coordinator: Dr. M. M. Pawar (iqac@svcoer.edu.in). AQAR &amp; Academic Audit reports published in Document Repository.</p>', 1, 2, '2026-09-25'),
-(4, 'prospectus-fee-structure', 'Prospectus & FRA Fee Structure (2026-27)', 'UGC Section 5(d)', '<h2>FRA Approved Fee Structure</h2><p>B.Tech Open Annual Fee: INR 1,13,000 (Tuition INR 98,214 + Development INR 14,786).</p>', 1, 1, '2026-10-12'),
+(3, 'academic-programs', 'Details of Academic Programs', 'UGC Section 5(c)', '<h2>UG, PG &amp; Doctoral Programs</h2><p>B.Tech: CSE (180), E&amp;TC (120), Mechanical (120), Civil (120), Electrical (60), ECS (60); M.Tech, MBA (60), MCA (60) &amp; Ph.D. Research Centres (CSE, E&amp;TC, Mechanical Design, Civil).</p>', 1, 1, '2026-10-08'),
+(3, 'iqac', 'Internal Quality Assurance Cell (IQAC)', 'UGC Section 5(c)', '<h2>IQAC Quality Mandate</h2><p>Coordinator: Dr. M. M. Pawar. AQAR &amp; Academic Audit reports published in Document Repository.</p>', 1, 2, '2026-09-25'),
+(4, 'prospectus-fee-structure', 'Prospectus & FRA Fee Structure (2026-27)', 'UGC Section 5(d)', '<h2>FRA Approved Fee Structure</h2><p>DTE Code 06220 · B.Tech Open Annual Fee: INR 1,13,000 (Tuition INR 98,214 + Development INR 14,786).</p>', 1, 1, '2026-10-12'),
 (4, 'fee-refund-policy', 'UGC Fee Refund Policy', 'UGC Section 5(d)', '<h2>100% Transparent Refund Policy</h2><p>Full refund within 15 working days for cancellations 15+ days prior to admission cutoff.</p>', 1, 2, '2026-08-21'),
 (5, 'research-development-cell', 'Research & Development Cell', 'UGC Section 5(e)', '<h2>Sponsored R&amp;D Projects</h2><p>DST-SERB, AICTE-MODROBS, and MSME Design Clinic funded research projects.</p>', 1, 1, '2026-09-29'),
-(6, 'placement-cell', 'Training & Placement Cell', 'UGC Section 5(f)', '<h2>91.1% Placement Record</h2><p>Highest offer 18.5 LPA · Median 5.40 LPA across 84 visiting recruiters.</p>', 1, 1, '2026-10-14'),
+(6, 'placement-cell', 'Training & Placement Cell', 'UGC Section 5(f)', '<h2>91.1% Placement Track · 250+ Recruiters</h2><p>Supported by Communication Improvement Programs (CIP) and language labs with top recruiters including TCS, Infosys, Accenture, Deloitte, Wipro, Tech Mahindra, Hexaware &amp; Bharat Forge.</p>', 1, 1, '2026-10-14'),
 (6, 'sgrc', 'Student Grievance Redressal Committee (SGRC)', 'UGC Section 5(f)', '<h2>SGRC &amp; Ombudsperson</h2><p>Guaranteed resolution within 15 working days under UGC Redressal of Grievances Regulations 2023.</p>', 1, 2, '2026-09-10'),
 (6, 'anti-ragging-cell', 'Anti-Ragging, ICC, Equal Opportunity & SEDG Cells', 'UGC Section 5(f)', '<h2>Zero Tolerance &amp; Barrier-Free Campus</h2><p>24x7 Anti-Ragging Helpline: 1800-180-5522. Ramps, elevators, tactile paths &amp; assistive tech enabled.</p>', 1, 3, '2026-09-03'),
-(7, 'alumni-association', 'Registered Alumni Association', 'UGC Section 5(g)', '<h2>SVCOER Alumni Network</h2><p>11,500+ engineering alumni across global chapters.</p>', 1, 1, '2026-09-19'),
-(8, 'rti-disclosure', 'RTI: CPIO & Appellate Authority', 'UGC Section 5(h)', '<h2>Right to Information Act 2005</h2><p>PIO: Shri S. G. Kulkarni (Registrar) · First Appellate Authority: Dr. B. P. Ronge (Principal).</p>', 1, 1, '2026-09-11'),
+(7, 'alumni-association', 'Registered Alumni Association', 'UGC Section 5(g)', '<h2>SVERI Alumni Network</h2><p>11,500+ engineering alumni across global chapters.</p>', 1, 1, '2026-09-19'),
+(8, 'rti-disclosure', 'RTI: CPIO & Appellate Authority', 'UGC Section 5(h)', '<h2>Right to Information Act 2005</h2><p>PIO: Shri S. G. Kulkarni (Registrar) · First Appellate Authority: Dr. B. P. Ronge (Principal, principal@coe.sveri.ac.in, +91-02186-216063).</p>', 1, 1, '2026-09-11'),
 (8, 'circulars-notices', 'Circulars, Notices & Announcements', 'UGC Section 5(h)', '<h2>Official Notices</h2><p>Exam schedules, job openings, reservation roster &amp; Study in India disclosures.</p>', 1, 2, '2026-10-18'),
-(9, 'examination-cell-coe', 'Examination Cell & Controller of Examinations', 'Autonomous Examination Section', '<h2>Autonomous Examination Governance</h2><p>Independent Evaluation Cell headed by Dr. M. S. Kumbhar (Controller of Examinations). Publishes End-Semester results within 20 working days and oversees question bank moderation and double-valuation integrity.</p>', 1, 1, '2026-10-18'),
+(9, 'examination-cell-coe', 'Examination Cell & Controller of Examinations', 'Autonomous Examination Section', '<h2>Autonomous Examination Governance</h2><p>Independent Evaluation Cell headed by Dr. M. S. Kumbhar (Controller of Examinations, coe@coe.sveri.ac.in). Publishes End-Semester results within 20 working days and oversees question bank moderation and double-valuation integrity.</p>', 1, 1, '2026-10-18'),
 (9, 'examination-ordinances', 'Autonomous Ordinances, Credit System & 10-Point Grading', 'UGC Autonomous Regulations', '<h2>NEP 2020 Credit &amp; Grading Framework</h2><p>Follows Continuous Internal Evaluation (CIE 40%) + End Semester Examination (ESE 60%) across a 10-point absolute/relative grading scale with ATKT/Grace ordinances.</p>', 1, 2, '2026-10-12'),
 (9, 'exam-timetable-hallticket', 'Exam Time Tables, Forms & Hall Tickets', 'Winter / Summer Sessions', '<h2>Theory &amp; Practical Examination Schedules</h2><p>Exam registration forms, hall ticket download schedules, and scribe/extra-time provisions for Divyangjan candidates.</p>', 1, 3, '2026-10-15'),
 (9, 'results-revaluation', 'Results, Photocopy & Revaluation Grievances', '20-Day Result Mandate', '<h2>Transparent Result Declaration &amp; Revaluation</h2><p>Students may apply for answer-script photocopy within 7 days and revaluation within 12 days via the Examination Cell portal.</p>', 1, 4, '2026-10-16'),
@@ -323,38 +325,44 @@ INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_publishe
 (9, 'convocation-transcripts', 'Convocation, Provisional Degree & Transcripts', 'Degrees & Academic Verification', '<h2>Convocation &amp; Employer Verification</h2><p>Online portal for official sealed transcripts, migration certificates, medium-of-instruction letters, and degree verification.</p>', 1, 6, '2026-10-14');
 
 INSERT INTO department_subpages (department_id, slug, title, content_html, sort_order, updated_at) VALUES
-(1, 'about', 'About Department', '<h2>CSE Department</h2><p>NBA Accredited department offering Honours in AI/ML and Cyber Security.</p>', 1, '2026-10-01'),
+(1, 'about', 'About Department', '<h2>CSE Department</h2><p>NBA Accredited department (180 intake) offering Honours in AI/ML and Cyber Security.</p>', 1, '2026-10-01'),
 (1, 'hod-desk', 'HoD Desk', '<h2>Message from Dr. Anjali K. Deshpande</h2><p>Focused on first-principles computing and industry-ready engineering.</p>', 2, '2026-09-25'),
 (1, 'syllabus', 'Syllabus & Curriculum', '<h2>160-Credit NEP 2020 Pattern</h2><p>Includes 6-month industry internship and multidisciplinary minors.</p>', 3, '2026-08-20'),
-(2, 'about', 'About Department', '<h2>Mechanical Engineering</h2><p>Equipped with Tata Technologies CIII Robotics Lab and CNC Centres.</p>', 1, '2026-09-12'),
-(3, 'about', 'About Department', '<h2>Civil Engineering</h2><p>Structural Engineering and NABL-aligned material testing consultancy.</p>', 1, '2026-09-09'),
-(4, 'about', 'About Department', '<h2>E&amp;TC Engineering</h2><p>Cadence VLSI tools and Texas Instruments Embedded Centre.</p>', 1, '2026-09-14');
+(2, 'about', 'About Department', '<h2>Mechanical Engineering</h2><p>120 intake · Equipped with Tata Technologies CIII Robotics Lab and CNC Centres.</p>', 1, '2026-09-12'),
+(3, 'about', 'About Department', '<h2>Civil Engineering</h2><p>120 intake · Structural Engineering and material testing consultancy.</p>', 1, '2026-09-09'),
+(4, 'about', 'About Department', '<h2>E&amp;TC Engineering</h2><p>120 intake · Cadence VLSI tools and Texas Instruments Embedded Centre.</p>', 1, '2026-09-14'),
+(5, 'about', 'About Department', '<h2>Electrical Engineering</h2><p>60 intake · Power Systems, Smart Grids &amp; EV Drives Laboratories.</p>', 1, '2026-09-18'),
+(6, 'about', 'About Department', '<h2>Electronics &amp; Computer Engineering</h2><p>60 intake · Embedded Systems, RTOS, Cloud IoT &amp; Software Engineering.</p>', 1, '2026-09-20');
 
 INSERT INTO faculty (department_id, name, designation, qualification, specialization, email, experience_years, is_hod) VALUES
 (1, 'Dr. Anjali K. Deshpande', 'Professor & Head of Department', 'Ph.D. (CSE), M.Tech', 'Distributed Systems & NLP', 'hod.cse@svcoer.edu.in', 21, 1),
 (1, 'Dr. Siddharth R. Mane', 'Associate Professor', 'Ph.D., M.E. (CSE)', 'Computer Vision & Edge AI', 'srmane@svcoer.edu.in', 15, 0),
 (2, 'Dr. Rajendra B. Kulkarni', 'Professor & Head of Department', 'Ph.D. (Design Engg.)', 'Robotics & Tribology', 'hod.mech@svcoer.edu.in', 24, 1),
 (3, 'Dr. Suhas V. Patwardhan', 'Professor & Head of Department', 'Ph.D. (Structural Engg.)', 'Earthquake Resistant Design', 'hod.civil@svcoer.edu.in', 20, 1),
-(4, 'Dr. Vandana P. Chavan', 'Professor & Head of Department', 'Ph.D. (VLSI)', 'Low-Power ASIC Design', 'hod.entc@svcoer.edu.in', 22, 1);
+(4, 'Dr. Vandana P. Chavan', 'Professor & Head of Department', 'Ph.D. (VLSI)', 'Low-Power ASIC Design', 'hod.entc@svcoer.edu.in', 22, 1),
+(5, 'Dr. M. R. Joshi', 'Professor & Head of Department', 'Ph.D. (Electrical Engg.)', 'Smart Grids & Power Electronics', 'hod.elec@svcoer.edu.in', 18, 1),
+(6, 'Prof. P. S. Sawant', 'Associate Professor & Head of Department', 'M.Tech (Embedded & CSE)', 'IoT Edge Computing & Embedded Linux', 'hod.ecs@svcoer.edu.in', 14, 1);
 
 INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, incharge) VALUES
 (1, 'High-Performance AI & Deep Learning Lab', 1450, 'NVIDIA GPU Workstations, 60 Core i7 Nodes', 'Dr. Siddharth R. Mane'),
 (2, 'Tata CIII Industrial Robotics & CNC Lab', 2400, 'KUKA 6-Axis Cobot, 5-Axis CNC Centre', 'Dr. Rajendra B. Kulkarni'),
 (3, 'Heavy Structures & Concrete Testing Lab', 2100, '1000 kN UTM, Rebound Hammer, UPV Tester', 'Dr. Suhas V. Patwardhan'),
-(4, 'VLSI Design & FPGA Prototyping Lab', 1350, 'Xilinx Vivado Boards, Cadence Virtuoso Suite', 'Dr. Vandana P. Chavan');
+(4, 'VLSI Design & FPGA Prototyping Lab', 1350, 'Xilinx Vivado Boards, Cadence Virtuoso Suite', 'Dr. Vandana P. Chavan'),
+(5, 'Power Systems & EV Drives Lab', 1650, 'MATLAB Simulink RT, Three-Phase Synchronous Machines', 'Dr. M. R. Joshi'),
+(6, 'Embedded Computing & Cloud IoT Lab', 1300, 'ARM Cortex Kits, Raspberry Pi Edge Clusters', 'Prof. P. S. Sawant');
 
 INSERT INTO leadership_profiles (role_title, name, qualification, email, phone, photo_url, bio, sort_order) VALUES
-('Principal & Director', 'Dr. B. P. Ronge', 'Ph.D. (Mech), M.Tech (IIT)', 'principal@svcoer.edu.in', '+91 2186 225083', 'assets/images/principal.jpg', '28 years of academic governance and accreditation leadership.', 1),
-('Registrar & PIO (RTI)', 'Shri S. G. Kulkarni', 'M.Com, LL.B., MBA', 'registrar@svcoer.edu.in', '+91 2186 225084', 'assets/images/principal.jpg', 'Custodian of institutional records and statutory compliance.', 2),
-('Controller of Examinations', 'Dr. M. S. Kumbhar', 'Ph.D. (E&TC)', 'coe@svcoer.edu.in', '+91 2186 225085', 'assets/images/principal.jpg', 'Heads autonomous examination and ABC credit governance.', 3);
+('Principal & Director', 'Dr. B. P. Ronge', 'Ph.D. (Mech), M.Tech (IIT)', 'principal@coe.sveri.ac.in', '+91-02186-216063', 'assets/images/principal.jpg', 'Leading SVERI''s College of Engineering, Pandharpur in NAAC A+ quality governance and autonomy.', 1),
+('Registrar & PIO (RTI)', 'Shri S. G. Kulkarni', 'M.Com, LL.B., MBA', 'coe@coe.sveri.ac.in', '+91-02186-216062', 'assets/images/principal.jpg', 'Custodian of institutional records and statutory compliance.', 2),
+('Controller of Examinations', 'Dr. M. S. Kumbhar', 'Ph.D. (E&TC)', 'coe@coe.sveri.ac.in', '+91-02186-216061', 'assets/images/principal.jpg', 'Heads autonomous examination and ABC credit governance.', 3);
 
 INSERT INTO sliders (title, caption, image_url, cta_label, cta_link, sort_order) VALUES
-('Empowering Engineering Excellence Under NEP 2020', 'Autonomous Institution · NAAC A+ · 4 NBA Accredited Programs · Complete UGC Public Self-Disclosure.', 'assets/images/hero_campus.jpg', 'View FRA Fee Structure', 'page.php?slug=prospectus-fee-structure', 1),
+('Empowering Engineering Excellence Under NEP 2020', 'Autonomous Institution (AY 2024-25) · NAAC A+ (CGPA 3.46) · DTE Code 06220 · Complete UGC Public Self-Disclosure.', 'assets/images/hero_campus.jpg', 'View FRA Fee Structure', 'page.php?slug=prospectus-fee-structure', 1),
 ('Industry 4.0 Robotics, AI & Semiconductor Innovation', 'Funded DST-SERB & AICTE-MODROBS laboratories driving real-world undergraduate research.', 'assets/images/hero_lab.jpg', 'Visit CSE Microsite', 'department.php?dept=computer-science', 2);
 
 INSERT INTO ticker_items (text, link_url, badge_text, sort_order) VALUES
 ('FRA-Fee Structure 2026-27 Approved & Published', 'page.php?slug=prospectus-fee-structure', 'FRA Fee', 1),
-('First Year B.Tech & Direct Second Year CAP Admissions 2026-27 Open', 'page.php?slug=prospectus-fee-structure', 'Admissions', 2),
+('First Year B.Tech & Direct Second Year CAP Admissions 2026-27 Open (DTE Code: 06220)', 'page.php?slug=prospectus-fee-structure', 'Admissions', 2),
 ('UGC Guidelines on Public Self-Disclosure (NEP 2020) Portal Active', 'quick-links.php', 'UGC Mandatory', 3);
 
 INSERT INTO documents (title, category, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by) VALUES
@@ -365,7 +373,7 @@ INSERT INTO documents (title, category, file_url, file_name, file_size_bytes, mi
 INSERT INTO campus_events (title, event_date, category, summary, content_html, is_featured) VALUES
 ('FRA Approved Fee Structure 2026-27 Published', '2026-10-12', 'Notice', 'Fees Regulating Authority approved B.Tech and M.Tech tuition & development fees.', '<p>Fees Regulating Authority approved fee structure published for AY 2026-27.</p>', 1),
 ('National Conference on Sustainable Engineering (NCSE-2026)', '2026-11-18', 'Event', 'Two-day AICTE-sponsored conference hosted by Mechanical & Civil departments.', '<p>Call for papers open for UG, PG, and Ph.D. scholars.</p>', 1),
-('SVCOER CSE Team Wins Smart India Hackathon Hardware Edition', '2026-09-20', 'Achievement', 'First prize in Smart Agriculture IoT Edge Analytics track.', '<p>Team ByteKnights secured national first rank with INR 1,00,000 prize.</p>', 1),
+('SVERI CSE Team Wins Smart India Hackathon Hardware Edition', '2026-09-20', 'Achievement', 'First prize in Smart Agriculture IoT Edge Analytics track.', '<p>Team ByteKnights secured national first rank with INR 1,00,000 prize.</p>', 1),
 ('End Semester Examination Form Submission Schedule (Winter 2026)', '2026-10-25', 'Circular', 'Online exam form submission via Autonomous ERP portal.', '<p>Students must verify ABC ID before submitting forms.</p>', 1);
 
 INSERT INTO gallery_albums (id, title, category, event_date, cover_url) VALUES
@@ -375,12 +383,12 @@ INSERT INTO gallery_albums (id, title, category, event_date, cover_url) VALUES
 (4, 'Central Reading Atrium & Digital Knowledge Center', 'Library', '2026-07-18', 'assets/images/hero_library.jpg');
 
 INSERT INTO gallery_photos (album_id, image_url, caption, alt_text) VALUES
-(1, 'assets/images/hero_campus.jpg', 'Aerial view of SVCOER Autonomous Academic Complex', 'Aerial campus complex'),
+(1, 'assets/images/hero_campus.jpg', 'Aerial view of SVERI Autonomous Academic Complex', 'Aerial campus complex'),
 (2, 'assets/images/convocation.jpg', 'Graduating B.Tech batch receiving autonomous degrees', 'Convocation ceremony'),
 (3, 'assets/images/hero_lab.jpg', 'Students experimenting in Tata CIII Robotics & AI Lab', 'Robotics laboratory'),
-(4, 'assets/images/hero_library.jpg', 'Central Library reading atrium with 42,000+ volumes', 'Central library atrium');
+(4, 'assets/images/hero_library.jpg', 'Central Library reading atrium with 68,450+ volumes', 'Central library atrium');
 
 INSERT INTO telephone_directory (section, officer_name, designation, extension, direct_phone, email) VALUES
-('Principal Office', 'Dr. B. P. Ronge', 'Principal & Director', '101', '+91 2186 225083', 'principal@svcoer.edu.in'),
-('Registrar & RTI Cell', 'Shri S. G. Kulkarni', 'Registrar & PIO', '102', '+91 2186 225084', 'registrar@svcoer.edu.in'),
-('Anti-Ragging Helpline', 'Dr. P. K. Deshmukh', 'Chief Vigilance Officer', '199', '+91 2186 225099', 'antiragging@svcoer.edu.in');
+('Principal Office', 'Dr. B. P. Ronge', 'Principal & Director', '101', '+91-02186-216063', 'principal@coe.sveri.ac.in'),
+('Registrar & RTI Cell', 'Shri S. G. Kulkarni', 'Registrar & PIO', '102', '+91-02186-216062', 'coe@coe.sveri.ac.in'),
+('Anti-Ragging Helpline', 'Dr. P. K. Deshmukh', 'Chief Vigilance Officer', '199', '+91-9545553888', 'antiragging@svcoer.edu.in');
