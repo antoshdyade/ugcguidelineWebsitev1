@@ -4,23 +4,18 @@ export type UserRole =
   | 'department_admin'
   | 'iqac_officer';
 
-export type UgcCategorySlug =
-  | 'about-hei'
-  | 'administration'
-  | 'academics'
-  | 'admissions-fee'
-  | 'research'
-  | 'student-life'
-  | 'alumni'
-  | 'information-corner';
+export type UgcCategorySlug = string;
 
 export interface CmsCategory {
   id: number;
   slug: UgcCategorySlug;
   name: string;
+  shortLabel?: string;
   ugcCode: string;
   sortOrder: number;
   description: string;
+  showInMenu?: boolean;
+  showOnHome?: boolean;
 }
 
 export interface CmsPage {
@@ -204,6 +199,25 @@ export interface AuditLogEntry {
   timestamp: string;
 }
 
+export interface HomeSectionsConfig {
+  showTicker: boolean;
+  showSlider: boolean;
+  showStatsAndRecognitions: boolean;
+  showAboutAndDownloads: boolean;
+  showApprovedAndVision: boolean;
+  showLeadershipDesk: boolean;
+  showExaminationSpotlight: boolean;
+  showDepartments: boolean;
+  showCategoriesDirectory: boolean;
+  showEventsAndRecruiters: boolean;
+  aboutHeading?: string;
+  downloadsHeading?: string;
+  leadershipHeading?: string;
+  examinationHeading?: string;
+  departmentsHeading?: string;
+  categoriesHeading?: string;
+}
+
 export interface SiteSettings {
   trustName?: string;
   institutionName: string;
@@ -240,6 +254,7 @@ export interface SiteSettings {
     twitter: string;
   };
   mapEmbedQuery: string;
+  homeSections?: HomeSectionsConfig;
 }
 
 export interface CmsDatabase {

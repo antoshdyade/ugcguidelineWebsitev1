@@ -115,6 +115,20 @@ export default function App() {
       );
     }
 
+    if (pathname.startsWith('/category/')) {
+      const catSlug = pathname.replace('/category/', '').split('/')[0];
+      return (
+        <PageViewer
+          categorySlug={catSlug}
+          categories={data.categories}
+          pages={data.pages}
+          leadership={data.leadership}
+          events={data.events}
+          onNavigate={navigate}
+        />
+      );
+    }
+
     if (pathname.startsWith('/page/')) {
       const slug = pathname.replace('/page/', '').split('/')[0];
       return (
@@ -171,6 +185,7 @@ export default function App() {
         sliders={data.sliders}
         ticker={data.ticker}
         categories={data.categories}
+        pages={data.pages}
         departments={data.departments}
         events={data.events}
         documents={data.documents}

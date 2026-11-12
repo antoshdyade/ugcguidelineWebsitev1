@@ -4,7 +4,8 @@ import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
 import type { CampusEvent, CmsCategory, CmsPage, LeadershipProfile } from '../types/cms';
 
 interface PageViewerProps {
-  slug: string;
+  slug?: string;
+  categorySlug?: string;
   categories: CmsCategory[];
   pages: CmsPage[];
   leadership: LeadershipProfile[];
@@ -14,6 +15,7 @@ interface PageViewerProps {
 
 export function PageViewer({
   slug,
+  categorySlug,
   categories,
   pages,
   leadership,
@@ -21,7 +23,45 @@ export function PageViewer({
   onNavigate,
 }: PageViewerProps) {
   const { toggleSpeech, isSpeaking } = useThemeAccessibility();
-  const page = pages.find((p) => p.slug === slug) || pages[0];
+
+  const resolvedCategory = categorySlug ? categories.find((c) => c.slug === categorySlug) : undefined;
+  const categoryPages = resolvedCategory
+    ? pages.filter((p) => p.categorySlug === resolvedCategory.slug).sort((a, b) => a.sortOrder - b.sortOrder)
+    : [];
+
+  const page = slug
+    ? pages.find((p) => p.slug === slug)
+    : resolvedCategory
+      ? categoryPages[0]
+      : pages[0];
+
+  if (!page && resolvedCategory) {
+    return (
+      <div className="max-w-[1380px] mx-auto px-4 py-8">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-stone-500 dark:text-slate-400 mb-6">
+          <button type="button" onClick={() => onNavigate('/')} className="hover:underline">
+            Home
+          </button>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <span className="font-semibold text-stone-800 dark:text-slate-200">{resolvedCategory.name}</span>
+        </nav>
+        <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-1">
+            {resolvedCategory.ugcCode}
+          </p>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mb-3">
+            {resolvedCategory.name}
+          </h1>
+          <p className="text-sm text-stone-600 dark:text-slate-300 leading-relaxed mb-6">
+            {resolvedCategory.description}
+          </p>
+          <p className="text-xs text-stone-500 dark:text-slate-400">
+            No micro-pages have been published under this category yet. Staff can add pages inside Admin Dashboard &rarr; Pages &amp; UGC Content.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!page) {
     return (
@@ -51,7 +91,13 @@ export function PageViewer({
           Home
         </button>
         <ChevronRight className="w-3.5 h-3.5" />
-        <span>{category?.name || page.categorySlug}</span>
+        <button
+          type="button"
+          onClick={() => onNavigate(`/category/${category?.slug || page.categorySlug}`)}
+          className="hover:underline"
+        >
+          {category?.name || page.categorySlug}
+        </button>
         <ChevronRight className="w-3.5 h-3.5" />
         <span className="font-semibold text-stone-800 dark:text-slate-200">{page.title}</span>
       </nav>

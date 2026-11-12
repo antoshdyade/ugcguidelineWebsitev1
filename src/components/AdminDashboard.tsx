@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   Building2,
   Check,
   Edit3,
@@ -9,6 +11,7 @@ import {
   FolderOpen,
   Image as ImageIcon,
   Layers,
+  LayoutGrid,
   LogOut,
   Phone,
   Plus,
@@ -61,6 +64,7 @@ interface AdminStatePayload {
 
 type AdminTab =
   | 'overview'
+  | 'categories'
   | 'pages'
   | 'departments'
   | 'homepage'
@@ -70,6 +74,86 @@ type AdminTab =
   | 'directory'
   | 'settings'
   | 'users';
+
+function LinkTargetPicker({
+  value,
+  onChange,
+  categories,
+  pages,
+  departments,
+  placeholder = '/page/...',
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  categories: CmsCategory[];
+  pages: CmsPage[];
+  departments: Department[];
+  placeholder?: string;
+}) {
+  const builtinTargets = [
+    { label: 'Home Page (/)', url: '/' },
+    { label: 'Quick Links & Document Repository', url: '/quick-links' },
+    { label: 'Picture Gallery', url: '/gallery' },
+    { label: 'Contact & Telephone Directory', url: '/contact' },
+  ];
+  const allUrls = new Set([
+    ...builtinTargets.map((b) => b.url),
+    ...categories.map((c) => `/category/${c.slug}`),
+    ...pages.map((p) => `/page/${p.slug}`),
+    ...departments.map((d) => `/department/${d.slug}`),
+  ]);
+  const selectVal = allUrls.has(value) ? value : '__custom__';
+
+  return (
+    <div className="space-y-1">
+      <select
+        aria-label="Choose destination page or category"
+        value={selectVal}
+        onChange={(e) => {
+          if (e.target.value !== '__custom__') onChange(e.target.value);
+        }}
+        className="w-full px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+      >
+        <option value="__custom__">-- Custom / External URL --</option>
+        <optgroup label="Built-In Portals">
+          {builtinTargets.map((b) => (
+            <option key={b.url} value={b.url}>
+              {b.label}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Categories (Header / Exam / Autonomous)">
+          {categories.map((c) => (
+            <option key={c.id} value={`/category/${c.slug}`}>
+              Category: {c.name} ({c.ugcCode})
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Disclosure & Exam Micro-Pages">
+          {pages.map((p) => (
+            <option key={p.id} value={`/page/${p.slug}`}>
+              Page: {p.title}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Department Microsites">
+          {departments.map((d) => (
+            <option key={d.id} value={`/department/${d.slug}`}>
+              Dept: {d.name}
+            </option>
+          ))}
+        </optgroup>
+      </select>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-2.5 py-1 text-[11px] font-mono rounded border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900"
+      />
+    </div>
+  );
+}
 
 export function AdminDashboard({
   onExitToPublic,
@@ -94,16 +178,31 @@ export function AdminDashboard({
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [statusMsg, setStatusMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
+  // Category & Navigation Builder state
+  const [editingCatId, setEditingCatId] = useState<number | null>(null);
+  const [catName, setCatName] = useState('');
+  const [catShort, setCatShort] = useState('');
+  const [catSlug, setCatSlug] = useState('');
+  const [catUgcCode, setCatUgcCode] = useState('Autonomous Portal');
+  const [catDesc, setCatDesc] = useState('');
+  const [catShowMenu, setCatShowMenu] = useState(true);
+  const [catShowHome, setCatShowHome] = useState(true);
+  const [catCreatePage, setCatCreatePage] = useState(true);
+
   // Page Builder state
+  const [pageFilterCat, setPageFilterCat] = useState<string>('all');
   const [editingPageId, setEditingPageId] = useState<number | null>(null);
   const [pageCat, setPageCat] = useState<UgcCategorySlug>('about-hei');
   const [pageTitle, setPageTitle] = useState('');
   const [pageSlug, setPageSlug] = useState('');
   const [pageSubtitle, setPageSubtitle] = useState('');
+  const [pageSortOrder, setPageSortOrder] = useState<number>(1);
   const [pageHtml, setPageHtml] = useState('<h2>Section Heading</h2><p>Enter institutional disclosure content here.</p>');
   const [pagePdfUrl, setPagePdfUrl] = useState('');
   const [pagePdfLabel, setPagePdfLabel] = useState('');
   const [pagePublished, setPagePublished] = useState(true);
+  const [homepageMode, setHomepageMode] = useState<'sliders' | 'sections'>('sliders');
+  const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics'>('identity');
 
   // Department Manager state
   const [selectedDeptId, setSelectedDeptId] = useState<number>(1);
@@ -531,6 +630,7 @@ export function AdminDashboard({
     );
   }
 
+  const canCategories = canUserAccessResource(user, 'categories');
   const canPages = canUserAccessResource(user, 'pages');
   const canDepts = canUserAccessResource(user, 'departments');
   const canHomepage = canUserAccessResource(user, 'sliders_events');
@@ -543,9 +643,10 @@ export function AdminDashboard({
 
   const navItems: { id: AdminTab; label: string; icon: React.ReactNode; allowed: boolean }[] = [
     { id: 'overview', label: 'Overview & UGC Audit', icon: <Shield className="w-4 h-4" />, allowed: true },
+    { id: 'categories', label: 'Categories & Menus', icon: <LayoutGrid className="w-4 h-4" />, allowed: canCategories },
     { id: 'pages', label: 'Pages & UGC Content', icon: <Layers className="w-4 h-4" />, allowed: canPages },
     { id: 'departments', label: 'Departments & Micro-Pages', icon: <Building2 className="w-4 h-4" />, allowed: canDepts },
-    { id: 'homepage', label: 'Hero, Ticker & Events', icon: <ImageIcon className="w-4 h-4" />, allowed: canHomepage },
+    { id: 'homepage', label: 'Homepage, Sliders & Events', icon: <ImageIcon className="w-4 h-4" />, allowed: canHomepage },
     { id: 'leadership', label: 'Leadership & Governance', icon: <UserCheck className="w-4 h-4" />, allowed: canLeadership },
     { id: 'gallery', label: 'Picture Gallery', icon: <ImageIcon className="w-4 h-4" />, allowed: canGallery },
     { id: 'documents', label: 'Document Repository', icon: <FolderOpen className="w-4 h-4" />, allowed: canDocs },
@@ -739,8 +840,531 @@ export function AdminDashboard({
           </div>
         )}
 
-        {/* 2. PAGES BUILDER TAB (Visual WYSIWYG + HTML Toggle + PDF Attachment Upload) */}
+        {/* 1B. CATEGORIES, NAVIGATION MENUS & HEADER/FOOTER BUILDER */}
+        {activeTab === 'categories' && canCategories && state && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  try {
+                    if (editingCatId) {
+                      await adminFetch(`/api/admin/categories/${editingCatId}`, 'PUT', {
+                        name: catName,
+                        shortLabel: catShort || catName,
+                        ugcCode: catUgcCode,
+                        description: catDesc,
+                        showInMenu: catShowMenu,
+                        showOnHome: catShowHome,
+                      });
+                      notify('ok', `Updated category "${catName}".`);
+                    } else {
+                      await adminFetch('/api/admin/categories', 'POST', {
+                        name: catName,
+                        shortLabel: catShort || catName,
+                        slug: catSlug || catName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                        ugcCode: catUgcCode,
+                        description: catDesc,
+                        showInMenu: catShowMenu,
+                        showOnHome: catShowHome,
+                        createDefaultPage: catCreatePage,
+                      });
+                      notify('ok', `Created category "${catName}" and updated navigation menus.`);
+                    }
+                    setEditingCatId(null);
+                    setCatName('');
+                    setCatShort('');
+                    setCatSlug('');
+                    setCatUgcCode('Autonomous Portal');
+                    setCatDesc('');
+                    setCatShowMenu(true);
+                    setCatShowHome(true);
+                    setCatCreatePage(true);
+                  } catch (err) {
+                    notify('err', (err as Error).message);
+                  }
+                }}
+                className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3.5"
+              >
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold">
+                    {editingCatId ? `Edit Category: ${catName}` : 'Add Homepage / Menu Category'}
+                  </h2>
+                  {editingCatId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCatId(null);
+                        setCatName('');
+                        setCatShort('');
+                        setCatSlug('');
+                        setCatDesc('');
+                      }}
+                      className="text-xs underline"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-stone-500 dark:text-slate-400">
+                  Create top-level portal sections (such as Examination, Placement Cell, or NIRF Cell) that appear in the website header menu and homepage directory.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Category Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={catName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCatName(val);
+                      if (!editingCatId) {
+                        setCatSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+                        setCatShort(val.slice(0, 18));
+                      }
+                    }}
+                    placeholder="e.g. Training & Placement"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Short Header Label</label>
+                    <input
+                      type="text"
+                      value={catShort}
+                      onChange={(e) => setCatShort(e.target.value)}
+                      placeholder="e.g. Placements"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Badge / UGC Reference</label>
+                    <input
+                      type="text"
+                      value={catUgcCode}
+                      onChange={(e) => setCatUgcCode(e.target.value)}
+                      placeholder="e.g. Autonomous · CoE"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1">URL Slug (auto-generated)</label>
+                  <input
+                    type="text"
+                    disabled={Boolean(editingCatId)}
+                    value={catSlug}
+                    onChange={(e) => setCatSlug(e.target.value)}
+                    placeholder="e.g. examination"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Description (shown on Homepage card)</label>
+                  <textarea
+                    rows={2}
+                    value={catDesc}
+                    onChange={(e) => setCatDesc(e.target.value)}
+                    placeholder="Brief description of micro-pages inside this section..."
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={catShowMenu} onChange={(e) => setCatShowMenu(e.target.checked)} />
+                    <span>Show in Top Header Navigation Bar</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={catShowHome} onChange={(e) => setCatShowHome(e.target.checked)} />
+                    <span>Show in Homepage Categories Directory</span>
+                  </label>
+                  {!editingCatId && (
+                    <label className="flex items-center gap-2 font-medium text-amber-800 dark:text-amber-300">
+                      <input type="checkbox" checked={catCreatePage} onChange={(e) => setCatCreatePage(e.target.checked)} />
+                      <span>Auto-create starter Overview micro-page inside this category</span>
+                    </label>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  {editingCatId ? 'Save Category Changes' : 'Add Category & Update Navigation'}
+                </button>
+              </form>
+
+              <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 flex items-center justify-between">
+                  <span className="font-bold text-sm">Website Categories &amp; Menu Order ({state.categories.length})</span>
+                  <span className="text-[11px] text-stone-500">Top 7 visible items show directly in desktop bar; rest under &ldquo;More Portals&rdquo;</span>
+                </div>
+                <div className="divide-y divide-stone-100 dark:divide-slate-800">
+                  {state.categories.map((cat, idx) => {
+                    const count = state.pages.filter((p) => p.categorySlug === cat.slug).length;
+                    const moveCategory = async (dir: -1 | 1) => {
+                      const target = idx + dir;
+                      if (target < 0 || target >= state.categories.length) return;
+                      const ids = state.categories.map((c) => c.id);
+                      [ids[idx], ids[target]] = [ids[target], ids[idx]];
+                      await adminFetch('/api/admin/categories/reorder', 'PUT', { orderedIds: ids });
+                      notify('ok', `Reordered "${cat.name}".`);
+                    };
+                    return (
+                      <div key={cat.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] font-mono font-semibold text-amber-700 dark:text-amber-400">
+                              #{cat.sortOrder} · {cat.ugcCode}
+                            </span>
+                            <span className="font-bold text-stone-900 dark:text-white">{cat.name}</span>
+                            {cat.shortLabel && cat.shortLabel !== cat.name && (
+                              <span className="text-[11px] text-stone-500">(Menu: {cat.shortLabel})</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-stone-500 dark:text-slate-400 truncate mt-0.5">{cat.description}</p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => moveCategory(-1)}
+                            title="Move Up"
+                            className="p-1.5 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === state.categories.length - 1}
+                            onClick={() => moveCategory(1)}
+                            title="Move Down"
+                            className="p-1.5 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              adminFetch(`/api/admin/categories/${cat.id}`, 'PUT', {
+                                showInMenu: cat.showInMenu === false,
+                              }).then(() => notify('ok', `Updated menu visibility for ${cat.name}`))
+                            }
+                            className={`px-2 py-1 rounded text-[11px] font-semibold border ${
+                              cat.showInMenu !== false
+                                ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                : 'border-stone-300 text-stone-500'
+                            }`}
+                          >
+                            {cat.showInMenu !== false ? 'In Menu' : 'Menu Hidden'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPageFilterCat(cat.slug);
+                              setPageCat(cat.slug);
+                              setActiveTab('pages');
+                            }}
+                            className="px-2.5 py-1 rounded text-xs font-semibold text-white"
+                            style={{ backgroundColor: 'var(--primary-color)' }}
+                          >
+                            Pages ({count}) &rarr;
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCatId(cat.id);
+                              setCatName(cat.name);
+                              setCatShort(cat.shortLabel || cat.name);
+                              setCatSlug(cat.slug);
+                              setCatUgcCode(cat.ugcCode);
+                              setCatDesc(cat.description);
+                              setCatShowMenu(cat.showInMenu !== false);
+                              setCatShowHome(cat.showOnHome !== false);
+                            }}
+                            className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete category ${cat.name}`}
+                            onClick={async () => {
+                              try {
+                                await adminFetch(`/api/admin/categories/${cat.id}`, 'DELETE');
+                                notify('ok', `Deleted category "${cat.name}".`);
+                              } catch (err) {
+                                notify('err', (err as Error).message);
+                              }
+                            }}
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Header Quick-Access Links & Footer Columns Visual Builder */}
+            {canSettings && settingsDraft && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Header Top Utility Strip */}
+                <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold">Top Quick-Access Strip Links</h3>
+                      <p className="text-xs text-stone-500">Shown directly below the main header bar.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettingsDraft({
+                          ...settingsDraft,
+                          topBarLinks: [...settingsDraft.topBarLinks, { label: 'New Quick Link', url: '/quick-links' }],
+                        })
+                      }
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-white"
+                      style={{ backgroundColor: 'var(--secondary-color)' }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Link
+                    </button>
+                  </div>
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    {settingsDraft.topBarLinks.map((lk, idx) => (
+                      <div key={idx} className="p-3 rounded-lg border border-stone-200 dark:border-slate-800 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={lk.label}
+                            onChange={(e) => {
+                              const next = [...settingsDraft.topBarLinks];
+                              next[idx] = { ...lk, label: e.target.value };
+                              setSettingsDraft({ ...settingsDraft, topBarLinks: next });
+                            }}
+                            placeholder="Button Label"
+                            className="flex-1 px-2.5 py-1.5 text-xs font-semibold rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                topBarLinks: settingsDraft.topBarLinks.filter((_, i) => i !== idx),
+                              })
+                            }
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <LinkTargetPicker
+                          value={lk.url}
+                          onChange={(url) => {
+                            const next = [...settingsDraft.topBarLinks];
+                            next[idx] = { ...lk, url };
+                            setSettingsDraft({ ...settingsDraft, topBarLinks: next });
+                          }}
+                          categories={state.categories}
+                          pages={state.pages}
+                          departments={state.departments}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      adminFetch('/api/admin/settings', 'PUT', settingsDraft)
+                        .then(() => notify('ok', 'Saved Header Quick-Access links.'))
+                        .catch((err) => notify('err', (err as Error).message))
+                    }
+                    className="px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    Save Header Quick Links
+                  </button>
+                </div>
+
+                {/* Footer Columns Builder */}
+                <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold">Footer Link Columns</h3>
+                      <p className="text-xs text-stone-500">Manage columns &amp; links in website footer.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettingsDraft({
+                          ...settingsDraft,
+                          footerColumns: [
+                            ...settingsDraft.footerColumns,
+                            { title: 'New Section', links: [{ label: 'Home', url: '/' }] },
+                          ],
+                        })
+                      }
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-white"
+                      style={{ backgroundColor: 'var(--secondary-color)' }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Column
+                    </button>
+                  </div>
+                  <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+                    {settingsDraft.footerColumns.map((col, colIdx) => (
+                      <div key={colIdx} className="p-3 rounded-lg border border-stone-200 dark:border-slate-800 space-y-2.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={col.title}
+                            onChange={(e) => {
+                              const nextCols = [...settingsDraft.footerColumns];
+                              nextCols[colIdx] = { ...col, title: e.target.value };
+                              setSettingsDraft({ ...settingsDraft, footerColumns: nextCols });
+                            }}
+                            placeholder="Column Heading"
+                            className="flex-1 px-2.5 py-1.5 text-xs font-bold rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextCols = [...settingsDraft.footerColumns];
+                              nextCols[colIdx] = {
+                                ...col,
+                                links: [...col.links, { label: 'New Link', url: '/page/about-overview' }],
+                              };
+                              setSettingsDraft({ ...settingsDraft, footerColumns: nextCols });
+                            }}
+                            className="px-2 py-1 text-[11px] font-semibold rounded border border-stone-300 dark:border-slate-700"
+                          >
+                            + Link
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                footerColumns: settingsDraft.footerColumns.filter((_, i) => i !== colIdx),
+                              })
+                            }
+                            className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {col.links.map((lk, lkIdx) => (
+                          <div key={lkIdx} className="pl-2 border-l-2 border-stone-200 dark:border-slate-700 space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={lk.label}
+                                onChange={(e) => {
+                                  const nextCols = [...settingsDraft.footerColumns];
+                                  const nextLinks = [...col.links];
+                                  nextLinks[lkIdx] = { ...lk, label: e.target.value };
+                                  nextCols[colIdx] = { ...col, links: nextLinks };
+                                  setSettingsDraft({ ...settingsDraft, footerColumns: nextCols });
+                                }}
+                                placeholder="Link Label"
+                                className="flex-1 px-2 py-1 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextCols = [...settingsDraft.footerColumns];
+                                  nextCols[colIdx] = { ...col, links: col.links.filter((_, i) => i !== lkIdx) };
+                                  setSettingsDraft({ ...settingsDraft, footerColumns: nextCols });
+                                }}
+                                className="text-rose-600 p-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                            <LinkTargetPicker
+                              value={lk.url}
+                              onChange={(url) => {
+                                const nextCols = [...settingsDraft.footerColumns];
+                                const nextLinks = [...col.links];
+                                nextLinks[lkIdx] = { ...lk, url };
+                                nextCols[colIdx] = { ...col, links: nextLinks };
+                                setSettingsDraft({ ...settingsDraft, footerColumns: nextCols });
+                              }}
+                              categories={state.categories}
+                              pages={state.pages}
+                              departments={state.departments}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      adminFetch('/api/admin/settings', 'PUT', settingsDraft)
+                        .then(() => notify('ok', 'Saved Footer columns & links.'))
+                        .catch((err) => notify('err', (err as Error).message))
+                    }
+                    className="px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    Save Footer Columns
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2. PAGES BUILDER TAB (Visual WYSIWYG + HTML Toggle + PDF Attachment Upload + Category Filter) */}
         {activeTab === 'pages' && canPages && state && (
+          <div className="space-y-4">
+            {/* Category Quick Filter Strip */}
+            <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-stone-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setPageFilterCat('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                  pageFilterCat === 'all' ? 'text-white' : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                }`}
+                style={pageFilterCat === 'all' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+              >
+                All Categories ({state.pages.length})
+              </button>
+              {state.categories.map((c) => {
+                const cnt = state.pages.filter((p) => p.categorySlug === c.slug).length;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setPageFilterCat(c.slug);
+                      if (!editingPageId) setPageCat(c.slug);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                      pageFilterCat === c.slug
+                        ? 'text-white'
+                        : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                    }`}
+                    style={pageFilterCat === c.slug ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                  >
+                    {c.shortLabel || c.name} ({cnt})
+                  </button>
+                );
+              })}
+            </div>
+
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
             <form
               onSubmit={async (e) => {
@@ -751,6 +1375,7 @@ export function AdminDashboard({
                       categorySlug: pageCat,
                       title: pageTitle,
                       subtitle: pageSubtitle,
+                      sortOrder: pageSortOrder,
                       contentHtml: pageHtml,
                       attachedPdfUrl: pagePdfUrl || undefined,
                       attachedPdfLabel: pagePdfLabel || undefined,
@@ -774,6 +1399,7 @@ export function AdminDashboard({
                   setPageTitle('');
                   setPageSlug('');
                   setPageSubtitle('');
+                  setPageSortOrder(1);
                   setPagePdfUrl('');
                   setPagePdfLabel('');
                 } catch (err) {
@@ -784,7 +1410,7 @@ export function AdminDashboard({
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold">
-                  {editingPageId ? 'Edit Disclosure Page' : 'Create New Disclosure Page'}
+                  {editingPageId ? 'Edit Micro-Page / Disclosure Page' : 'Create New Micro-Page / Disclosure Page'}
                 </h2>
                 {editingPageId && (
                   <button
@@ -794,6 +1420,7 @@ export function AdminDashboard({
                       setPageTitle('');
                       setPageSlug('');
                       setPageSubtitle('');
+                      setPageSortOrder(1);
                       setPagePdfUrl('');
                       setPagePdfLabel('');
                     }}
@@ -804,9 +1431,9 @@ export function AdminDashboard({
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1">UGC Category</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold mb-1">Portal Category</label>
                   <select
                     value={pageCat}
                     onChange={(e) => setPageCat(e.target.value as UgcCategorySlug)}
@@ -820,20 +1447,20 @@ export function AdminDashboard({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1">URL Slug (auto-generated if blank)</label>
+                  <label className="block text-xs font-semibold mb-1">URL Slug</label>
                   <input
                     type="text"
                     disabled={Boolean(editingPageId)}
                     value={pageSlug}
                     onChange={(e) => setPageSlug(e.target.value)}
-                    placeholder="e.g. scholarship-schemes"
+                    placeholder="auto-from-title"
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-60"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                <div className="sm:col-span-6">
                   <label className="block text-xs font-semibold mb-1">Page Title</label>
                   <input
                     type="text"
@@ -841,7 +1468,7 @@ export function AdminDashboard({
                     value={pageTitle}
                     onChange={(e) => {
                       setPageTitle(e.target.value);
-                      if (!editingPageId && !pageSlug) {
+                      if (!editingPageId) {
                         setPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
                       }
                     }}
@@ -849,13 +1476,23 @@ export function AdminDashboard({
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Subtitle / UGC Reference</label>
+                <div className="sm:col-span-4">
+                  <label className="block text-xs font-semibold mb-1">Subtitle / Reference</label>
                   <input
                     type="text"
                     value={pageSubtitle}
                     onChange={(e) => setPageSubtitle(e.target.value)}
-                    placeholder="UGC Section 5(x) · Description"
+                    placeholder="Autonomous CoE / UGC Section"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold mb-1">Order</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={pageSortOrder}
+                    onChange={(e) => setPageSortOrder(Number(e.target.value))}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   />
                 </div>
@@ -928,22 +1565,27 @@ export function AdminDashboard({
                   style={{ backgroundColor: 'var(--primary-color)' }}
                 >
                   <FilePlus2 className="w-4 h-4" />
-                  <span>{editingPageId ? 'Save Changes' : 'Create Page'}</span>
+                  <span>{editingPageId ? 'Save Changes' : 'Create Micro-Page'}</span>
                 </button>
               </div>
             </form>
 
             <div className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 font-bold text-sm">
-                All Disclosure Pages ({state.pages.length})
+                {pageFilterCat === 'all'
+                  ? `All Micro-Pages (${state.pages.length})`
+                  : `${state.categories.find((c) => c.slug === pageFilterCat)?.name || pageFilterCat} Pages`}
               </div>
               <div className="max-h-[640px] overflow-y-auto divide-y divide-stone-100 dark:divide-slate-800">
-                {state.pages.map((pg) => (
+                {state.pages
+                  .filter((pg) => pageFilterCat === 'all' || pg.categorySlug === pageFilterCat)
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((pg) => (
                   <div key={pg.id} className="p-3.5 flex items-center justify-between gap-3 text-sm">
                     <div className="min-w-0">
                       <p className="font-semibold text-stone-900 dark:text-white truncate">{pg.title}</p>
                       <p className="text-xs text-stone-500 dark:text-slate-400">
-                        {pg.categorySlug} · /{pg.slug} · {pg.isPublished ? 'Published' : 'Draft'}
+                        {pg.categorySlug} · #{pg.sortOrder} · /{pg.slug} · {pg.isPublished ? 'Published' : 'Draft'}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -955,6 +1597,7 @@ export function AdminDashboard({
                           setPageTitle(pg.title);
                           setPageSlug(pg.slug);
                           setPageSubtitle(pg.subtitle);
+                          setPageSortOrder(pg.sortOrder);
                           setPageHtml(pg.contentHtml);
                           setPagePdfUrl(pg.attachedPdfUrl || '');
                           setPagePdfLabel(pg.attachedPdfLabel || '');
@@ -984,6 +1627,7 @@ export function AdminDashboard({
                 ))}
               </div>
             </div>
+          </div>
           </div>
         )}
 
@@ -1718,8 +2362,272 @@ export function AdminDashboard({
           </div>
         )}
 
-        {/* 4. HOMEPAGE SLIDERS, TICKER & EVENTS (with Image Upload & Edit) */}
+        {/* 4. HOMEPAGE SLIDERS, TICKER, EVENTS & SECTION BUILDER */}
         {activeTab === 'homepage' && canHomepage && state && (
+          <div className="space-y-6">
+            {canSettings && (
+              <div className="flex flex-wrap gap-2 bg-white dark:bg-slate-900 p-2 rounded-xl border border-stone-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setHomepageMode('sliders')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold ${
+                    homepageMode === 'sliders' ? 'text-white' : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100'
+                  }`}
+                  style={homepageMode === 'sliders' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                >
+                  Hero Sliders, Ticker &amp; Events
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHomepageMode('sections')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold ${
+                    homepageMode === 'sections' ? 'text-white' : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100'
+                  }`}
+                  style={homepageMode === 'sections' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                >
+                  Homepage Sections, Stats &amp; Badges Builder
+                </button>
+              </div>
+            )}
+
+          {homepageMode === 'sections' && canSettings && settingsDraft ? (
+            <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 dark:border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-base font-bold">Manage Homepage Blocks, Key Metrics &amp; Statutory Cards</h2>
+                  <p className="text-xs text-stone-500">Toggle sections on/off, customize headings, and manage metrics without touching any code.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    adminFetch('/api/admin/settings', 'PUT', settingsDraft)
+                      .then(() => notify('ok', 'Homepage layout sections & metrics saved!'))
+                      .catch((err) => notify('err', (err as Error).message))
+                  }
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  Save Homepage Layout
+                </button>
+              </div>
+
+              {/* Section Toggles */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                {(
+                  [
+                    ['showTicker', 'Scrolling News / FRA Fee Ticker'],
+                    ['showSlider', 'Hero Image Banner Slider'],
+                    ['showStatsAndRecognitions', 'Institutional Metrics & Recognition Bar'],
+                    ['showAboutAndDownloads', 'About Campus & Downloads Split'],
+                    ['showApprovedAndVision', 'Approved Bodies & Vision/Mission'],
+                    ['showLeadershipDesk', 'Our Desk & Leadership Cards'],
+                    ['showExaminationSpotlight', 'Autonomous Examination Portal Spotlight'],
+                    ['showDepartments', 'Academic Departments Microsites'],
+                    ['showCategoriesDirectory', 'All Categories & Portals Directory'],
+                    ['showEventsAndRecruiters', 'Events, Circulars & Top Recruiters'],
+                  ] as const
+                ).map(([key, label]) => {
+                  const hs = settingsDraft.homeSections || {
+                    showTicker: true,
+                    showSlider: true,
+                    showStatsAndRecognitions: true,
+                    showAboutAndDownloads: true,
+                    showApprovedAndVision: true,
+                    showLeadershipDesk: true,
+                    showExaminationSpotlight: true,
+                    showDepartments: true,
+                    showCategoriesDirectory: true,
+                    showEventsAndRecruiters: true,
+                  };
+                  const checked = hs[key] !== false;
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-center gap-2.5 p-3 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/40 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            homeSections: { ...hs, [key]: e.target.checked },
+                          })
+                        }
+                      />
+                      <span className="font-semibold text-stone-800 dark:text-slate-200">{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Custom Section Headings */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {(
+                  [
+                    ['aboutHeading', 'About Section Heading', 'ABOUT US'],
+                    ['downloadsHeading', 'Downloads Heading', 'DOWNLOADS'],
+                    ['leadershipHeading', 'Leadership Desk Heading', 'OUR DESK & LEADERSHIP'],
+                    ['examinationHeading', 'Examination Section Heading', 'AUTONOMOUS EXAMINATION PORTAL'],
+                    ['departmentsHeading', 'Departments Section Heading', 'Academic Departments'],
+                    ['categoriesHeading', 'Categories Directory Heading', 'Statutory Self-Disclosure & Autonomous Portals'],
+                  ] as const
+                ).map(([field, label, fallback]) => {
+                  const hs = settingsDraft.homeSections || {
+                    showTicker: true,
+                    showSlider: true,
+                    showStatsAndRecognitions: true,
+                    showAboutAndDownloads: true,
+                    showApprovedAndVision: true,
+                    showLeadershipDesk: true,
+                    showExaminationSpotlight: true,
+                    showDepartments: true,
+                    showCategoriesDirectory: true,
+                    showEventsAndRecruiters: true,
+                  };
+                  return (
+                    <div key={field}>
+                      <label className="block text-xs font-semibold mb-1">{label}</label>
+                      <input
+                        type="text"
+                        value={hs[field] ?? fallback}
+                        onChange={(e) =>
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            homeSections: { ...hs, [field]: e.target.value },
+                          })
+                        }
+                        className="w-full px-3 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Key Stats Metrics Builder */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2 border-t border-stone-200 dark:border-slate-800">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold">Key Highlight Statistics Bar</h3>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettingsDraft({
+                          ...settingsDraft,
+                          highlightsStats: [...(settingsDraft.highlightsStats || []), { label: 'New Metric', value: '100%' }],
+                        })
+                      }
+                      className="px-2.5 py-1 rounded text-xs font-semibold text-white"
+                      style={{ backgroundColor: 'var(--secondary-color)' }}
+                    >
+                      + Add Stat
+                    </button>
+                  </div>
+                  {(settingsDraft.highlightsStats || []).map((st, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={st.value}
+                        onChange={(e) => {
+                          const next = [...(settingsDraft.highlightsStats || [])];
+                          next[idx] = { ...st, value: e.target.value };
+                          setSettingsDraft({ ...settingsDraft, highlightsStats: next });
+                        }}
+                        placeholder="91.1%"
+                        className="w-28 px-2.5 py-1.5 text-xs font-bold rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                      <input
+                        type="text"
+                        value={st.label}
+                        onChange={(e) => {
+                          const next = [...(settingsDraft.highlightsStats || [])];
+                          next[idx] = { ...st, label: e.target.value };
+                          setSettingsDraft({ ...settingsDraft, highlightsStats: next });
+                        }}
+                        placeholder="Placement Rate"
+                        className="flex-1 px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            highlightsStats: (settingsDraft.highlightsStats || []).filter((_, i) => i !== idx),
+                          })
+                        }
+                        className="p-1.5 text-rose-600"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Approved Bodies Cards Builder */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold">Approved &amp; Affiliated Body Cards</h3>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettingsDraft({
+                          ...settingsDraft,
+                          approvedBodies: [
+                            ...(settingsDraft.approvedBodies || []),
+                            { name: 'AICTE Approved', url: '/page/recognition-approvals' },
+                          ],
+                        })
+                      }
+                      className="px-2.5 py-1 rounded text-xs font-semibold text-white"
+                      style={{ backgroundColor: 'var(--secondary-color)' }}
+                    >
+                      + Add Approval Card
+                    </button>
+                  </div>
+                  {(settingsDraft.approvedBodies || []).map((ab, idx) => (
+                    <div key={idx} className="p-2.5 rounded border border-stone-200 dark:border-slate-800 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={ab.name}
+                          onChange={(e) => {
+                            const next = [...(settingsDraft.approvedBodies || [])];
+                            next[idx] = { ...ab, name: e.target.value };
+                            setSettingsDraft({ ...settingsDraft, approvedBodies: next });
+                          }}
+                          placeholder="Statutory Body Name"
+                          className="flex-1 px-2.5 py-1.5 text-xs font-semibold rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSettingsDraft({
+                              ...settingsDraft,
+                              approvedBodies: (settingsDraft.approvedBodies || []).filter((_, i) => i !== idx),
+                            })
+                          }
+                          className="p-1.5 text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <LinkTargetPicker
+                        value={ab.url}
+                        onChange={(url) => {
+                          const next = [...(settingsDraft.approvedBodies || [])];
+                          next[idx] = { ...ab, url };
+                          setSettingsDraft({ ...settingsDraft, approvedBodies: next });
+                        }}
+                        categories={state.categories}
+                        pages={state.pages}
+                        departments={state.departments}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Hero Slides */}
             <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
@@ -1829,22 +2737,20 @@ export function AdminDashboard({
                   onChange={setSlideImage}
                   uploadBinary={uploadBinaryFile}
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={slideCta}
-                    onChange={(e) => setSlideCta(e.target.value)}
-                    placeholder="CTA Label"
-                    className="px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                  <input
-                    type="text"
-                    value={slideLink}
-                    onChange={(e) => setSlideLink(e.target.value)}
-                    placeholder="/page/..."
-                    className="px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={slideCta}
+                  onChange={(e) => setSlideCta(e.target.value)}
+                  placeholder="CTA Button Label"
+                  className="w-full px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <LinkTargetPicker
+                  value={slideLink}
+                  onChange={setSlideLink}
+                  categories={state.categories}
+                  pages={state.pages}
+                  departments={state.departments}
+                />
                 <button
                   type="submit"
                   className="px-3 py-1.5 rounded text-xs font-semibold text-white"
@@ -1896,22 +2802,20 @@ export function AdminDashboard({
                   placeholder="Scrolling announcement text..."
                   className="w-full px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={tickerBadge}
-                    onChange={(e) => setTickerBadge(e.target.value)}
-                    placeholder="Badge (e.g. FRA Fee)"
-                    className="px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                  <input
-                    type="text"
-                    value={tickerLink}
-                    onChange={(e) => setTickerLink(e.target.value)}
-                    placeholder="Target Link"
-                    className="px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={tickerBadge}
+                  onChange={(e) => setTickerBadge(e.target.value)}
+                  placeholder="Badge (e.g. FRA Fee, Exam)"
+                  className="w-full px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <LinkTargetPicker
+                  value={tickerLink}
+                  onChange={setTickerLink}
+                  categories={state.categories}
+                  pages={state.pages}
+                  departments={state.departments}
+                />
                 <button
                   type="submit"
                   className="px-3 py-1.5 rounded text-xs font-semibold text-white"
@@ -2055,6 +2959,8 @@ export function AdminDashboard({
                 </button>
               </form>
             </div>
+          </div>
+          )}
           </div>
         )}
 
@@ -2620,7 +3526,7 @@ export function AdminDashboard({
         )}
 
         {/* 9. SITE SETTINGS, VISION/MISSION, LOGO, STATS & THEME */}
-        {activeTab === 'settings' && canSettings && settingsDraft && (
+        {activeTab === 'settings' && canSettings && settingsDraft && state && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <form
               onSubmit={async (e) => {
@@ -2634,168 +3540,277 @@ export function AdminDashboard({
               }}
               className="lg:col-span-8 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-5"
             >
-              <h2 className="text-base font-bold">Complete Website Identity, Homepage Sections &amp; Theme</h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Trust / Society Name</label>
-                  <input
-                    type="text"
-                    value={settingsDraft.trustName || ''}
-                    onChange={(e) => setSettingsDraft({ ...settingsDraft, trustName: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Institution Full Name</label>
-                  <input
-                    type="text"
-                    value={settingsDraft.institutionName}
-                    onChange={(e) => setSettingsDraft({ ...settingsDraft, institutionName: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold mb-1">Affiliation &amp; Recognition Line</label>
-                <input
-                  type="text"
-                  value={settingsDraft.affiliation}
-                  onChange={(e) => setSettingsDraft({ ...settingsDraft, affiliation: e.target.value })}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <ImageUploader
-                  label="Institution Logo / Crest (Optional)"
-                  value={settingsDraft.logoUrl || ''}
-                  onChange={(url) => setSettingsDraft({ ...settingsDraft, logoUrl: url })}
-                  uploadBinary={uploadBinaryFile}
-                />
-                <ImageUploader
-                  label="About Campus Showcase Photo"
-                  value={settingsDraft.aboutImageUrl || ''}
-                  onChange={(url) => setSettingsDraft({ ...settingsDraft, aboutImageUrl: url })}
-                  uploadBinary={uploadBinaryFile}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold mb-1">Homepage About Us Summary</label>
-                <textarea
-                  rows={3}
-                  value={settingsDraft.aboutSummary || ''}
-                  onChange={(e) => setSettingsDraft({ ...settingsDraft, aboutSummary: e.target.value })}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Our Vision Statement</label>
-                  <textarea
-                    rows={3}
-                    value={settingsDraft.visionText || ''}
-                    onChange={(e) => setSettingsDraft({ ...settingsDraft, visionText: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Our Mission Points (One per line)</label>
-                  <textarea
-                    rows={3}
-                    value={(settingsDraft.missionItems || []).join('\n')}
-                    onChange={(e) =>
-                      setSettingsDraft({
-                        ...settingsDraft,
-                        missionItems: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
-                      })
-                    }
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 dark:border-slate-800 pb-3">
+                <h2 className="text-base font-bold">Complete Website Identity, Sections &amp; Recognitions</h2>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ['identity', 'Identity & Branding'],
+                      ['sections', 'Homepage Sections'],
+                      ['metrics', 'Recognitions & Recruiters'],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setSettingsSection(id)}
+                      className={`px-2.5 py-1 rounded text-xs font-semibold ${
+                        settingsSection === id ? 'text-white' : 'bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300'
+                      }`}
+                      style={settingsSection === id ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Top Recruiters (Comma-separated)</label>
-                  <input
-                    type="text"
-                    value={(settingsDraft.recruiters || []).join(', ')}
-                    onChange={(e) =>
-                      setSettingsDraft({
-                        ...settingsDraft,
-                        recruiters: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                      })
-                    }
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">DTE &amp; AICTE Codes</label>
-                  <div className="grid grid-cols-2 gap-2">
+              {settingsSection === 'identity' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Trust / Society Name</label>
+                      <input
+                        type="text"
+                        value={settingsDraft.trustName || ''}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, trustName: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Institution Full Name</label>
+                      <input
+                        type="text"
+                        value={settingsDraft.institutionName}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, institutionName: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Affiliation &amp; Recognition Line</label>
                     <input
                       type="text"
-                      value={settingsDraft.dteCode}
-                      onChange={(e) => setSettingsDraft({ ...settingsDraft, dteCode: e.target.value })}
-                      placeholder="DTE Code"
-                      className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      value={settingsDraft.affiliation}
+                      onChange={(e) => setSettingsDraft({ ...settingsDraft, affiliation: e.target.value })}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                     />
-                    <input
-                      type="text"
-                      value={settingsDraft.aicteCode}
-                      onChange={(e) => setSettingsDraft({ ...settingsDraft, aicteCode: e.target.value })}
-                      placeholder="AICTE ID"
-                      className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <ImageUploader
+                      label="Institution Logo / Crest (Optional)"
+                      value={settingsDraft.logoUrl || ''}
+                      onChange={(url) => setSettingsDraft({ ...settingsDraft, logoUrl: url })}
+                      uploadBinary={uploadBinaryFile}
+                    />
+                    <ImageUploader
+                      label="About Campus Showcase Photo"
+                      value={settingsDraft.aboutImageUrl || ''}
+                      onChange={(url) => setSettingsDraft({ ...settingsDraft, aboutImageUrl: url })}
+                      uploadBinary={uploadBinaryFile}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Homepage About Us Summary</label>
+                    <textarea
+                      rows={3}
+                      value={settingsDraft.aboutSummary || ''}
+                      onChange={(e) => setSettingsDraft({ ...settingsDraft, aboutSummary: e.target.value })}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Our Vision Statement</label>
+                      <textarea
+                        rows={3}
+                        value={settingsDraft.visionText || ''}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, visionText: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Our Mission Points (One per line)</label>
+                      <textarea
+                        rows={3}
+                        value={(settingsDraft.missionItems || []).join('\n')}
+                        onChange={(e) =>
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            missionItems: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                          })
+                        }
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Official Phone</label>
+                      <input
+                        type="text"
+                        value={settingsDraft.phone}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, phone: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Official Email</label>
+                      <input
+                        type="email"
+                        value={settingsDraft.email}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, email: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Theme Palette</label>
+                      <select
+                        value={settingsDraft.defaultPaletteId}
+                        onChange={(e) => {
+                          const pal = THEME_PALETTES.find((p) => p.id === e.target.value);
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            defaultPaletteId: e.target.value,
+                            primaryColor: pal?.primary || settingsDraft.primaryColor,
+                            secondaryColor: pal?.secondary || settingsDraft.secondaryColor,
+                          });
+                        }}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      >
+                        {THEME_PALETTES.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">DTE Code</label>
+                      <input
+                        type="text"
+                        value={settingsDraft.dteCode}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, dteCode: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">AICTE Permanent ID</label>
+                      <input
+                        type="text"
+                        value={settingsDraft.aicteCode}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, aicteCode: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Anti-Ragging Helpline</label>
+                      <input
+                        type="text"
+                        value={settingsDraft.antiRaggingHelpline}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, antiRaggingHelpline: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {settingsSection === 'sections' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-stone-500 dark:text-slate-400">
+                    Turn any homepage section on or off and customize headings for your campus.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    {(
+                      [
+                        ['showTicker', 'Scrolling News / FRA Fee Ticker'],
+                        ['showSlider', 'Hero Image Banner Slider'],
+                        ['showStatsAndRecognitions', 'Institutional Metrics & Recognition Bar'],
+                        ['showAboutAndDownloads', 'About Campus & Downloads Split'],
+                        ['showApprovedAndVision', 'Approved Bodies & Vision/Mission'],
+                        ['showLeadershipDesk', 'Our Desk & Leadership Cards'],
+                        ['showExaminationSpotlight', 'Autonomous Examination Portal Spotlight'],
+                        ['showDepartments', 'Academic Departments Microsites'],
+                        ['showCategoriesDirectory', 'All Categories & Portals Directory'],
+                        ['showEventsAndRecruiters', 'Events, Circulars & Top Recruiters'],
+                      ] as const
+                    ).map(([key, label]) => {
+                      const hs = settingsDraft.homeSections || {
+                        showTicker: true,
+                        showSlider: true,
+                        showStatsAndRecognitions: true,
+                        showAboutAndDownloads: true,
+                        showApprovedAndVision: true,
+                        showLeadershipDesk: true,
+                        showExaminationSpotlight: true,
+                        showDepartments: true,
+                        showCategoriesDirectory: true,
+                        showEventsAndRecruiters: true,
+                      };
+                      return (
+                        <label
+                          key={key}
+                          className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/40 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={hs[key] !== false}
+                            onChange={(e) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                homeSections: { ...hs, [key]: e.target.checked },
+                              })
+                            }
+                          />
+                          <span className="font-semibold">{label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {settingsSection === 'metrics' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Accreditation Recognition Strip (One badge per line)</label>
+                    <textarea
+                      rows={4}
+                      value={(settingsDraft.accreditationHighlights || []).join('\n')}
+                      onChange={(e) =>
+                        setSettingsDraft({
+                          ...settingsDraft,
+                          accreditationHighlights: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                        })
+                      }
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Top Recruiters (One company per line)</label>
+                    <textarea
+                      rows={4}
+                      value={(settingsDraft.recruiters || []).join('\n')}
+                      onChange={(e) =>
+                        setSettingsDraft({
+                          ...settingsDraft,
+                          recruiters: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                        })
+                      }
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                     />
                   </div>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Official Phone</label>
-                  <input
-                    type="text"
-                    value={settingsDraft.phone}
-                    onChange={(e) => setSettingsDraft({ ...settingsDraft, phone: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Official Email</label>
-                  <input
-                    type="email"
-                    value={settingsDraft.email}
-                    onChange={(e) => setSettingsDraft({ ...settingsDraft, email: e.target.value })}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Theme Palette</label>
-                  <select
-                    value={settingsDraft.defaultPaletteId}
-                    onChange={(e) => {
-                      const pal = THEME_PALETTES.find((p) => p.id === e.target.value);
-                      setSettingsDraft({
-                        ...settingsDraft,
-                        defaultPaletteId: e.target.value,
-                        primaryColor: pal?.primary || settingsDraft.primaryColor,
-                        secondaryColor: pal?.secondary || settingsDraft.secondaryColor,
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  >
-                    {THEME_PALETTES.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              )}
 
               <button
                 type="submit"

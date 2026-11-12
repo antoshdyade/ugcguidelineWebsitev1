@@ -8,7 +8,6 @@ import {
   Download,
   ExternalLink,
   FileText,
-  GraduationCap,
   Mail,
   Pause,
   Play,
@@ -20,8 +19,10 @@ import type {
   CampusEvent,
   CmsCategory,
   CmsDocument,
+  CmsPage,
   Department,
   HeroSlide,
+  HomeSectionsConfig,
   LeadershipProfile,
   SiteSettings,
   TickerItem,
@@ -32,6 +33,7 @@ interface HomePageProps {
   sliders: HeroSlide[];
   ticker: TickerItem[];
   categories: CmsCategory[];
+  pages: CmsPage[];
   departments: Department[];
   events: CampusEvent[];
   documents: CmsDocument[];
@@ -44,6 +46,7 @@ export function HomePage({
   sliders,
   ticker,
   categories,
+  pages,
   departments,
   events,
   documents,
@@ -74,16 +77,28 @@ export function HomePage({
   const activeSlide = sliders[slideIdx % Math.max(1, sliders.length)];
   const activeTicker = ticker[activeTickerIdx % Math.max(1, ticker.length)];
 
-  const categoryLandingMap: Record<string, string> = {
-    'about-hei': '/page/about-overview',
-    administration: '/page/statutory-officers',
-    academics: '/page/academic-programs',
-    'admissions-fee': '/page/prospectus-fee-structure',
-    research: '/page/research-development-cell',
-    'student-life': '/page/placement-cell',
-    alumni: '/page/alumni-association',
-    'information-corner': '/page/rti-disclosure',
+  const hs: HomeSectionsConfig = {
+    showTicker: true,
+    showSlider: true,
+    showStatsAndRecognitions: true,
+    showAboutAndDownloads: true,
+    showApprovedAndVision: true,
+    showLeadershipDesk: true,
+    showExaminationSpotlight: true,
+    showDepartments: true,
+    showCategoriesDirectory: true,
+    showEventsAndRecruiters: true,
+    ...(settings.homeSections || {}),
   };
+
+  const examCategory = categories.find((c) => c.slug === 'examination');
+  const examPages = pages
+    .filter((p) => p.categorySlug === 'examination')
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const visibleHomeCategories = [...categories]
+    .filter((c) => c.showOnHome !== false)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
 
   const highlightsStats = settings.highlightsStats || [
     { label: 'Placement Rate', value: '91.1%' },
@@ -111,8 +126,8 @@ export function HomePage({
 
   return (
     <div className="space-y-12 pb-10">
-      {/* News Ticker Bar with Prev / Play-Pause / Next Controls (ftccoe-inspired) */}
-      {ticker.length > 0 && (
+      {/* News Ticker Bar with Prev / Play-Pause / Next Controls */}
+      {hs.showTicker && ticker.length > 0 && (
         <div className="border-b border-stone-200 dark:border-slate-800 bg-amber-50/95 dark:bg-slate-900">
           <div className="max-w-[1380px] mx-auto px-4 flex items-center justify-between gap-2">
             <div className="flex items-center flex-1 min-w-0">
@@ -193,7 +208,7 @@ export function HomePage({
       )}
 
       {/* Hero Image Slider */}
-      {activeSlide && (
+      {hs.showSlider && activeSlide && (
         <section aria-label="Featured Campus Highlights" className="max-w-[1380px] mx-auto px-4 pt-1">
           <div className="relative rounded-xl overflow-hidden border border-stone-200 dark:border-slate-800 bg-slate-900 min-h-[380px] lg:min-h-[460px] flex items-end">
             <img
@@ -262,55 +277,58 @@ export function HomePage({
         </section>
       )}
 
-      {/* Institutional Highlights & Key Metrics Bar (ftccoe-style stats + recognitions) */}
-      <section aria-label="Institutional Highlights" className="max-w-[1380px] mx-auto px-4 space-y-4">
-        <div
-          className="rounded-xl text-white grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-white/15 shadow-sm overflow-hidden"
-          style={{ backgroundColor: 'var(--primary-color)' }}
-        >
-          {highlightsStats.map((stat, idx) => (
-            <div key={idx} className="px-5 py-5 text-center">
-              <p className="font-display text-2xl sm:text-3xl font-bold text-amber-300 tabular-nums">
-                {stat.value}
-              </p>
-              <p className="text-xs uppercase tracking-wider text-white/85 mt-1 font-medium">
-                {stat.label}
-              </p>
-            </div>
-          ))}
-        </div>
+      {/* Institutional Highlights & Key Metrics Bar */}
+      {hs.showStatsAndRecognitions && (
+        <section aria-label="Institutional Highlights" className="max-w-[1380px] mx-auto px-4 space-y-4">
+          <div
+            className="rounded-xl text-white grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-white/15 shadow-sm overflow-hidden"
+            style={{ backgroundColor: 'var(--primary-color)' }}
+          >
+            {highlightsStats.map((stat, idx) => (
+              <div key={idx} className="px-5 py-5 text-center">
+                <p className="font-display text-2xl sm:text-3xl font-bold text-amber-300 tabular-nums">
+                  {stat.value}
+                </p>
+                <p className="text-xs uppercase tracking-wider text-white/85 mt-1 font-medium">
+                  {stat.label}
+                </p>
+              </div>
+            ))}
+          </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-stone-200 dark:divide-slate-800 border border-stone-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
-          {settings.accreditationHighlights.map((item, idx) => (
-            <div key={idx} className="px-4 py-3 text-center">
-              <p className="text-[11px] uppercase tracking-wider text-stone-500 dark:text-slate-400">
-                Recognition {String(idx + 1).padStart(2, '0')}
-              </p>
-              <p className="text-xs sm:text-sm font-semibold text-stone-900 dark:text-white mt-0.5">
-                {item}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-stone-200 dark:divide-slate-800 border border-stone-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
+            {settings.accreditationHighlights.map((item, idx) => (
+              <div key={idx} className="px-4 py-3 text-center">
+                <p className="text-[11px] uppercase tracking-wider text-stone-500 dark:text-slate-400">
+                  Recognition {String(idx + 1).padStart(2, '0')}
+                </p>
+                <p className="text-xs sm:text-sm font-semibold text-stone-900 dark:text-white mt-0.5">
+                  {item}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
-      {/* About Us + Statutory Downloads Split (ftccoe.ac.in signature layout) */}
-      <section className="max-w-[1380px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-        <article className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 flex flex-col sm:flex-row gap-6 items-start">
-          <img
-            src={settings.aboutImageUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg'}
-            alt={`${settings.shortCode} campus`}
-            referrerPolicy="no-referrer"
-            className="w-full sm:w-52 h-48 sm:h-full max-h-64 rounded-xl object-cover border border-stone-200 dark:border-slate-700 shrink-0"
-          />
-          <div className="flex-1 flex flex-col justify-between h-full space-y-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--secondary-color)' }}>
-                About Our Campus
-              </p>
-              <h2 className="font-display text-2xl font-bold text-stone-900 dark:text-white pb-2 border-b-2 inline-block mb-3" style={{ borderColor: 'var(--primary-color)' }}>
-                ABOUT US
-              </h2>
+      {/* About Us + Statutory Downloads Split */}
+      {hs.showAboutAndDownloads && (
+        <section className="max-w-[1380px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+          <article className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 flex flex-col sm:flex-row gap-6 items-start">
+            <img
+              src={settings.aboutImageUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg'}
+              alt={`${settings.shortCode} campus`}
+              referrerPolicy="no-referrer"
+              className="w-full sm:w-52 h-48 sm:h-full max-h-64 rounded-xl object-cover border border-stone-200 dark:border-slate-700 shrink-0"
+            />
+            <div className="flex-1 flex flex-col justify-between h-full space-y-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--secondary-color)' }}>
+                  About Our Campus
+                </p>
+                <h2 className="font-display text-2xl font-bold text-stone-900 dark:text-white pb-2 border-b-2 inline-block mb-3" style={{ borderColor: 'var(--primary-color)' }}>
+                  {hs.aboutHeading || 'ABOUT US'}
+                </h2>
               <p className="text-sm text-stone-600 dark:text-slate-300 leading-relaxed">
                 {settings.aboutSummary ||
                   'Established in 1998, our Autonomous Engineering Campus delivers NAAC A+ accredited technical education, industry-partnered laboratories, and 100% transparent UGC NEP 2020 public disclosures.'}
@@ -350,7 +368,7 @@ export function HomePage({
                   Open Public Access
                 </p>
                 <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white">
-                  DOWNLOADS
+                  {hs.downloadsHeading || 'DOWNLOADS'}
                 </h2>
               </div>
               <button
@@ -392,8 +410,10 @@ export function HomePage({
           </div>
         </aside>
       </section>
+      )}
 
-      {/* Approved & Affiliated By + Vision & Mission Split (ftccoe-style + UGC Compliance) */}
+      {/* Approved & Affiliated By + Vision & Mission Split */}
+      {hs.showApprovedAndVision && (
       <section className="max-w-[1380px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
         <div className="lg:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 flex flex-col justify-between space-y-5">
           <div>
@@ -463,9 +483,10 @@ export function HomePage({
           </div>
         </div>
       </section>
+      )}
 
-      {/* Our Desk — Leadership Showcase (ftccoe-style multi-card desk) */}
-      {leadership.length > 0 && (
+      {/* Our Desk — Leadership Showcase */}
+      {hs.showLeadershipDesk && leadership.length > 0 && (
         <section className="max-w-[1380px] mx-auto px-4">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 pb-3 border-b border-stone-200 dark:border-slate-800">
             <div>
@@ -473,7 +494,7 @@ export function HomePage({
                 UGC Section 5(b) · Governance &amp; Statutory Officers
               </p>
               <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
-                OUR DESK &amp; LEADERSHIP
+                {hs.leadershipHeading || 'OUR DESK & LEADERSHIP'}
               </h2>
             </div>
             <button
@@ -527,7 +548,64 @@ export function HomePage({
         </section>
       )}
 
+      {/* Autonomous Examination Portal Spotlight */}
+      {hs.showExaminationSpotlight && examPages.length > 0 && (
+        <section aria-label="Autonomous Examination Cell Portal" className="max-w-[1380px] mx-auto px-4">
+          <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-7 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-3 border-b border-stone-200 dark:border-slate-800">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--secondary-color)' }}>
+                  {examCategory?.ugcCode || 'Autonomous · CoE'} · NEP 2020 Credit &amp; Grading
+                </p>
+                <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
+                  {hs.examinationHeading || 'AUTONOMOUS EXAMINATION PORTAL'}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('/category/examination')}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white shrink-0"
+                style={{ backgroundColor: 'var(--primary-color)' }}
+              >
+                <span>Open Examination Portal</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {examPages.map((pg, idx) => (
+                <button
+                  key={pg.id}
+                  type="button"
+                  onClick={() => onNavigate(`/page/${pg.slug}`)}
+                  className="text-left p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/60 hover:border-amber-600 transition-colors group flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] font-mono-tabular text-stone-500 dark:text-slate-400 mb-1.5">
+                      <span className="font-semibold" style={{ color: 'var(--secondary-color)' }}>
+                        EXAM {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <FileText className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+                    </div>
+                    <h3 className="text-sm font-bold text-stone-900 dark:text-white group-hover:underline mb-1">
+                      {pg.title}
+                    </h3>
+                    <p className="text-xs text-stone-600 dark:text-slate-300 line-clamp-2">
+                      {pg.subtitle}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold mt-3 inline-flex items-center gap-1" style={{ color: 'var(--primary-color)' }}>
+                    View Details <ArrowRight className="w-3 h-3" />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Academic Departments Microsites Showcase */}
+      {hs.showDepartments && (
       <section className="max-w-[1380px] mx-auto px-4">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 pb-3 border-b border-stone-200 dark:border-slate-800">
           <div>
@@ -535,7 +613,7 @@ export function HomePage({
               UGC Section 5(c) · Dedicated Departmental Microsites
             </p>
             <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
-              {t('exploreDepts')}
+              {hs.departmentsHeading || t('exploreDepts')}
             </h2>
           </div>
           <button
@@ -598,42 +676,83 @@ export function HomePage({
           ))}
         </div>
       </section>
+      )}
 
-      {/* UGC 8-Module Disclosure Directory */}
+      {/* Dynamic UGC & Autonomous Portal Directory */}
+      {hs.showCategoriesDirectory && (
       <section className="max-w-[1380px] mx-auto px-4">
         <div className="mb-6 pb-3 border-b border-stone-200 dark:border-slate-800">
           <p className="text-xs uppercase tracking-widest text-stone-500 dark:text-slate-400">
-            NEP 2020 Compliance Architecture
+            NEP 2020 Compliance &amp; Autonomous Structure
           </p>
           <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
-            Statutory Self-Disclosure Categories
+            {hs.categoriesHeading || 'Statutory Self-Disclosure & Autonomous Portals'}
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => onNavigate(categoryLandingMap[cat.slug] || '/page/about-overview')}
-              className="text-left p-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-stone-400 dark:hover:border-slate-600 transition-colors group"
-            >
-              <div className="flex items-center justify-between text-xs text-stone-500 dark:text-slate-400 mb-1.5">
-                <span className="font-mono-tabular font-medium">{cat.ugcCode}</span>
-                <GraduationCap className="w-4 h-4 opacity-50 group-hover:opacity-100" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visibleHomeCategories.map((cat) => {
+            const catPages = pages
+              .filter((p) => p.categorySlug === cat.slug)
+              .sort((a, b) => a.sortOrder - b.sortOrder);
+            return (
+              <div
+                key={cat.id}
+                className="p-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between space-y-3"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-xs text-stone-500 dark:text-slate-400 mb-1.5">
+                    <span className="font-mono-tabular font-semibold" style={{ color: 'var(--secondary-color)' }}>
+                      {cat.ugcCode}
+                    </span>
+                    <span className="text-[11px] font-mono-tabular text-stone-400">
+                      {catPages.length} {catPages.length === 1 ? 'Micro-Page' : 'Micro-Pages'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(`/category/${cat.slug}`)}
+                    className="text-left text-base font-bold text-stone-900 dark:text-white mb-1.5 hover:underline block"
+                  >
+                    {cat.name}
+                  </button>
+                  <p className="text-xs text-stone-600 dark:text-slate-400 leading-relaxed line-clamp-2 mb-3">
+                    {cat.description}
+                  </p>
+                  {catPages.length > 0 && (
+                    <ul className="space-y-1 border-t border-stone-100 dark:border-slate-800 pt-2.5">
+                      {catPages.slice(0, 3).map((pg) => (
+                        <li key={pg.id}>
+                          <button
+                            type="button"
+                            onClick={() => onNavigate(`/page/${pg.slug}`)}
+                            className="text-xs text-stone-700 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 hover:underline text-left truncate block w-full"
+                          >
+                            &bull; {pg.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate(`/category/${cat.slug}`)}
+                  className="text-xs font-semibold inline-flex items-center gap-1 hover:underline self-start pt-1"
+                  style={{ color: 'var(--primary-color)' }}
+                >
+                  <span>Explore {cat.shortLabel || cat.name}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <h3 className="text-base font-bold text-stone-900 dark:text-white mb-1.5 group-hover:underline">
-                {cat.name}
-              </h3>
-              <p className="text-xs text-stone-600 dark:text-slate-400 leading-relaxed line-clamp-2">
-                {cat.description}
-              </p>
-            </button>
-          ))}
+            );
+          })}
         </div>
       </section>
+      )}
 
       {/* Campus Activities, Achievements & Top Recruiters Strip */}
+      {hs.showEventsAndRecruiters && (
       <section className="max-w-[1380px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-stone-200 dark:border-slate-800">
@@ -713,10 +832,11 @@ export function HomePage({
             className="w-full py-2.5 px-4 rounded-lg text-xs font-semibold text-white text-center transition-colors"
             style={{ backgroundColor: 'var(--primary-color)' }}
           >
-            Explore Campus Picture Gallery →
+            Explore Campus Picture Gallery &rarr;
           </button>
         </aside>
       </section>
+      )}
     </div>
   );
 }

@@ -28,9 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($err === '') {
             $slug = preg_replace('/[^a-z0-9-]/', '-', strtolower(trim($_POST['slug'])));
+            $sortOrder = max(1, (int)($_POST['sort_order'] ?? 1));
             if ($action === 'update' && !empty($_POST['page_id'])) {
                 $stmt = $pdo->prepare(
-                    'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, is_published = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?'
+                    'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, is_published = ?, sort_order = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?'
                 );
                 $stmt->execute([
                     (int)$_POST['category_id'],
@@ -41,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdfUrl !== '' ? $pdfUrl : null,
                     $pdfLabel !== '' ? $pdfLabel : null,
                     isset($_POST['is_published']) ? 1 : 0,
+                    $sortOrder,
                     $user['full_name'],
                     (int)$_POST['page_id'],
                 ]);
@@ -48,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'Disclosure page updated successfully.';
             } else {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO pages (category_id, slug, title, subtitle, content_html, attached_pdf_url, attached_pdf_label, is_published, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())'
+                    'INSERT INTO pages (category_id, slug, title, subtitle, content_html, attached_pdf_url, attached_pdf_label, is_published, sort_order, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())'
                 );
                 $stmt->execute([
                     (int)$_POST['category_id'],
@@ -59,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdfUrl !== '' ? $pdfUrl : null,
                     $pdfLabel !== '' ? $pdfLabel : null,
                     isset($_POST['is_published']) ? 1 : 0,
+                    $sortOrder,
                     $user['full_name'],
                 ]);
                 logAudit($pdo, $user, 'CREATE_PAGE', 'Page', $_POST['title']);
@@ -80,8 +83,15 @@ if (!empty($_GET['edit'])) {
     $editingPage = $st->fetch() ?: null;
 }
 
-$cats  = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC')->fetchAll();
-$pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC')->fetchAll();
+$filterCatId = !empty($_GET['cat']) ? (int)$_GET['cat'] : 0;
+$cats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
+if ($filterCatId > 0) {
+    $stPg = $pdo->prepare('SELECT p.*, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? ORDER BY p.sort_order ASC, p.id DESC');
+    $stPg->execute([$filterCatId]);
+    $pages = $stPg->fetchAll();
+} else {
+    $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id ORDER BY c.sort_order ASC, p.sort_order ASC, p.id DESC')->fetchAll();
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -92,10 +102,22 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
   <script src="../assets/js/editor.js" defer></script>
 </head>
 <body class="container" style="padding:2rem 1rem;">
-  <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1><?= $editingPage ? 'Edit Page: ' . e($editingPage['title']) : 'Manage Dynamic UGC Disclosure Pages' ?></h1>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+    <p><a href="dashboard.php">&larr; Dashboard</a></p>
+    <a href="manage_categories.php" class="btn-secondary">Manage Categories &amp; Nav &rarr;</a>
+  </div>
+  <h1><?= $editingPage ? 'Edit Page: ' . e($editingPage['title']) : 'Manage Dynamic UGC &amp; Autonomous Micro-Pages' ?></h1>
   <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
   <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
+
+  <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem;">
+    <a href="manage_pages.php" class="<?= $filterCatId === 0 ? 'btn-primary' : 'btn-secondary' ?>" style="font-size:0.8rem;padding:0.35rem 0.7rem;">All Categories</a>
+    <?php foreach ($cats as $c): ?>
+      <a href="?cat=<?= (int)$c['id'] ?>" class="<?= $filterCatId === (int)$c['id'] ? 'btn-primary' : 'btn-secondary' ?>" style="font-size:0.8rem;padding:0.35rem 0.7rem;">
+        <?= e($c['name']) ?>
+      </a>
+    <?php endforeach; ?>
+  </div>
 
   <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -106,12 +128,16 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
     <div class="grid-2" style="margin-bottom:0.75rem;">
       <select name="category_id" required style="padding:0.5rem;">
         <?php foreach ($cats as $c): ?>
-          <option value="<?= (int)$c['id'] ?>" <?= ($editingPage && (int)$editingPage['category_id'] === (int)$c['id']) ? 'selected' : '' ?>>
+          <?php $selectedCat = $editingPage ? (int)$editingPage['category_id'] : $filterCatId; ?>
+          <option value="<?= (int)$c['id'] ?>" <?= $selectedCat === (int)$c['id'] ? 'selected' : '' ?>>
             <?= e($c['ugc_code']) ?> · <?= e($c['name']) ?>
           </option>
         <?php endforeach; ?>
       </select>
-      <input type="text" name="slug" required value="<?= e($editingPage['slug'] ?? '') ?>" placeholder="url-slug" style="padding:0.5rem;">
+      <div style="display:flex;gap:0.5rem;">
+        <input type="text" name="slug" required value="<?= e($editingPage['slug'] ?? '') ?>" placeholder="url-slug" style="flex:1;padding:0.5rem;">
+        <input type="number" name="sort_order" min="1" value="<?= (int)($editingPage['sort_order'] ?? 1) ?>" title="Order" style="width:72px;padding:0.5rem;">
+      </div>
     </div>
     <input type="text" name="title" required value="<?= e($editingPage['title'] ?? '') ?>" placeholder="Page Title" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
     <input type="text" name="subtitle" value="<?= e($editingPage['subtitle'] ?? '') ?>" placeholder="Subtitle / UGC Reference" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">

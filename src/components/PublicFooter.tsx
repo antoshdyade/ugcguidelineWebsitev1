@@ -38,14 +38,14 @@ export function PublicFooter({ settings, onNavigate }: PublicFooterProps) {
           </ul>
         </div>
 
-        {settings.footerColumns.map((col) => (
-          <div key={col.title}>
+        {settings.footerColumns.map((col, colIdx) => (
+          <div key={`${col.title}-${colIdx}`}>
             <h3 className="text-sm font-semibold text-white mb-3 pb-2 border-b border-slate-800">
               {col.title}
             </h3>
             <ul className="space-y-2 text-sm">
-              {col.links.map((lk) => (
-                <li key={lk.url}>
+              {col.links.map((lk, idx) => (
+                <li key={`${lk.label}-${idx}`}>
                   <button
                     type="button"
                     onClick={() => onNavigate(lk.url)}

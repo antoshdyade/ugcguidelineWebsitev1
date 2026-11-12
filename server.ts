@@ -10,7 +10,7 @@ import {
   validateUploadMeta,
   type AdminResource,
 } from './src/lib/cmsLogic';
-import type { CmsDatabase, CmsUser, UserRole } from './src/types/cms';
+import type { CmsCategory, CmsDatabase, CmsUser, UserRole } from './src/types/cms';
 
 const PORT = 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -27,14 +27,49 @@ function loadDatabase(): CmsDatabase {
     try {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw) as CmsDatabase;
-      return {
+      const isPreExamUpgrade = !parsed.settings?.homeSections;
+      let categories: CmsCategory[] = (parsed.categories || seed.categories).map((c) => ({
+        ...c,
+        shortLabel: c.shortLabel || c.name,
+        showInMenu: c.showInMenu !== false,
+        showOnHome: c.showOnHome !== false,
+      }));
+      let pages = parsed.pages || seed.pages;
+
+      if (isPreExamUpgrade) {
+        const examCat = seed.categories.find((c) => c.slug === 'examination');
+        if (examCat && !categories.some((c) => c.slug === 'examination')) {
+          categories.push({ ...examCat });
+          categories = categories
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((c, idx) => ({ ...c, sortOrder: idx + 1 }));
+        }
+        const existingSlugs = new Set(pages.map((p) => p.slug));
+        for (const sp of seed.pages.filter((p) => p.categorySlug === 'examination')) {
+          if (!existingSlugs.has(sp.slug)) {
+            pages.push(sp);
+          }
+        }
+      }
+
+      const merged: CmsDatabase = {
         ...seed,
         ...parsed,
+        categories,
+        pages,
         settings: {
           ...seed.settings,
           ...(parsed.settings || {}),
+          homeSections: {
+            ...seed.settings.homeSections!,
+            ...(parsed.settings?.homeSections || {}),
+          },
         },
       };
+      if (isPreExamUpgrade) {
+        fs.writeFileSync(DB_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+      }
+      return merged;
     } catch {
       // Fallback to fresh seed if file is corrupted
     }
@@ -138,8 +173,8 @@ async function startServer() {
   // Public bootstrap endpoint (unrestricted access per UGC Rule 4)
   app.get('/api/public/bootstrap', (_req, res) => {
     res.json({
-      categories: db.categories,
-      pages: db.pages.filter((p) => p.isPublished),
+      categories: [...db.categories].sort((a, b) => a.sortOrder - b.sortOrder),
+      pages: db.pages.filter((p) => p.isPublished).sort((a, b) => a.sortOrder - b.sortOrder),
       leadership: db.leadership,
       departments: db.departments.map((d) => ({
         ...d,
@@ -244,7 +279,7 @@ async function startServer() {
   app.get('/api/admin/state', requireAdmin(), (req, res) => {
     const currentUser = (req as express.Request & { currentUser: CmsUser }).currentUser;
     res.json({
-      categories: db.categories,
+      categories: [...db.categories].sort((a, b) => a.sortOrder - b.sortOrder),
       pages: db.pages,
       departments: db.departments,
       sliders: db.sliders,
@@ -258,6 +293,133 @@ async function startServer() {
       users: canUserAccessResource(currentUser, 'users') ? db.users.map(sanitizeUser) : [],
       auditLogs: canUserAccessResource(currentUser, 'audit_logs') ? db.auditLogs : [],
     });
+  });
+
+  // Categories & Navigation Builder CRUD
+  app.post('/api/admin/categories', requireAdmin('categories'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const {
+      name,
+      shortLabel,
+      slug,
+      ugcCode,
+      description,
+      showInMenu,
+      showOnHome,
+      createDefaultPage,
+    } = req.body as {
+      name?: string;
+      shortLabel?: string;
+      slug?: string;
+      ugcCode?: string;
+      description?: string;
+      showInMenu?: boolean;
+      showOnHome?: boolean;
+      createDefaultPage?: boolean;
+    };
+    if (!name || !String(name).trim()) {
+      res.status(400).json({ error: 'Category name is required.' });
+      return;
+    }
+    const rawSlug = slug && String(slug).trim() ? String(slug) : String(name);
+    const cleanSlug = rawSlug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `section-${Date.now()}`;
+    if (db.categories.some((c) => c.slug === cleanSlug)) {
+      res.status(409).json({ error: `A category with slug "${cleanSlug}" already exists.` });
+      return;
+    }
+    const nextId = Math.max(1, ...db.categories.map((c) => c.id)) + 1;
+    const nextSort = Math.max(0, ...db.categories.map((c) => c.sortOrder)) + 1;
+    const cat = {
+      id: nextId,
+      slug: cleanSlug,
+      name: String(name).trim(),
+      shortLabel: String(shortLabel || name).trim(),
+      ugcCode: String(ugcCode || 'Autonomous Portal').trim(),
+      description: String(description || `Official institutional section and micro-pages for ${String(name).trim()}.`).trim(),
+      sortOrder: nextSort,
+      showInMenu: showInMenu !== false,
+      showOnHome: showOnHome !== false,
+    };
+    db.categories.push(cat);
+
+    if (createDefaultPage !== false) {
+      const pageSlug = `${cleanSlug}-overview`;
+      if (!db.pages.some((p) => p.slug === pageSlug)) {
+        const nextPageId = Math.max(100, ...db.pages.map((p) => p.id)) + 1;
+        db.pages.push({
+          id: nextPageId,
+          categorySlug: cat.slug,
+          slug: pageSlug,
+          title: `${cat.name}: Overview`,
+          subtitle: `${cat.ugcCode} · Official Information`,
+          contentHtml: `<h2>${cat.name}</h2><p>${cat.description}</p><h3>Highlights &amp; Guidelines</h3><ul><li>Managed dynamically via Admin Dashboard &rarr; Pages &amp; UGC Content.</li><li>Add more micro-pages under the <strong>${cat.name}</strong> category to expand the left sidebar menu automatically.</li></ul>`,
+          isPublished: true,
+          sortOrder: 1,
+          updatedAt: new Date().toISOString().slice(0, 10),
+          updatedBy: actor.fullName,
+        });
+      }
+    }
+
+    addAudit(actor, 'CREATE_CATEGORY', 'Category', cat.name);
+    saveDatabase();
+    res.status(201).json(cat);
+  });
+
+  app.put('/api/admin/categories/reorder', requireAdmin('categories'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    orderedIds.forEach((id, idx) => {
+      const cat = db.categories.find((c) => c.id === Number(id));
+      if (cat) cat.sortOrder = idx + 1;
+    });
+    db.categories.sort((a, b) => a.sortOrder - b.sortOrder);
+    addAudit(actor, 'REORDER_CATEGORIES', 'Category', 'Updated navigation sort order');
+    saveDatabase();
+    res.json(db.categories);
+  });
+
+  app.put('/api/admin/categories/:id', requireAdmin('categories'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const cat = db.categories.find((c) => c.id === Number(req.params.id));
+    if (!cat) {
+      res.status(404).json({ error: 'Category not found.' });
+      return;
+    }
+    const { name, shortLabel, ugcCode, description, sortOrder, showInMenu, showOnHome } = req.body;
+    if (name !== undefined) cat.name = String(name).trim();
+    if (shortLabel !== undefined) cat.shortLabel = String(shortLabel).trim();
+    if (ugcCode !== undefined) cat.ugcCode = String(ugcCode).trim();
+    if (description !== undefined) cat.description = String(description).trim();
+    if (sortOrder !== undefined) cat.sortOrder = Number(sortOrder);
+    if (showInMenu !== undefined) cat.showInMenu = Boolean(showInMenu);
+    if (showOnHome !== undefined) cat.showOnHome = Boolean(showOnHome);
+    db.categories.sort((a, b) => a.sortOrder - b.sortOrder);
+    addAudit(actor, 'UPDATE_CATEGORY', 'Category', cat.name);
+    saveDatabase();
+    res.json(cat);
+  });
+
+  app.delete('/api/admin/categories/:id', requireAdmin('categories'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    if (db.categories.length <= 1) {
+      res.status(400).json({ error: 'At least one navigation category must remain.' });
+      return;
+    }
+    const idx = db.categories.findIndex((c) => c.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Category not found.' });
+      return;
+    }
+    const [removed] = db.categories.splice(idx, 1);
+    db.pages = db.pages.filter((p) => p.categorySlug !== removed.slug);
+    addAudit(actor, 'DELETE_CATEGORY', 'Category', removed.name);
+    saveDatabase();
+    res.json({ ok: true });
   });
 
   // Pages CRUD
@@ -303,12 +465,13 @@ async function startServer() {
       res.status(404).json({ error: 'Page not found.' });
       return;
     }
-    const { title, subtitle, contentHtml, categorySlug, isPublished, attachedPdfUrl, attachedPdfLabel } = req.body;
+    const { title, subtitle, contentHtml, categorySlug, isPublished, attachedPdfUrl, attachedPdfLabel, sortOrder } = req.body;
     if (title !== undefined) page.title = String(title);
     if (subtitle !== undefined) page.subtitle = String(subtitle);
     if (contentHtml !== undefined) page.contentHtml = String(contentHtml);
     if (categorySlug !== undefined) page.categorySlug = categorySlug;
     if (isPublished !== undefined) page.isPublished = Boolean(isPublished);
+    if (sortOrder !== undefined) page.sortOrder = Number(sortOrder);
     if (attachedPdfUrl !== undefined) page.attachedPdfUrl = attachedPdfUrl || undefined;
     if (attachedPdfLabel !== undefined) page.attachedPdfLabel = attachedPdfLabel || undefined;
     page.updatedAt = new Date().toISOString().slice(0, 10);

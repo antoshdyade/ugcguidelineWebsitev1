@@ -94,12 +94,58 @@ function getSiteSettings(PDO $pdo): array
         'mission_text' => "Deliver outcome-based engineering education with multidisciplinary minors and barrier-free access.\nFoster funded R&D, industrial consultancy, and entrepreneurship incubation.\nMaintain 100% institutional governance transparency aligned with UGC Public Self-Disclosure norms.",
         'recruiters' => "TCS\nInfosys\nPersistent Systems\nBosch India\nTata Technologies\nBharat Forge\nL&T Construction\nCapgemini",
         'map_embed_query' => 'Pandharpur,Maharashtra,India',
+        'home_sections' => [
+            'showTicker' => 1,
+            'showSlider' => 1,
+            'showStatsAndRecognitions' => 1,
+            'showAboutAndDownloads' => 1,
+            'showApprovedAndVision' => 1,
+            'showLeadershipDesk' => 1,
+            'showExaminationSpotlight' => 1,
+            'showDepartments' => 1,
+            'showCategoriesDirectory' => 1,
+            'showEventsAndRecruiters' => 1,
+            'examSpotlightTitle' => 'Autonomous Examination Portal (CoE)',
+            'departmentsTitle' => 'Academic Departments',
+            'categoriesTitle' => 'Statutory Self-Disclosure & Autonomous Portals',
+        ],
+        'highlights_stats' => [
+            ['label' => 'Years of Excellence', 'value' => '28+'],
+            ['label' => 'Placement Track', 'value' => '91.1%'],
+            ['label' => 'NBA Accredited Depts', 'value' => '4'],
+            ['label' => 'Faculty Doctorates', 'value' => '68'],
+        ],
+        'approved_bodies' => [
+            ['name' => 'AICTE New Delhi', 'subtitle' => 'Statutory Technical Approval', 'href' => 'page.php?slug=act-statutes-moa'],
+            ['name' => 'UGC 2(f) & 12(B)', 'subtitle' => 'Recognized Autonomous Institution', 'href' => 'page.php?slug=about-overview'],
+            ['name' => 'NAAC A+ Grade', 'subtitle' => 'CGPA 3.42 Institutional Cycle', 'href' => 'page.php?slug=accreditation-ranking'],
+            ['name' => 'PAHSUS Solapur', 'subtitle' => 'Affiliating University', 'href' => 'page.php?slug=about-overview'],
+        ],
     ];
     try {
         $stmt = $pdo->query('SELECT * FROM site_settings WHERE id = 1 LIMIT 1');
         $row = $stmt->fetch();
         if ($row) {
-            return array_merge($defaults, array_filter($row, static fn($v) => $v !== null && $v !== ''));
+            $merged = array_merge($defaults, array_filter($row, static fn($v) => $v !== null && $v !== ''));
+            if (!empty($row['home_sections_json'])) {
+                $decoded = json_decode((string)$row['home_sections_json'], true);
+                if (is_array($decoded)) {
+                    $merged['home_sections'] = array_merge($defaults['home_sections'], $decoded);
+                }
+            }
+            if (!empty($row['highlights_json'])) {
+                $decoded = json_decode((string)$row['highlights_json'], true);
+                if (is_array($decoded) && count($decoded) > 0) {
+                    $merged['highlights_stats'] = $decoded;
+                }
+            }
+            if (!empty($row['approved_bodies_json'])) {
+                $decoded = json_decode((string)$row['approved_bodies_json'], true);
+                if (is_array($decoded) && count($decoded) > 0) {
+                    $merged['approved_bodies'] = $decoded;
+                }
+            }
+            return $merged;
         }
     } catch (Throwable $ignored) {
         // Fallback below if schema has not been imported yet

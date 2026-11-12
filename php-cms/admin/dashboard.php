@@ -46,8 +46,11 @@ $evCount   = (int)$pdo->query('SELECT COUNT(*) FROM campus_events')->fetchColumn
   </div>
 
   <div class="grid-4">
+    <?php if (canAccessResource($user, 'categories')): ?>
+      <a href="manage_categories.php" class="card" style="text-decoration:none;color:inherit;"><h3>Categories &amp; Menus</h3><p>Add Examination/custom sections, reorder header links &amp; auto-create portals.</p></a>
+    <?php endif; ?>
     <?php if (canAccessResource($user, 'pages')): ?>
-      <a href="manage_pages.php" class="card" style="text-decoration:none;color:inherit;"><h3>Pages &amp; Categories</h3><p>Visual WYSIWYG + HTML editor with photo &amp; PDF upload.</p></a>
+      <a href="manage_pages.php" class="card" style="text-decoration:none;color:inherit;"><h3>Pages &amp; Micro-Pages</h3><p>Visual WYSIWYG + HTML editor with photo &amp; PDF upload.</p></a>
     <?php endif; ?>
     <?php if (canAccessResource($user, 'departments')): ?>
       <a href="manage_departments.php" class="card" style="text-decoration:none;color:inherit;"><h3>Departments &amp; Micro-Pages</h3><p>Add departments, edit micro-pages, faculty photos &amp; labs.</p></a>

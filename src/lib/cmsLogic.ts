@@ -123,6 +123,7 @@ export type AdminResource =
   | 'users'
   | 'settings'
   | 'audit_logs'
+  | 'categories'
   | 'pages'
   | 'sliders_events'
   | 'departments'
@@ -150,6 +151,7 @@ export function canUserAccessResource(
     case 'gallery':
     case 'directory':
       return role === 'content_editor';
+    case 'categories':
     case 'pages':
     case 'leadership':
       return role === 'content_editor' || role === 'iqac_officer';

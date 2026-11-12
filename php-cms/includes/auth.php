@@ -66,7 +66,7 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
     return match ($resource) {
         'users', 'settings', 'audit_logs' => false,
         'sliders_events', 'gallery', 'directory' => $role === 'content_editor',
-        'pages'                           => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'pages', 'categories'             => in_array($role, ['content_editor', 'iqac_officer'], true),
         'documents', 'leadership'         => in_array($role, ['iqac_officer', 'content_editor'], true),
         'departments'                     => $role === 'department_admin'
             && ($targetDeptId === null ? !empty($user['assigned_department_id']) : (int)$user['assigned_department_id'] === $targetDeptId),

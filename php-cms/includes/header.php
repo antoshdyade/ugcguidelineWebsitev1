@@ -1,13 +1,15 @@
 <?php
 declare(strict_types=1);
 $settings = getSiteSettings($pdo);
-$navCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC')->fetchAll();
+$navCats = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_in_menu, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
 $navDepts = $pdo->query('SELECT id, slug, code, name FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $navPagesStmt = $pdo->query('SELECT id, category_id, slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC');
 $pagesByCat = [];
 foreach ($navPagesStmt->fetchAll() as $pg) {
     $pagesByCat[$pg['category_id']][] = $pg;
 }
+$primaryCats = array_slice($navCats, 0, 7);
+$overflowCats = array_slice($navCats, 7);
 $dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '6220');
 ?>
 <!doctype html>
@@ -84,10 +86,11 @@ $dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '6220');
     <div class="container">
       <ul class="nav-list">
         <li class="nav-item"><a class="nav-link" href="index.php">Home</a></li>
-        <?php foreach ($navCats as $cat): ?>
+        <?php foreach ($primaryCats as $cat): ?>
           <li class="nav-item">
-            <a class="nav-link" href="#"><?= e($cat['name']) ?></a>
+            <a class="nav-link" href="page.php?cat=<?= urlencode($cat['slug']) ?>"><?= e(!empty($cat['short_label']) ? $cat['short_label'] : $cat['name']) ?></a>
             <div class="dropdown-menu">
+              <a href="page.php?cat=<?= urlencode($cat['slug']) ?>"><strong>Open <?= e($cat['name']) ?> Portal &rarr;</strong></a>
               <?php foreach ($pagesByCat[$cat['id']] ?? [] as $pg): ?>
                 <a href="page.php?slug=<?= urlencode($pg['slug']) ?>"><?= e($pg['title']) ?></a>
               <?php endforeach; ?>
@@ -100,6 +103,19 @@ $dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '6220');
             </div>
           </li>
         <?php endforeach; ?>
+        <?php if (!empty($overflowCats)): ?>
+          <li class="nav-item">
+            <a class="nav-link" href="#">More Portals</a>
+            <div class="dropdown-menu">
+              <?php foreach ($overflowCats as $ocat): ?>
+                <a href="page.php?cat=<?= urlencode($ocat['slug']) ?>"><strong><?= e($ocat['name']) ?></strong></a>
+                <?php foreach (array_slice($pagesByCat[$ocat['id']] ?? [], 0, 3) as $pg): ?>
+                  <a href="page.php?slug=<?= urlencode($pg['slug']) ?>" style="padding-left:1.25rem;font-size:0.82rem;"><?= e($pg['title']) ?></a>
+                <?php endforeach; ?>
+              <?php endforeach; ?>
+            </div>
+          </li>
+        <?php endif; ?>
         <li class="nav-item"><a class="nav-link" href="quick-links.php">Quick Links</a></li>
         <li class="nav-item"><a class="nav-link" href="gallery.php">Gallery</a></li>
         <li class="nav-item"><a class="nav-link" href="contact.php">Contact Us</a></li>

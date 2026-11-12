@@ -3,10 +3,43 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 $pdo = getDB();
 
-$slug = $_GET['slug'] ?? 'about-overview';
-$stmt = $pdo->prepare('SELECT p.*, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.slug = ? AND p.is_published = 1 LIMIT 1');
-$stmt->execute([$slug]);
-$page = $stmt->fetch();
+$slug = $_GET['slug'] ?? '';
+$catSlug = $_GET['cat'] ?? '';
+$page = null;
+$emptyCategory = null;
+
+if ($slug !== '') {
+    $stmt = $pdo->prepare('SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.slug = ? AND p.is_published = 1 LIMIT 1');
+    $stmt->execute([$slug]);
+    $page = $stmt->fetch() ?: null;
+} elseif ($catSlug !== '') {
+    $catStmt = $pdo->prepare('SELECT * FROM categories WHERE slug = ? LIMIT 1');
+    $catStmt->execute([$catSlug]);
+    $catRow = $catStmt->fetch();
+    if ($catRow) {
+        $pgStmt = $pdo->prepare('SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE c.id = ? AND p.is_published = 1 ORDER BY p.sort_order ASC, p.id ASC LIMIT 1');
+        $pgStmt->execute([(int)$catRow['id']]);
+        $page = $pgStmt->fetch() ?: null;
+        if ($page) {
+            $slug = $page['slug'];
+        } else {
+            $emptyCategory = $catRow;
+        }
+    }
+} else {
+    $stmt = $pdo->prepare('SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.is_published = 1 ORDER BY c.sort_order ASC, p.sort_order ASC LIMIT 1');
+    $stmt->execute();
+    $page = $stmt->fetch() ?: null;
+    if ($page) $slug = $page['slug'];
+}
+
+if (!$page && $emptyCategory) {
+    $pageTitle = $emptyCategory['name'];
+    require_once __DIR__ . '/includes/header.php';
+    echo '<div class="card"><small style="color:var(--secondary-color);font-weight:700;">' . e($emptyCategory['ugc_code']) . '</small><h1>' . e($emptyCategory['name']) . '</h1><p>' . e($emptyCategory['description'] ?: 'Content for this portal is being updated via the CMS Admin Portal.') . '</p><a href="index.php" class="btn-primary">Return Home</a></div>';
+    require_once __DIR__ . '/includes/footer.php';
+    exit;
+}
 
 if (!$page) {
     http_response_code(404);

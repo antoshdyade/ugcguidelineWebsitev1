@@ -26,8 +26,11 @@ export function createSeedDatabase(): CmsDatabase {
         id: 1,
         slug: 'about-hei',
         name: 'About HEI',
+        shortLabel: 'About HEI',
         ugcCode: 'Section 5(a)',
         sortOrder: 1,
+        showInMenu: true,
+        showOnHome: true,
         description:
           'Institutional overview, Act & Statutes, IDP, Affiliating University, NAAC/NBA/NIRF status, UGC 2(f)/12B, Annual Reports & Audited Accounts.',
       },
@@ -35,8 +38,11 @@ export function createSeedDatabase(): CmsDatabase {
         id: 2,
         slug: 'administration',
         name: 'Administration',
+        shortLabel: 'Administration',
         ugcCode: 'Section 5(b)',
         sortOrder: 2,
+        showInMenu: true,
+        showOnHome: true,
         description:
           'Statutory officers, Governing Body, Academic Council, Board of Studies, Finance Committee, ICC & Academic Leadership profiles.',
       },
@@ -44,17 +50,35 @@ export function createSeedDatabase(): CmsDatabase {
         id: 3,
         slug: 'academics',
         name: 'Academics',
+        shortLabel: 'Academics',
         ugcCode: 'Section 5(c)',
         sortOrder: 3,
+        showInMenu: true,
+        showOnHome: true,
         description:
-          'Academic Programs, Academic Calendar, Examination Ordinances, Department Microsites, Faculty Directory, IQAC, Central Library & Collaborations.',
+          'Academic Programs, Academic Calendar, OBE Curriculum, Department Microsites, Faculty Directory, IQAC, Central Library & Collaborations.',
+      },
+      {
+        id: 9,
+        slug: 'examination',
+        name: 'Examination',
+        shortLabel: 'Examination',
+        ugcCode: 'Autonomous · CoE',
+        sortOrder: 4,
+        showInMenu: true,
+        showOnHome: true,
+        description:
+          'Controller of Examinations, Autonomous Exam Ordinances, Time Tables, Results, Photocopy/Revaluation, ABC/NAD Verification & Convocation.',
       },
       {
         id: 4,
         slug: 'admissions-fee',
         name: 'Admissions & Fee',
+        shortLabel: 'Admissions & Fee',
         ugcCode: 'Section 5(d)',
-        sortOrder: 4,
+        sortOrder: 5,
+        showInMenu: true,
+        showOnHome: true,
         description:
           'Information Brochure / Prospectus, FRA Approved Fee Structure, DTE/CAP Admission Process, and UGC Fee Refund Policy.',
       },
@@ -62,8 +86,11 @@ export function createSeedDatabase(): CmsDatabase {
         id: 5,
         slug: 'research',
         name: 'Research',
+        shortLabel: 'Research',
         ugcCode: 'Section 5(e)',
-        sortOrder: 5,
+        sortOrder: 6,
+        showInMenu: true,
+        showOnHome: true,
         description:
           'Research & Development Cell, Funded Projects, Consultancy, Foreign & Industry Collaborations, Incubation Centre & Central Facilities.',
       },
@@ -71,8 +98,11 @@ export function createSeedDatabase(): CmsDatabase {
         id: 6,
         slug: 'student-life',
         name: 'Student Life & Cells',
+        shortLabel: 'Student Life',
         ugcCode: 'Section 5(f)',
-        sortOrder: 6,
+        sortOrder: 7,
+        showInMenu: true,
+        showOnHome: true,
         description:
           'Sports, NCC/NSS, Hostels, Training & Placement, SGRC, Health Centre, Anti-Ragging, Equal Opportunity, SEDG & Barrier-Free Campus.',
       },
@@ -80,16 +110,22 @@ export function createSeedDatabase(): CmsDatabase {
         id: 7,
         slug: 'alumni',
         name: 'Alumni',
+        shortLabel: 'Alumni',
         ugcCode: 'Section 5(g)',
-        sortOrder: 7,
+        sortOrder: 8,
+        showInMenu: true,
+        showOnHome: true,
         description: 'Registered Alumni Association, chapter events, portal registration & distinguished alumni.',
       },
       {
         id: 8,
         slug: 'information-corner',
         name: 'Information Corner',
+        shortLabel: 'Info Corner',
         ugcCode: 'Section 5(h)',
-        sortOrder: 8,
+        sortOrder: 9,
+        showInMenu: true,
+        showOnHome: true,
         description:
           'RTI CPIO/Appellate details, Circulars & Notices, Announcements, Newsletters, Events, Job Openings, Reservation Roster & Study in India.',
       },
@@ -512,6 +548,142 @@ export function createSeedDatabase(): CmsDatabase {
         isPublished: true,
         sortOrder: 7,
         updatedAt: '2026-09-18',
+        updatedBy: 'Content Editor',
+      },
+
+      // Autonomous Examination Section Micro-Pages
+      {
+        id: 901,
+        categorySlug: 'examination',
+        slug: 'examination-cell-coe',
+        title: 'Examination Cell & Controller of Examinations (CoE)',
+        subtitle: 'Autonomous Examination Governance · Confidential Evaluation & Result Processing',
+        contentHtml: `
+          <h2>Autonomous Examination Cell Structure</h2>
+          <p>As a UGC Autonomous Engineering Institution, SVCOER operates an independent, technology-enabled Examination Cell led by the Controller of Examinations (CoE) and supervised by the Statutory Examination Committee and Board of Examinations.</p>
+          <table>
+            <thead><tr><th>Role / Designation</th><th>Officer Name</th><th>Contact &amp; Desk</th></tr></thead>
+            <tbody>
+              <tr><td>Controller of Examinations (CoE)</td><td>Dr. M. S. Kumbhar</td><td>coe@svcoer.edu.in · +91 2186 225085 (Ext. 112)</td></tr>
+              <tr><td>Deputy CoE (Confidential &amp; Question Bank)</td><td>Prof. R. S. Bhosale</td><td>exam.cell@svcoer.edu.in · Ext. 113</td></tr>
+              <tr><td>Assistant CoE (ABC / DigiLocker NAD &amp; Results)</td><td>Prof. S. A. More</td><td>abc.nad@svcoer.edu.in · Ext. 114</td></tr>
+            </tbody>
+          </table>
+          <h3>Key Commitments</h3>
+          <ul>
+            <li>100% digital barcoded answer-book masking and double-evaluation audit checks.</li>
+            <li>Mandatory declaration of End-Semester Examination (ESE) results within 15 working days.</li>
+            <li>Zero-delay credit synchronization with Academic Bank of Credits (ABC) &amp; DigiLocker NAD.</li>
+          </ul>
+        `,
+        attachedPdfUrl: UGC_PDF_URL,
+        attachedPdfLabel: 'Download Autonomous Examination Manual (PDF)',
+        isPublished: true,
+        sortOrder: 1,
+        updatedAt: '2026-11-04',
+        updatedBy: 'IQAC Officer',
+      },
+      {
+        id: 902,
+        categorySlug: 'examination',
+        slug: 'examination-ordinances',
+        title: 'Autonomous Examination Ordinances & 10-Point Grading Rules',
+        subtitle: 'UGC Autonomous Regulations · CIE (40%) + ESE (60%), SGPA/CGPA & ATKT Norms',
+        contentHtml: `
+          <h2>Assessment Pattern &amp; Credit Evaluation (R-24 NEP 2020 Pattern)</h2>
+          <p>All B.Tech and M.Tech autonomous cohorts follow Outcome-Based Continuous Internal Evaluation (40 Marks CIE: In-Sem Tests + Assignments/Projects) and End-Semester Examination (60 Marks ESE).</p>
+          <table>
+            <thead><tr><th>Marks Range (%)</th><th>Letter Grade</th><th>Grade Point</th><th>Performance</th></tr></thead>
+            <tbody>
+              <tr><td>85 – 100</td><td>O</td><td>10</td><td>Outstanding</td></tr>
+              <tr><td>75 – 84</td><td>A+</td><td>9</td><td>Excellent</td></tr>
+              <tr><td>65 – 74</td><td>A</td><td>8</td><td>Very Good</td></tr>
+              <tr><td>55 – 64</td><td>B+</td><td>7</td><td>Good</td></tr>
+              <tr><td>50 – 54</td><td>B</td><td>6</td><td>Above Average</td></tr>
+              <tr><td>40 – 49</td><td>P</td><td>4</td><td>Pass (Min. 40% combined &amp; 40% in ESE)</td></tr>
+              <tr><td>Below 40</td><td>F</td><td>0</td><td>Fail / Re-Appear</td></tr>
+            </tbody>
+          </table>
+        `,
+        isPublished: true,
+        sortOrder: 2,
+        updatedAt: '2026-10-20',
+        updatedBy: 'IQAC Officer',
+      },
+      {
+        id: 903,
+        categorySlug: 'examination',
+        slug: 'exam-timetable-hallticket',
+        title: 'Examination Time Tables, Seating Plans & Hall Tickets',
+        subtitle: 'Autonomous ESE Winter / Summer Schedule & Practical Exam Calendar',
+        contentHtml: `
+          <h2>Winter 2026 End-Semester Examination Schedule</h2>
+          <p>Theory and Practical schedules for B.Tech (Sem I–VII), M.Tech, and Backlog / Re-Exam cohorts are published 30 days prior to commencement. Hall tickets are generated digitally via the Autonomous ERP Student Portal.</p>
+          <table>
+            <thead><tr><th>Examination Phase</th><th>Window</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>Practical / Oral / Project Viva-Voce</td><td>10 Nov – 20 Nov 2026</td><td>Published</td></tr>
+              <tr><td>Regular &amp; Backlog Theory ESE (Odd Sem)</td><td>25 Nov – 18 Dec 2026</td><td>Published</td></tr>
+              <tr><td>Supplementary / Make-Up Re-Exam</td><td>12 Jan – 22 Jan 2027</td><td>Tentative</td></tr>
+            </tbody>
+          </table>
+        `,
+        attachedPdfUrl: UGC_PDF_URL,
+        attachedPdfLabel: 'Download Winter 2026 Master Exam Timetable (PDF)',
+        isPublished: true,
+        sortOrder: 3,
+        updatedAt: '2026-11-04',
+        updatedBy: 'Content Editor',
+      },
+      {
+        id: 904,
+        categorySlug: 'examination',
+        slug: 'results-revaluation',
+        title: 'Results, Answer-Book Photocopy & Revaluation Grievances',
+        subtitle: '15-Day Result Declaration · Transparent Photocopy & Challenge Valuation SOP',
+        contentHtml: `
+          <h2>Results &amp; Student Examination Grievance Redressal</h2>
+          <p>Students may apply online within 5 working days of result declaration for scanned answer-book inspection (Photocopy) and subsequent Revaluation or Moderation review by an independent subject expert panel.</p>
+          <ul>
+            <li><strong>Step 1 (Photocopy Request):</strong> Online application within 5 days of result publication.</li>
+            <li><strong>Step 2 (Redressal / Revaluation):</strong> Submit reasoned question-wise appeal within 3 days of receiving scanned booklet.</li>
+            <li><strong>Step 3 (Final Revised Grade Card):</strong> Discrepancies exceeding ±5% marks trigger automatic fee refund and revised grade card issuance.</li>
+          </ul>
+        `,
+        isPublished: true,
+        sortOrder: 4,
+        updatedAt: '2026-10-28',
+        updatedBy: 'IQAC Officer',
+      },
+      {
+        id: 905,
+        categorySlug: 'examination',
+        slug: 'abc-nad-verification',
+        title: 'Academic Bank of Credits (ABC) & DigiLocker NAD Verification',
+        subtitle: 'NEP 2020 Digital Credit Mobility & Employer Document Authentication',
+        contentHtml: `
+          <h2>Academic Bank of Credits (ABC) &amp; National Academic Depository (NAD)</h2>
+          <p>SVCOER is registered on the UGC-NAD / DigiLocker portal. Every semester grade card and degree certificate is digitally signed and pushed directly to student ABC IDs for seamless credit accumulation, lateral entry, and SWAYAM-NPTEL credit transfer.</p>
+          <p><strong>Employer / Background Verification:</strong> External agencies and universities seeking authenticity verification of SVCOER transcripts or provisional degrees may email <strong>coe@svcoer.edu.in</strong> with scanned certificate copies.</p>
+        `,
+        isPublished: true,
+        sortOrder: 5,
+        updatedAt: '2026-10-12',
+        updatedBy: 'IQAC Officer',
+      },
+      {
+        id: 906,
+        categorySlug: 'examination',
+        slug: 'convocation-transcripts',
+        title: 'Convocation, Provisional Degree & Official Transcript Services',
+        subtitle: 'Graduating Batch Services · Degree Verification & Sealed Transcripts',
+        contentHtml: `
+          <h2>Annual Convocation &amp; Transcript Issuance</h2>
+          <p>Official sealed transcripts for higher studies (MS/MBA/Ph.D.), migration certificates, CGPA-to-Percentage conversion certificates (formula: <code>Percentage = (CGPA - 0.75) × 10</code> or as per University ordinance), and duplicate grade cards are processed within 5 working days through the Examination Cell window.</p>
+        `,
+        isPublished: true,
+        sortOrder: 6,
+        updatedAt: '2026-10-08',
         updatedBy: 'Content Editor',
       },
 
@@ -1683,6 +1855,7 @@ export function createSeedDatabase(): CmsDatabase {
       ],
       topBarLinks: [
         { label: 'Quick Links', url: '/quick-links' },
+        { label: 'Examination Cell', url: '/category/examination' },
         { label: 'FRA Fee Structure', url: '/page/prospectus-fee-structure' },
         { label: 'RTI Disclosure', url: '/page/rti-disclosure' },
         { label: 'Mandatory Disclosures', url: '/page/about-overview' },
@@ -1700,12 +1873,12 @@ export function createSeedDatabase(): CmsDatabase {
           ],
         },
         {
-          title: 'Academics & Departments',
+          title: 'Autonomous Academics & Exam',
           links: [
+            { label: 'Examination Cell & CoE', url: '/category/examination' },
+            { label: 'Exam Time Tables & Results', url: '/page/exam-timetable-hallticket' },
             { label: 'Computer Science & Engg.', url: '/department/computer-science' },
-            { label: 'Mechanical Engineering', url: '/department/mechanical' },
-            { label: 'Civil Engineering', url: '/department/civil' },
-            { label: 'Electronics & Telecomm.', url: '/department/entc' },
+            { label: 'Mechanical & Core Depts', url: '/page/academic-programs' },
           ],
         },
         {
@@ -1725,6 +1898,24 @@ export function createSeedDatabase(): CmsDatabase {
         twitter: 'https://x.com',
       },
       mapEmbedQuery: 'Pandharpur,Maharashtra,India',
+      homeSections: {
+        showTicker: true,
+        showSlider: true,
+        showStatsAndRecognitions: true,
+        showAboutAndDownloads: true,
+        showApprovedAndVision: true,
+        showLeadershipDesk: true,
+        showExaminationSpotlight: true,
+        showDepartments: true,
+        showCategoriesDirectory: true,
+        showEventsAndRecruiters: true,
+        aboutHeading: 'ABOUT US',
+        downloadsHeading: 'DOWNLOADS',
+        leadershipHeading: 'OUR DESK & LEADERSHIP',
+        examinationHeading: 'AUTONOMOUS EXAMINATION PORTAL',
+        departmentsHeading: 'Academic Departments',
+        categoriesHeading: 'Statutory Self-Disclosure & Autonomous Portals',
+      },
     },
   };
 }

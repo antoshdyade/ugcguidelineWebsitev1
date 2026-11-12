@@ -8,16 +8,24 @@ $ticker     = $pdo->query('SELECT * FROM ticker_items WHERE is_active = 1 ORDER 
 $depts      = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $events     = $pdo->query('SELECT * FROM campus_events ORDER BY event_date DESC LIMIT 5')->fetchAll();
 $docs       = $pdo->query('SELECT * FROM documents WHERE is_quick_link = 1 ORDER BY uploaded_at DESC LIMIT 6')->fetchAll();
-$cats       = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC')->fetchAll();
+$cats       = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_on_home, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
 $leadership = $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order ASC, id ASC LIMIT 4')->fetchAll();
+$examPages  = $pdo->query("SELECT p.slug, p.title, p.subtitle FROM pages p JOIN categories c ON p.category_id = c.id WHERE c.slug = 'examination' AND p.is_published = 1 ORDER BY p.sort_order ASC")->fetchAll();
+$allCatPages = [];
+foreach ($pdo->query('SELECT category_id, slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC')->fetchAll() as $pg) {
+    $allCatPages[$pg['category_id']][] = $pg;
+}
 
 $pageTitle = 'Home — UGC NEP 2020 Self-Disclosure Portal';
 require_once __DIR__ . '/includes/header.php';
 
+$hs = $settings['home_sections'] ?? [];
+$stats = $settings['highlights_stats'] ?? [];
+$approvedBodies = $settings['approved_bodies'] ?? [];
 $missionLines = array_filter(array_map('trim', explode("\n", (string)($settings['mission_text'] ?? ''))));
 $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($settings['recruiters'] ?? ''))));
 ?>
-<?php if ($ticker): ?>
+<?php if (!empty($hs['showTicker']) && $ticker): ?>
   <div class="ticker-wrap" role="region" aria-label="Latest Announcements">
     <div class="ticker-inner">
       <?php foreach (array_merge($ticker, $ticker) as $tk): ?>
@@ -29,7 +37,7 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   </div>
 <?php endif; ?>
 
-<?php if (!empty($sliders[0])): $hero = $sliders[0]; ?>
+<?php if (!empty($hs['showSlider']) && !empty($sliders[0])): $hero = $sliders[0]; ?>
   <section class="card" style="position:relative;overflow:hidden;background:linear-gradient(120deg, var(--primary-color), #1e293b);color:#fff;padding:2.5rem;margin-top:1rem;">
     <p style="text-transform:uppercase;letter-spacing:0.08em;font-size:0.75rem;color:#fde68a;margin:0 0 0.5rem;">UGC NEP 2020 Public Self-Disclosure Portal</p>
     <h1 style="font-family:'Playfair Display',serif;font-size:2.2rem;margin:0 0 0.75rem;"><?= e($hero['title']) ?></h1>
@@ -39,7 +47,18 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   </section>
 <?php endif; ?>
 
-<!-- About Us + Downloads Split (ftccoe-style) -->
+<?php if (!empty($hs['showStatsAndRecognitions']) && !empty($stats)): ?>
+  <section class="grid-4" style="margin-top:1.5rem;">
+    <?php foreach ($stats as $st): ?>
+      <div class="card" style="text-align:center;">
+        <div style="font-size:1.75rem;font-weight:700;color:var(--primary-color);"><?= e($st['value'] ?? '') ?></div>
+        <small style="color:var(--text-muted);font-weight:600;"><?= e($st['label'] ?? '') ?></small>
+      </div>
+    <?php endforeach; ?>
+  </section>
+<?php endif; ?>
+
+<?php if (!empty($hs['showAboutAndDownloads'])): ?>
 <section class="grid-2" style="margin-top:2rem;">
   <article class="card" style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start;">
     <img src="<?= e($settings['about_image_url']) ?>" alt="Campus" style="width:200px;height:180px;object-fit:cover;border-radius:8px;">
@@ -67,17 +86,20 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
     <?php endforeach; ?>
   </aside>
 </section>
+<?php endif; ?>
 
-<!-- Approved & Affiliated By + Vision & Mission -->
+<?php if (!empty($hs['showApprovedAndVision'])): ?>
 <section class="grid-2" style="margin-top:2rem;">
   <div class="card">
     <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">Statutory Recognitions</small>
     <h2 style="font-family:'Playfair Display',serif;margin:0.25rem 0 1rem;">APPROVED &amp; AFFILIATED BY</h2>
     <div class="grid-2">
-      <a href="page.php?slug=act-statutes-moa" class="card" style="text-decoration:none;color:inherit;"><strong>AICTE New Delhi</strong></a>
-      <a href="page.php?slug=about-overview" class="card" style="text-decoration:none;color:inherit;"><strong>UGC 2(f) &amp; 12(B)</strong></a>
-      <a href="page.php?slug=accreditation-ranking" class="card" style="text-decoration:none;color:inherit;"><strong>NAAC A+ Accredited</strong></a>
-      <a href="page.php?slug=about-overview" class="card" style="text-decoration:none;color:inherit;"><strong>PAHSUS Solapur</strong></a>
+      <?php foreach ($approvedBodies as $ab): ?>
+        <a href="<?= e($ab['href'] ?? 'page.php?slug=about-overview') ?>" class="card" style="text-decoration:none;color:inherit;">
+          <strong><?= e($ab['name'] ?? '') ?></strong>
+          <?php if (!empty($ab['subtitle'])): ?><small style="display:block;color:var(--text-muted);"><?= e($ab['subtitle']) ?></small><?php endif; ?>
+        </a>
+      <?php endforeach; ?>
     </div>
   </div>
   <div class="card">
@@ -91,9 +113,9 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
     </ol>
   </div>
 </section>
+<?php endif; ?>
 
-<!-- Our Desk -->
-<?php if ($leadership): ?>
+<?php if (!empty($hs['showLeadershipDesk']) && $leadership): ?>
 <section style="margin-top:2rem;">
   <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:0.75rem;">
     <h2 style="font-family:'Playfair Display',serif;margin:0;">OUR DESK &amp; LEADERSHIP</h2>
@@ -113,8 +135,29 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
 </section>
 <?php endif; ?>
 
+<?php if (!empty($hs['showExaminationSpotlight']) && $examPages): ?>
+<section class="card" style="margin-top:2rem;border-left:5px solid var(--secondary-color);">
+  <div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
+    <div>
+      <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">Controller of Examinations (Autonomous)</small>
+      <h2 style="font-family:'Playfair Display',serif;margin:0.2rem 0 0;"><?= e($hs['examSpotlightTitle'] ?? 'Autonomous Examination Portal (CoE)') ?></h2>
+    </div>
+    <a href="page.php?cat=examination" class="btn-primary">Open Examination Cell &rarr;</a>
+  </div>
+  <div class="grid-3">
+    <?php foreach ($examPages as $ep): ?>
+      <a href="page.php?slug=<?= urlencode($ep['slug']) ?>" class="card" style="text-decoration:none;color:inherit;">
+        <small style="color:var(--secondary-color);font-weight:700;"><?= e($ep['subtitle'] ?: 'Autonomous Examination') ?></small>
+        <h3 style="margin:0.35rem 0 0;font-size:1rem;"><?= e($ep['title']) ?></h3>
+      </a>
+    <?php endforeach; ?>
+  </div>
+</section>
+<?php endif; ?>
+
+<?php if (!empty($hs['showDepartments']) && $depts): ?>
 <section style="margin-top:2rem;">
-  <h2 style="font-family:'Playfair Display',serif;">Academic Department Microsites</h2>
+  <h2 style="font-family:'Playfair Display',serif;"><?= e($hs['departmentsTitle'] ?? 'Academic Department Microsites') ?></h2>
   <div class="grid-4">
     <?php foreach ($depts as $d): ?>
       <article class="card">
@@ -126,20 +169,28 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
     <?php endforeach; ?>
   </div>
 </section>
+<?php endif; ?>
 
+<?php if (!empty($hs['showCategoriesDirectory']) && $cats): ?>
 <section style="margin-top:2rem;">
-  <h2 style="font-family:'Playfair Display',serif;">UGC Mandatory Disclosure Sections</h2>
+  <h2 style="font-family:'Playfair Display',serif;"><?= e($hs['categoriesTitle'] ?? 'Statutory Self-Disclosure & Autonomous Portals') ?></h2>
   <div class="grid-4">
-    <?php foreach ($cats as $c): ?>
+    <?php foreach ($cats as $c): $subPages = $allCatPages[$c['id']] ?? []; ?>
       <div class="card">
-        <small style="color:var(--secondary-color);font-weight:600;"><?= e($c['ugc_code']) ?></small>
+        <small style="color:var(--secondary-color);font-weight:600;"><?= e($c['ugc_code']) ?> · <?= count($subPages) ?> pages</small>
         <h3 style="margin:0.35rem 0;"><?= e($c['name']) ?></h3>
         <p style="font-size:0.82rem;color:var(--text-muted);"><?= e($c['description']) ?></p>
+        <?php foreach (array_slice($subPages, 0, 3) as $sp): ?>
+          <a href="page.php?slug=<?= urlencode($sp['slug']) ?>" style="display:block;font-size:0.8rem;margin-bottom:0.2rem;color:var(--primary-color);text-decoration:none;">&rsaquo; <?= e($sp['title']) ?></a>
+        <?php endforeach; ?>
+        <a href="page.php?cat=<?= urlencode($c['slug']) ?>" class="btn-secondary" style="margin-top:0.65rem;font-size:0.8rem;">Explore <?= e(!empty($c['short_label']) ? $c['short_label'] : $c['name']) ?> &rarr;</a>
       </div>
     <?php endforeach; ?>
   </div>
 </section>
+<?php endif; ?>
 
+<?php if (!empty($hs['showEventsAndRecruiters'])): ?>
 <section class="grid-2" style="margin-top:2rem;">
   <div class="card">
     <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Latest Circulars, Events &amp; Achievements</h2>
@@ -161,4 +212,5 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
     <a href="gallery.php" class="btn-primary" style="margin-top:1rem;">Explore Picture Gallery &rarr;</a>
   </div>
 </section>
+<?php endif; ?>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

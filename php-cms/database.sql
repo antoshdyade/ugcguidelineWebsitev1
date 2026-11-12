@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS site_settings (
   vision_text TEXT,
   mission_text TEXT,
   recruiters TEXT,
+  home_sections_json TEXT,
+  highlights_json TEXT,
+  approved_bodies_json TEXT,
   map_embed_query VARCHAR(255) DEFAULT 'Pandharpur,Maharashtra,India',
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -69,8 +72,11 @@ CREATE TABLE IF NOT EXISTS categories (
   id INT AUTO_INCREMENT PRIMARY KEY,
   slug VARCHAR(64) NOT NULL UNIQUE,
   name VARCHAR(120) NOT NULL,
+  short_label VARCHAR(80) DEFAULT '',
   ugc_code VARCHAR(40) NOT NULL,
   description TEXT,
+  show_in_menu TINYINT(1) DEFAULT 1,
+  show_on_home TINYINT(1) DEFAULT 1,
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -238,7 +244,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- ============================================================================
 -- Seed Data
 -- ============================================================================
-INSERT INTO site_settings (id, trust_name, institution_name, short_code, affiliation, aicte_code, dte_code, address, phone, email, emergency_helpline, anti_ragging_helpline, about_summary, about_image_url, vision_text, mission_text, recruiters)
+INSERT INTO site_settings (id, trust_name, institution_name, short_code, affiliation, aicte_code, dte_code, address, phone, email, emergency_helpline, anti_ragging_helpline, about_summary, about_image_url, vision_text, mission_text, recruiters, home_sections_json, highlights_json, approved_bodies_json)
 VALUES (
   1,
   'Shri Vithal Education & Research Trust''s',
@@ -256,7 +262,10 @@ VALUES (
   'assets/images/hero_campus.jpg',
   'To emerge as a globally respected autonomous engineering institution driving inclusive technological innovation and ethical societal transformation under NEP 2020.',
   'Deliver outcome-based engineering education with multidisciplinary minors and barrier-free access.\nFoster funded R&D, industrial consultancy, and entrepreneurship incubation.\nMaintain 100% institutional governance transparency aligned with UGC Public Self-Disclosure norms.',
-  'TCS\nInfosys\nPersistent Systems\nBosch India\nTata Technologies\nBharat Forge\nL&T Construction\nCapgemini'
+  'TCS\nInfosys\nPersistent Systems\nBosch India\nTata Technologies\nBharat Forge\nL&T Construction\nCapgemini',
+  '{"showTicker":1,"showSlider":1,"showStatsAndRecognitions":1,"showAboutAndDownloads":1,"showApprovedAndVision":1,"showLeadershipDesk":1,"showExaminationSpotlight":1,"showDepartments":1,"showCategoriesDirectory":1,"showEventsAndRecruiters":1,"examSpotlightTitle":"Autonomous Examination Portal (CoE)","departmentsTitle":"Academic Departments","categoriesTitle":"Statutory Self-Disclosure & Autonomous Portals"}',
+  '[{"label":"Years of Excellence","value":"28+"},{"label":"Placement Track","value":"91.1%"},{"label":"NBA Accredited Depts","value":"4"},{"label":"Faculty Doctorates","value":"68"}]',
+  '[{"name":"AICTE New Delhi","subtitle":"Statutory Technical Approval","href":"page.php?slug=act-statutes-moa"},{"name":"UGC 2(f) & 12(B)","subtitle":"Recognized Autonomous Institution","href":"page.php?slug=about-overview"},{"name":"NAAC A+ Grade","subtitle":"CGPA 3.42 Institutional Cycle","href":"page.php?slug=accreditation-ranking"},{"name":"PAHSUS Solapur","subtitle":"Affiliating University","href":"page.php?slug=about-overview"}]'
 );
 
 INSERT INTO departments (id, slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission) VALUES
@@ -276,15 +285,16 @@ INSERT INTO users (full_name, email, password_hash, role, assigned_department_id
 ('Dr. Anjali K. Deshpande (CSE)', 'hod.cse@svcoer.edu.in', '$2y$12$IuYIZs0/0nNl5UBpoIcBoO2F8MAYzpAR1khT64OdYwWocLJAxIMfu', 'department_admin', 1),
 ('Dr. M. M. Pawar (IQAC)', 'iqac@svcoer.edu.in', '$2y$12$BsZtjgY0Plf8R1M3Asu3iuV8BfaIwSoS.7elVQNYjaWxjrp1mB7z2', 'iqac_officer', NULL);
 
-INSERT INTO categories (id, slug, name, ugc_code, description, sort_order) VALUES
-(1, 'about-hei', 'About HEI', 'Section 5(a)', 'Overview, Act & Statutes, IDP, Affiliating University, NAAC/NBA/NIRF, UGC 2(f)/12B, Annual Reports & Accounts.', 1),
-(2, 'administration', 'Administration', 'Section 5(b)', 'Statutory officers, Governing Body, Academic Council, Finance Committee, ICC & Academic Leadership.', 2),
-(3, 'academics', 'Academics', 'Section 5(c)', 'Programs, Calendar, Ordinances, Department Microsites, Faculty Directory, IQAC, Library & Collaborations.', 3),
-(4, 'admissions-fee', 'Admissions & Fee', 'Section 5(d)', 'Prospectus, FRA Fee Structure, Admission Process & UGC Fee Refund Policy.', 4),
-(5, 'research', 'Research', 'Section 5(e)', 'R&D Cell, Consultancy, Foreign/Industry Collaborations, Incubation Centre & Central Facilities.', 5),
-(6, 'student-life', 'Student Life & Cells', 'Section 5(f)', 'Sports, NCC/NSS, Hostels, Placements, SGRC, Health, Anti-Ragging, Equal Opportunity, SEDG & Barrier-Free Campus.', 6),
-(7, 'alumni', 'Alumni', 'Section 5(g)', 'Alumni Association details, registration and notable alumni.', 7),
-(8, 'information-corner', 'Information Corner', 'Section 5(h)', 'RTI CPIO/Appellate, Circulars, Announcements, Newsletters, Events, Jobs, Reservation Roster & Study in India.', 8);
+INSERT INTO categories (id, slug, name, short_label, ugc_code, description, show_in_menu, show_on_home, sort_order) VALUES
+(1, 'about-hei', 'About HEI', 'About HEI', 'Section 5(a)', 'Overview, Act & Statutes, IDP, Affiliating University, NAAC/NBA/NIRF, UGC 2(f)/12B, Annual Reports & Accounts.', 1, 1, 1),
+(2, 'administration', 'Administration', 'Administration', 'Section 5(b)', 'Statutory officers, Governing Body, Academic Council, Finance Committee, ICC & Academic Leadership.', 1, 1, 2),
+(3, 'academics', 'Academics', 'Academics', 'Section 5(c)', 'Programs, Calendar, Ordinances, Department Microsites, Faculty Directory, IQAC, Library & Collaborations.', 1, 1, 3),
+(9, 'examination', 'Examination', 'Examination', 'Autonomous · CoE', 'Controller of Examinations, Autonomous Ordinances, Timetables, Hall Tickets, Results, Revaluation, ABC/NAD & Convocation.', 1, 1, 4),
+(4, 'admissions-fee', 'Admissions & Fee', 'Admissions', 'Section 5(d)', 'Prospectus, FRA Fee Structure, Admission Process & UGC Fee Refund Policy.', 1, 1, 5),
+(5, 'research', 'Research', 'Research', 'Section 5(e)', 'R&D Cell, Consultancy, Foreign/Industry Collaborations, Incubation Centre & Central Facilities.', 1, 1, 6),
+(6, 'student-life', 'Student Life & Cells', 'Student Life', 'Section 5(f)', 'Sports, NCC/NSS, Hostels, Placements, SGRC, Health, Anti-Ragging, Equal Opportunity, SEDG & Barrier-Free Campus.', 1, 1, 7),
+(7, 'alumni', 'Alumni', 'Alumni', 'Section 5(g)', 'Alumni Association details, registration and notable alumni.', 1, 1, 8),
+(8, 'information-corner', 'Information Corner', 'Info Corner', 'Section 5(h)', 'RTI CPIO/Appellate, Circulars, Announcements, Newsletters, Events, Jobs, Reservation Roster & Study in India.', 1, 1, 9);
 
 INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_published, sort_order, updated_at) VALUES
 (1, 'about-overview', 'About Us: Institutional Overview', 'UGC Section 5(a)', '<h2>Institutional Profile</h2><p>Shri Vithal College of Engineering &amp; Research (Autonomous), established in 1998, is accredited with NAAC A+ (CGPA 3.42) and recognized under UGC 2(f) &amp; 12(B).</p>', 1, 1, '2026-10-15'),
@@ -304,7 +314,13 @@ INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_publishe
 (6, 'anti-ragging-cell', 'Anti-Ragging, ICC, Equal Opportunity & SEDG Cells', 'UGC Section 5(f)', '<h2>Zero Tolerance &amp; Barrier-Free Campus</h2><p>24x7 Anti-Ragging Helpline: 1800-180-5522. Ramps, elevators, tactile paths &amp; assistive tech enabled.</p>', 1, 3, '2026-09-03'),
 (7, 'alumni-association', 'Registered Alumni Association', 'UGC Section 5(g)', '<h2>SVCOER Alumni Network</h2><p>11,500+ engineering alumni across global chapters.</p>', 1, 1, '2026-09-19'),
 (8, 'rti-disclosure', 'RTI: CPIO & Appellate Authority', 'UGC Section 5(h)', '<h2>Right to Information Act 2005</h2><p>PIO: Shri S. G. Kulkarni (Registrar) · First Appellate Authority: Dr. B. P. Ronge (Principal).</p>', 1, 1, '2026-09-11'),
-(8, 'circulars-notices', 'Circulars, Notices & Announcements', 'UGC Section 5(h)', '<h2>Official Notices</h2><p>Exam schedules, job openings, reservation roster &amp; Study in India disclosures.</p>', 1, 2, '2026-10-18');
+(8, 'circulars-notices', 'Circulars, Notices & Announcements', 'UGC Section 5(h)', '<h2>Official Notices</h2><p>Exam schedules, job openings, reservation roster &amp; Study in India disclosures.</p>', 1, 2, '2026-10-18'),
+(9, 'examination-cell-coe', 'Examination Cell & Controller of Examinations', 'Autonomous Examination Section', '<h2>Autonomous Examination Governance</h2><p>Independent Evaluation Cell headed by Dr. M. S. Kumbhar (Controller of Examinations). Publishes End-Semester results within 20 working days and oversees question bank moderation and double-valuation integrity.</p>', 1, 1, '2026-10-18'),
+(9, 'examination-ordinances', 'Autonomous Ordinances, Credit System & 10-Point Grading', 'UGC Autonomous Regulations', '<h2>NEP 2020 Credit &amp; Grading Framework</h2><p>Follows Continuous Internal Evaluation (CIE 40%) + End Semester Examination (ESE 60%) across a 10-point absolute/relative grading scale with ATKT/Grace ordinances.</p>', 1, 2, '2026-10-12'),
+(9, 'exam-timetable-hallticket', 'Exam Time Tables, Forms & Hall Tickets', 'Winter / Summer Sessions', '<h2>Theory &amp; Practical Examination Schedules</h2><p>Exam registration forms, hall ticket download schedules, and scribe/extra-time provisions for Divyangjan candidates.</p>', 1, 3, '2026-10-15'),
+(9, 'results-revaluation', 'Results, Photocopy & Revaluation Grievances', '20-Day Result Mandate', '<h2>Transparent Result Declaration &amp; Revaluation</h2><p>Students may apply for answer-script photocopy within 7 days and revaluation within 12 days via the Examination Cell portal.</p>', 1, 4, '2026-10-16'),
+(9, 'abc-nad-verification', 'Academic Bank of Credits (ABC) & DigiLocker NAD', 'NEP 2020 Digital Credits', '<h2>ABC ID &amp; NAD Degree Verification</h2><p>All autonomous semester credits and provisional certificates are deposited directly into DigiLocker NAD under NEP 2020.</p>', 1, 5, '2026-10-10'),
+(9, 'convocation-transcripts', 'Convocation, Provisional Degree & Transcripts', 'Degrees & Academic Verification', '<h2>Convocation &amp; Employer Verification</h2><p>Online portal for official sealed transcripts, migration certificates, medium-of-instruction letters, and degree verification.</p>', 1, 6, '2026-10-14');
 
 INSERT INTO department_subpages (department_id, slug, title, content_html, sort_order, updated_at) VALUES
 (1, 'about', 'About Department', '<h2>CSE Department</h2><p>NBA Accredited department offering Honours in AI/ML and Cyber Security.</p>', 1, '2026-10-01'),

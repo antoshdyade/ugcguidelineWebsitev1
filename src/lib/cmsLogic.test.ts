@@ -47,6 +47,10 @@ test('canUserAccessResource enforces strict multi-tier RBAC and department scopi
   assert.equal(canUserAccessResource(iqacOfficer, 'sliders_events'), false);
   assert.equal(canUserAccessResource(contentEditor, 'sliders_events'), true);
   assert.equal(canUserAccessResource(contentEditor, 'directory'), true);
+  assert.equal(canUserAccessResource(contentEditor, 'categories'), true);
+  assert.equal(canUserAccessResource(iqacOfficer, 'categories'), true);
+  assert.equal(canUserAccessResource(deptAdminCSE, 'categories'), false);
+  assert.equal(canUserAccessResource(superAdmin, 'categories'), true);
   assert.equal(canUserAccessResource(contentEditor, 'settings'), false);
 });
 

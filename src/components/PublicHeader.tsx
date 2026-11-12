@@ -101,24 +101,12 @@ export function PublicHeader({
   const getCategoryPages = (slug: string) =>
     pages.filter((p) => p.categorySlug === slug).sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const navGroups = [
-    { key: 'about-hei', label: t('about'), pages: getCategoryPages('about-hei') },
-    { key: 'administration', label: t('administration'), pages: getCategoryPages('administration') },
-    {
-      key: 'academics',
-      label: t('academics'),
-      pages: getCategoryPages('academics'),
-      departments,
-    },
-    { key: 'admissions-fee', label: t('admissions'), pages: getCategoryPages('admissions-fee') },
-    { key: 'research', label: t('research'), pages: getCategoryPages('research') },
-    { key: 'student-life', label: t('studentLife'), pages: getCategoryPages('student-life') },
-    {
-      key: 'info-alumni',
-      label: t('infoAlumni'),
-      pages: [...getCategoryPages('alumni'), ...getCategoryPages('information-corner')],
-    },
-  ];
+  const visibleMenuCategories = [...categories]
+    .filter((c) => c.showInMenu !== false)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const primaryMenuCategories = visibleMenuCategories.slice(0, 7);
+  const overflowMenuCategories = visibleMenuCategories.slice(7);
 
   const dteDisplay = (settings.dteCode || 'EN-6220').replace(/^EN-/i, '');
 
@@ -492,33 +480,45 @@ export function PublicHeader({
               </button>
             </li>
 
-            {navGroups.map((group) => {
-              const isOpen = openDropdown === group.key;
+            {primaryMenuCategories.map((cat) => {
+              const isOpen = openDropdown === cat.slug;
+              const catPages = getCategoryPages(cat.slug);
+              const isActiveCat = currentPath === `/category/${cat.slug}`;
               return (
                 <li
-                  key={group.key}
+                  key={cat.id}
                   className="relative"
-                  onMouseEnter={() => setOpenDropdown(group.key)}
+                  onMouseEnter={() => setOpenDropdown(cat.slug)}
                   onMouseLeave={() => setOpenDropdown(null)}
                 >
                   <button
                     type="button"
                     aria-expanded={isOpen}
-                    onClick={() => setOpenDropdown(isOpen ? null : group.key)}
-                    className="inline-flex items-center gap-1 px-2.5 py-2 text-xs xl:text-sm font-medium text-white/95 hover:bg-white/10 rounded whitespace-nowrap shrink-0 transition-colors"
+                    onClick={() => setOpenDropdown(isOpen ? null : cat.slug)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-2 text-xs xl:text-sm font-medium rounded whitespace-nowrap shrink-0 transition-colors ${
+                      isActiveCat ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
+                    }`}
                   >
-                    <span>{group.label}</span>
+                    <span>{cat.shortLabel || cat.name}</span>
                     <ChevronDown className="w-3.5 h-3.5 opacity-75" />
                   </button>
 
                   {isOpen && (
                     <div className="absolute left-0 top-full pt-1 w-80 z-50">
                       <div className="bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 rounded-lg shadow-xl p-2">
-                        <div className="px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-slate-500 border-b border-stone-100 dark:border-slate-800 mb-1">
-                          {group.label} · UGC Disclosure
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenDropdown(null);
+                            onNavigate(`/category/${cat.slug}`);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 hover:bg-stone-50 dark:hover:bg-slate-800 rounded border-b border-stone-100 dark:border-slate-800 mb-1 flex items-center justify-between"
+                        >
+                          <span>{cat.name} · {cat.ugcCode}</span>
+                          <span>Portal &rarr;</span>
+                        </button>
                         <ul className="space-y-0.5 max-h-80 overflow-y-auto">
-                          {group.pages.map((pg) => (
+                          {catPages.map((pg) => (
                             <li key={pg.id}>
                               <button
                                 type="button"
@@ -532,12 +532,17 @@ export function PublicHeader({
                               </button>
                             </li>
                           ))}
-                          {group.departments && (
+                          {catPages.length === 0 && (
+                            <li className="px-2.5 py-1.5 text-xs text-stone-500">
+                              View {cat.name} overview
+                            </li>
+                          )}
+                          {cat.slug === 'academics' && departments.length > 0 && (
                             <>
                               <li className="pt-2 pb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 border-t border-stone-100 dark:border-slate-800 mt-1">
-                                Department Microsites ({group.departments.length})
+                                Department Microsites ({departments.length})
                               </li>
-                              {group.departments.map((dept) => (
+                              {departments.map((dept) => (
                                 <li key={dept.id}>
                                   <button
                                     type="button"
@@ -560,6 +565,61 @@ export function PublicHeader({
                 </li>
               );
             })}
+
+            {overflowMenuCategories.length > 0 && (
+              <li
+                className="relative"
+                onMouseEnter={() => setOpenDropdown('__more__')}
+                onMouseLeave={() => setOpenDropdown(null)}
+              >
+                <button
+                  type="button"
+                  aria-expanded={openDropdown === '__more__'}
+                  onClick={() => setOpenDropdown(openDropdown === '__more__' ? null : '__more__')}
+                  className="inline-flex items-center gap-1 px-2.5 py-2 text-xs xl:text-sm font-medium text-white/95 hover:bg-white/10 rounded whitespace-nowrap shrink-0 transition-colors"
+                >
+                  <span>More Portals</span>
+                  <ChevronDown className="w-3.5 h-3.5 opacity-75" />
+                </button>
+                {openDropdown === '__more__' && (
+                  <div className="absolute right-0 top-full pt-1 w-80 z-50">
+                    <div className="bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 rounded-lg shadow-xl p-2 max-h-96 overflow-y-auto space-y-2">
+                      {overflowMenuCategories.map((cat) => {
+                        const catPages = getCategoryPages(cat.slug);
+                        return (
+                          <div key={cat.id} className="pb-1.5 border-b last:border-b-0 border-stone-100 dark:border-slate-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdown(null);
+                                onNavigate(`/category/${cat.slug}`);
+                              }}
+                              className="w-full text-left px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 hover:bg-stone-50 dark:hover:bg-slate-800 rounded flex items-center justify-between"
+                            >
+                              <span>{cat.name}</span>
+                              <span>{cat.ugcCode} &rarr;</span>
+                            </button>
+                            {catPages.map((pg) => (
+                              <button
+                                key={pg.id}
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdown(null);
+                                  onNavigate(`/page/${pg.slug}`);
+                                }}
+                                className="w-full text-left px-3 py-1 text-xs rounded text-stone-700 dark:text-slate-200 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors"
+                              >
+                                {pg.title}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </li>
+            )}
 
             <li>
               <button
@@ -630,12 +690,22 @@ export function PublicHeader({
                   {t('contact')}
                 </button>
               </div>
-              {categories.map((cat) => (
+              {visibleMenuCategories.map((cat) => (
                 <details key={cat.id} className="bg-white text-slate-900 rounded px-3 py-2">
                   <summary className="text-sm font-semibold cursor-pointer">
                     {cat.name} ({cat.ugcCode})
                   </summary>
                   <div className="mt-2 space-y-1 pl-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onNavigate(`/category/${cat.slug}`);
+                      }}
+                      className="block w-full text-left py-1 text-xs font-semibold text-amber-700"
+                    >
+                      Open {cat.name} Portal &rarr;
+                    </button>
                     {getCategoryPages(cat.slug).map((pg) => (
                       <button
                         key={pg.id}
