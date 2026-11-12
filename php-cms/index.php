@@ -3,15 +3,19 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 $pdo = getDB();
 
-$sliders = $pdo->query('SELECT * FROM sliders WHERE is_active = 1 ORDER BY sort_order ASC')->fetchAll();
-$ticker  = $pdo->query('SELECT * FROM ticker_items WHERE is_active = 1 ORDER BY sort_order ASC')->fetchAll();
-$depts   = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC')->fetchAll();
-$events  = $pdo->query('SELECT * FROM campus_events ORDER BY event_date DESC LIMIT 5')->fetchAll();
-$docs    = $pdo->query('SELECT * FROM documents WHERE is_quick_link = 1 ORDER BY uploaded_at DESC LIMIT 6')->fetchAll();
-$cats    = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC')->fetchAll();
+$sliders    = $pdo->query('SELECT * FROM sliders WHERE is_active = 1 ORDER BY sort_order ASC')->fetchAll();
+$ticker     = $pdo->query('SELECT * FROM ticker_items WHERE is_active = 1 ORDER BY sort_order ASC')->fetchAll();
+$depts      = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
+$events     = $pdo->query('SELECT * FROM campus_events ORDER BY event_date DESC LIMIT 5')->fetchAll();
+$docs       = $pdo->query('SELECT * FROM documents WHERE is_quick_link = 1 ORDER BY uploaded_at DESC LIMIT 6')->fetchAll();
+$cats       = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC')->fetchAll();
+$leadership = $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order ASC, id ASC LIMIT 4')->fetchAll();
 
 $pageTitle = 'Home — UGC NEP 2020 Self-Disclosure Portal';
 require_once __DIR__ . '/includes/header.php';
+
+$missionLines = array_filter(array_map('trim', explode("\n", (string)($settings['mission_text'] ?? ''))));
+$recruiterLines = array_filter(array_map('trim', explode("\n", (string)($settings['recruiters'] ?? ''))));
 ?>
 <?php if ($ticker): ?>
   <div class="ticker-wrap" role="region" aria-label="Latest Announcements">
@@ -26,13 +30,87 @@ require_once __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <?php if (!empty($sliders[0])): $hero = $sliders[0]; ?>
-  <section class="card" style="background:linear-gradient(120deg, var(--primary-color), #1e293b);color:#fff;padding:2.5rem;margin-top:1rem;">
+  <section class="card" style="position:relative;overflow:hidden;background:linear-gradient(120deg, var(--primary-color), #1e293b);color:#fff;padding:2.5rem;margin-top:1rem;">
     <p style="text-transform:uppercase;letter-spacing:0.08em;font-size:0.75rem;color:#fde68a;margin:0 0 0.5rem;">UGC NEP 2020 Public Self-Disclosure Portal</p>
     <h1 style="font-family:'Playfair Display',serif;font-size:2.2rem;margin:0 0 0.75rem;"><?= e($hero['title']) ?></h1>
     <p style="max-width:680px;margin:0 0 1.25rem;color:#e2e8f0;"><?= e($hero['caption']) ?></p>
     <a href="<?= e($hero['cta_link']) ?>" class="btn-secondary"><?= e($hero['cta_label']) ?></a>
     <a href="quick-links.php" class="btn-primary" style="margin-left:0.5rem;background:rgba(255,255,255,0.16);">Document Repository</a>
   </section>
+<?php endif; ?>
+
+<!-- About Us + Downloads Split (ftccoe-style) -->
+<section class="grid-2" style="margin-top:2rem;">
+  <article class="card" style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start;">
+    <img src="<?= e($settings['about_image_url']) ?>" alt="Campus" style="width:200px;height:180px;object-fit:cover;border-radius:8px;">
+    <div style="flex:1;min-width:220px;">
+      <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">About Campus</small>
+      <h2 style="font-family:'Playfair Display',serif;margin:0.25rem 0 0.75rem;">ABOUT US</h2>
+      <p style="font-size:0.9rem;color:var(--text-muted);line-height:1.6;"><?= e($settings['about_summary']) ?></p>
+      <a href="page.php?slug=about-overview" class="btn-primary" style="margin-top:0.5rem;">Know More &rarr;</a>
+    </div>
+  </article>
+
+  <aside class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color);padding-bottom:0.5rem;margin-bottom:0.75rem;">
+      <h2 style="margin:0;font-family:'Playfair Display',serif;">DOWNLOADS</h2>
+      <a href="quick-links.php" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;">View All</a>
+    </div>
+    <?php foreach ($docs as $doc): ?>
+      <div style="padding:0.5rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-weight:600;font-size:0.88rem;"><?= e($doc['title']) ?></div>
+          <small style="color:var(--text-muted);"><?= e($doc['category']) ?> · <?= e(formatBytes((int)$doc['file_size_bytes'])) ?></small>
+        </div>
+        <a href="<?= e($doc['file_url']) ?>" download class="btn-primary" style="font-size:0.78rem;">Download</a>
+      </div>
+    <?php endforeach; ?>
+  </aside>
+</section>
+
+<!-- Approved & Affiliated By + Vision & Mission -->
+<section class="grid-2" style="margin-top:2rem;">
+  <div class="card">
+    <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">Statutory Recognitions</small>
+    <h2 style="font-family:'Playfair Display',serif;margin:0.25rem 0 1rem;">APPROVED &amp; AFFILIATED BY</h2>
+    <div class="grid-2">
+      <a href="page.php?slug=act-statutes-moa" class="card" style="text-decoration:none;color:inherit;"><strong>AICTE New Delhi</strong></a>
+      <a href="page.php?slug=about-overview" class="card" style="text-decoration:none;color:inherit;"><strong>UGC 2(f) &amp; 12(B)</strong></a>
+      <a href="page.php?slug=accreditation-ranking" class="card" style="text-decoration:none;color:inherit;"><strong>NAAC A+ Accredited</strong></a>
+      <a href="page.php?slug=about-overview" class="card" style="text-decoration:none;color:inherit;"><strong>PAHSUS Solapur</strong></a>
+    </div>
+  </div>
+  <div class="card">
+    <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">NEP 2020 Charter</small>
+    <h2 style="font-family:'Playfair Display',serif;margin:0.25rem 0 0.75rem;">VISION &amp; MISSION</h2>
+    <p style="background:#f8fafc;border-left:4px solid var(--secondary-color);padding:0.75rem;margin-bottom:0.75rem;font-weight:500;">
+      <?= e($settings['vision_text']) ?>
+    </p>
+    <ol style="padding-left:1.25rem;margin:0;color:var(--text-muted);font-size:0.9rem;">
+      <?php foreach ($missionLines as $m): ?><li style="margin-bottom:0.35rem;"><?= e($m) ?></li><?php endforeach; ?>
+    </ol>
+  </div>
+</section>
+
+<!-- Our Desk -->
+<?php if ($leadership): ?>
+<section style="margin-top:2rem;">
+  <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:0.75rem;">
+    <h2 style="font-family:'Playfair Display',serif;margin:0;">OUR DESK &amp; LEADERSHIP</h2>
+    <a href="page.php?slug=statutory-officers" style="color:var(--primary-color);font-weight:600;text-decoration:none;">All Statutory Officers &rarr;</a>
+  </div>
+  <div class="grid-4">
+    <?php foreach ($leadership as $ld): ?>
+      <article class="card">
+        <img src="<?= e($ld['photo_url']) ?>" alt="<?= e($ld['name']) ?>" style="width:60px;height:60px;border-radius:50%;object-fit:cover;">
+        <small style="display:block;color:var(--secondary-color);font-weight:700;margin-top:0.5rem;"><?= e($ld['role_title']) ?></small>
+        <h3 style="margin:0.2rem 0;"><?= e($ld['name']) ?></h3>
+        <small style="color:var(--text-muted);display:block;"><?= e($ld['qualification']) ?></small>
+        <p style="font-size:0.82rem;color:var(--text-muted);"><?= e($ld['bio']) ?></p>
+      </article>
+    <?php endforeach; ?>
+  </div>
+</section>
 <?php endif; ?>
 
 <section style="margin-top:2rem;">
@@ -64,7 +142,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <section class="grid-2" style="margin-top:2rem;">
   <div class="card">
-    <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Latest Circulars &amp; Events</h2>
+    <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Latest Circulars, Events &amp; Achievements</h2>
     <?php foreach ($events as $ev): ?>
       <div style="padding:0.6rem 0;border-bottom:1px solid var(--border-color);">
         <small style="color:var(--secondary-color);font-weight:600;"><?= e($ev['category']) ?> · <?= e($ev['event_date']) ?></small>
@@ -74,16 +152,13 @@ require_once __DIR__ . '/includes/header.php';
     <?php endforeach; ?>
   </div>
   <div class="card">
-    <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Quick Links &amp; Downloads</h2>
-    <?php foreach ($docs as $doc): ?>
-      <div style="padding:0.6rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:12px;">
-        <div>
-          <div style="font-weight:600;font-size:0.9rem;"><?= e($doc['title']) ?></div>
-          <small style="color:var(--text-muted);"><?= e($doc['category']) ?> · <?= e(formatBytes((int)$doc['file_size_bytes'])) ?> · <?= e($doc['uploaded_at']) ?></small>
-        </div>
-        <a href="<?= e($doc['file_url']) ?>" download class="btn-primary">Download</a>
-      </div>
-    <?php endforeach; ?>
+    <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Top Recruiters</h2>
+    <div class="grid-2" style="gap:0.6rem;">
+      <?php foreach ($recruiterLines as $rc): ?>
+        <div style="padding:0.6rem 0.75rem;border:1px solid var(--border-color);border-radius:6px;font-weight:600;font-size:0.88rem;"><?= e($rc) ?></div>
+      <?php endforeach; ?>
+    </div>
+    <a href="gallery.php" class="btn-primary" style="margin-top:1rem;">Explore Picture Gallery &rarr;</a>
   </div>
 </section>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

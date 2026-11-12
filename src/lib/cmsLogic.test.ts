@@ -26,6 +26,10 @@ test('validateUploadMeta blocks executable extensions and double extensions', ()
   const validPdf = validateUploadMeta('FRA Fee Structure 2026.pdf', 'application/pdf', 250_000);
   assert.equal(validPdf.valid, true);
   assert.ok(validPdf.safeFilename?.endsWith('.pdf'));
+
+  const validPng = validateUploadMeta('campus-logo.png', 'image/png', 120_000);
+  assert.equal(validPng.valid, true);
+  assert.ok(validPng.safeFilename?.endsWith('.png'));
 });
 
 test('canUserAccessResource enforces strict multi-tier RBAC and department scoping', () => {
@@ -39,8 +43,10 @@ test('canUserAccessResource enforces strict multi-tier RBAC and department scopi
   assert.equal(canUserAccessResource(deptAdminCSE, 'departments', 1), true);
   assert.equal(canUserAccessResource(deptAdminCSE, 'departments', 2), false);
   assert.equal(canUserAccessResource(iqacOfficer, 'documents'), true);
+  assert.equal(canUserAccessResource(iqacOfficer, 'leadership'), true);
   assert.equal(canUserAccessResource(iqacOfficer, 'sliders_events'), false);
   assert.equal(canUserAccessResource(contentEditor, 'sliders_events'), true);
+  assert.equal(canUserAccessResource(contentEditor, 'directory'), true);
   assert.equal(canUserAccessResource(contentEditor, 'settings'), false);
 });
 

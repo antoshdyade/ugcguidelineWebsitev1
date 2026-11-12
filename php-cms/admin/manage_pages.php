@@ -6,30 +6,78 @@ require_once __DIR__ . '/../includes/auth.php';
 $user = requireRoleAccess('pages');
 $pdo = getDB();
 $msg = '';
+$err = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'create') {
-        $stmt = $pdo->prepare('INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_published, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())');
-        $stmt->execute([
-            (int)$_POST['category_id'],
-            preg_replace('/[^a-z0-9-]/', '-', strtolower(trim($_POST['slug']))),
-            trim($_POST['title']),
-            trim($_POST['subtitle'] ?? ''),
-            $_POST['content_html'] ?? '<p></p>',
-            isset($_POST['is_published']) ? 1 : 0,
-            $user['full_name'],
-        ]);
-        logAudit($pdo, $user, 'CREATE_PAGE', 'Page', $_POST['title']);
-        $msg = 'Disclosure page created successfully.';
+    if ($action === 'create' || $action === 'update') {
+        $pdfUrl = trim($_POST['attached_pdf_url'] ?? '');
+        $pdfLabel = trim($_POST['attached_pdf_label'] ?? '');
+        if (!empty($_FILES['pdf_file']['name'])) {
+            $up = handleSecureUpload($_FILES['pdf_file'], __DIR__ . '/../uploads');
+            if ($up['ok']) {
+                $pdfUrl = $up['file_url'];
+                if ($pdfLabel === '') {
+                    $pdfLabel = 'Download Attachment (' . $_FILES['pdf_file']['name'] . ')';
+                }
+            } else {
+                $err = $up['error'];
+            }
+        }
+        if ($err === '') {
+            $slug = preg_replace('/[^a-z0-9-]/', '-', strtolower(trim($_POST['slug'])));
+            if ($action === 'update' && !empty($_POST['page_id'])) {
+                $stmt = $pdo->prepare(
+                    'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, is_published = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?'
+                );
+                $stmt->execute([
+                    (int)$_POST['category_id'],
+                    $slug,
+                    trim($_POST['title']),
+                    trim($_POST['subtitle'] ?? ''),
+                    $_POST['content_html'] ?? '<p></p>',
+                    $pdfUrl !== '' ? $pdfUrl : null,
+                    $pdfLabel !== '' ? $pdfLabel : null,
+                    isset($_POST['is_published']) ? 1 : 0,
+                    $user['full_name'],
+                    (int)$_POST['page_id'],
+                ]);
+                logAudit($pdo, $user, 'UPDATE_PAGE', 'Page', $_POST['title']);
+                $msg = 'Disclosure page updated successfully.';
+            } else {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO pages (category_id, slug, title, subtitle, content_html, attached_pdf_url, attached_pdf_label, is_published, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())'
+                );
+                $stmt->execute([
+                    (int)$_POST['category_id'],
+                    $slug,
+                    trim($_POST['title']),
+                    trim($_POST['subtitle'] ?? ''),
+                    $_POST['content_html'] ?? '<p></p>',
+                    $pdfUrl !== '' ? $pdfUrl : null,
+                    $pdfLabel !== '' ? $pdfLabel : null,
+                    isset($_POST['is_published']) ? 1 : 0,
+                    $user['full_name'],
+                ]);
+                logAudit($pdo, $user, 'CREATE_PAGE', 'Page', $_POST['title']);
+                $msg = 'Disclosure page created successfully.';
+            }
+        }
     } elseif ($action === 'delete') {
         $stmt = $pdo->prepare('DELETE FROM pages WHERE id = ?');
         $stmt->execute([(int)$_POST['page_id']]);
         logAudit($pdo, $user, 'DELETE_PAGE', 'Page', 'ID #' . (int)$_POST['page_id']);
         $msg = 'Page deleted.';
     }
+}
+
+$editingPage = null;
+if (!empty($_GET['edit'])) {
+    $st = $pdo->prepare('SELECT * FROM pages WHERE id = ? LIMIT 1');
+    $st->execute([(int)$_GET['edit']]);
+    $editingPage = $st->fetch() ?: null;
 }
 
 $cats  = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC')->fetchAll();
@@ -41,41 +89,58 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
   <meta charset="UTF-8">
   <title>Manage UGC Pages</title>
   <link rel="stylesheet" href="../assets/css/style.css">
+  <script src="../assets/js/editor.js" defer></script>
 </head>
 <body class="container" style="padding:2rem 1rem;">
   <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1>Manage Dynamic UGC Disclosure Pages</h1>
+  <h1><?= $editingPage ? 'Edit Page: ' . e($editingPage['title']) : 'Manage Dynamic UGC Disclosure Pages' ?></h1>
   <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
+  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
 
-  <form method="post" class="card" style="margin-bottom:1.5rem;">
+  <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-    <input type="hidden" name="action" value="create">
+    <input type="hidden" name="action" value="<?= $editingPage ? 'update' : 'create' ?>">
+    <?php if ($editingPage): ?>
+      <input type="hidden" name="page_id" value="<?= (int)$editingPage['id'] ?>">
+    <?php endif; ?>
     <div class="grid-2" style="margin-bottom:0.75rem;">
       <select name="category_id" required style="padding:0.5rem;">
         <?php foreach ($cats as $c): ?>
-          <option value="<?= (int)$c['id'] ?>"><?= e($c['ugc_code']) ?> · <?= e($c['name']) ?></option>
+          <option value="<?= (int)$c['id'] ?>" <?= ($editingPage && (int)$editingPage['category_id'] === (int)$c['id']) ? 'selected' : '' ?>>
+            <?= e($c['ugc_code']) ?> · <?= e($c['name']) ?>
+          </option>
         <?php endforeach; ?>
       </select>
-      <input type="text" name="slug" required placeholder="url-slug" style="padding:0.5rem;">
+      <input type="text" name="slug" required value="<?= e($editingPage['slug'] ?? '') ?>" placeholder="url-slug" style="padding:0.5rem;">
     </div>
-    <input type="text" name="title" required placeholder="Page Title" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
-    <input type="text" name="subtitle" placeholder="Subtitle / UGC Reference" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
+    <input type="text" name="title" required value="<?= e($editingPage['title'] ?? '') ?>" placeholder="Page Title" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
+    <input type="text" name="subtitle" value="<?= e($editingPage['subtitle'] ?? '') ?>" placeholder="Subtitle / UGC Reference" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
 
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.5rem;">
-      <button type="button" class="btn-secondary" onclick="insertTag('<h2>Section Heading</h2>\n')">+ H2 Heading</button>
-      <button type="button" class="btn-secondary" onclick="insertTag('<p>Paragraph text here.</p>\n')">+ Paragraph</button>
-      <button type="button" class="btn-secondary" onclick="insertTag('<ul>\n  <li>Item 1</li>\n  <li>Item 2</li>\n</ul>\n')">+ Bullet List</button>
-      <button type="button" class="btn-secondary" onclick="insertTag('<table>\n  <thead><tr><th>Item</th><th>Details</th></tr></thead>\n  <tbody><tr><td>Row 1</td><td>Value</td></tr></tbody>\n</table>\n')">+ Table</button>
-      <button type="button" class="btn-secondary" onclick="insertTag('<a href=&quot;uploads/document.pdf&quot; target=&quot;_blank&quot;>Download PDF</a>\n')">+ PDF Link</button>
+    <label style="display:block;font-weight:600;margin-bottom:0.35rem;">Page Content (Visual Word-Style Editor &amp; Optional HTML Source Toggle):</label>
+    <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" name="content_html" rows="10"><?= htmlspecialchars($editingPage['content_html'] ?? '<h2>Disclosure Overview</h2><p>Enter institutional disclosure details...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
+
+    <div class="grid-2" style="margin:0.75rem 0;">
+      <label style="font-size:0.85rem;">Upload Attached PDF (Optional):
+        <input type="file" name="pdf_file" accept="application/pdf" style="display:block;margin-top:4px;">
+      </label>
+      <label style="font-size:0.85rem;">Or PDF URL / Label:
+        <input type="text" name="attached_pdf_url" value="<?= e($editingPage['attached_pdf_url'] ?? '') ?>" placeholder="uploads/document.pdf" style="width:100%;padding:0.4rem;margin-bottom:4px;">
+        <input type="text" name="attached_pdf_label" value="<?= e($editingPage['attached_pdf_label'] ?? '') ?>" placeholder="Download Official PDF" style="width:100%;padding:0.4rem;">
+      </label>
     </div>
-    <textarea id="page-editor" name="content_html" rows="10" style="width:100%;padding:0.65rem;font-family:monospace;border:1px solid var(--border-color);border-radius:6px;"><h2>Disclosure Overview</h2><p>Enter institutional disclosure details...</p></textarea>
-    <label style="display:block;margin:0.75rem 0;"><input type="checkbox" name="is_published" checked> Publish Immediately</label>
-    <button type="submit" class="btn-primary">Save &amp; Publish Page</button>
+
+    <label style="display:block;margin:0.75rem 0;">
+      <input type="checkbox" name="is_published" <?= (!$editingPage || !empty($editingPage['is_published'])) ? 'checked' : '' ?>> Publish Immediately
+    </label>
+    <button type="submit" class="btn-primary"><?= $editingPage ? 'Update Disclosure Page' : 'Save &amp; Publish Page' ?></button>
+    <?php if ($editingPage): ?>
+      <a href="manage_pages.php" class="btn-secondary" style="margin-left:0.5rem;">Cancel Edit</a>
+    <?php endif; ?>
   </form>
 
   <div class="card">
     <table class="data-table">
-      <thead><tr><th>Title</th><th>Category</th><th>Slug</th><th>Updated</th><th>Action</th></tr></thead>
+      <thead><tr><th>Title</th><th>Category</th><th>Slug</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         <?php foreach ($pages as $pg): ?>
           <tr>
@@ -83,12 +148,13 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
             <td><?= e($pg['cat_name']) ?></td>
             <td><?= e($pg['slug']) ?></td>
             <td><?= e($pg['updated_at']) ?></td>
-            <td>
-              <form method="post" style="display:inline;">
+            <td style="white-space:nowrap;">
+              <a href="?edit=<?= (int)$pg['id'] ?>" class="btn-primary" style="padding:0.35rem 0.65rem;font-size:0.8rem;">Edit</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Delete this page?');">
                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="page_id" value="<?= (int)$pg['id'] ?>">
-                <button type="submit" class="btn-secondary">Delete</button>
+                <button type="submit" class="btn-secondary" style="padding:0.35rem 0.65rem;font-size:0.8rem;">Delete</button>
               </form>
             </td>
           </tr>
@@ -96,13 +162,5 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
       </tbody>
     </table>
   </div>
-  <script>
-    function insertTag(snippet) {
-      var ta = document.getElementById('page-editor');
-      var start = ta.selectionStart || ta.value.length;
-      ta.value = ta.value.slice(0, start) + snippet + ta.value.slice(ta.selectionEnd || start);
-      ta.focus();
-    }
-  </script>
 </body>
 </html>

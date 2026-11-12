@@ -7,8 +7,10 @@
 -- 1. Site Settings
 CREATE TABLE IF NOT EXISTS site_settings (
   id INT PRIMARY KEY DEFAULT 1,
+  trust_name VARCHAR(255) DEFAULT 'Shri Vithal Education & Research Trust''s',
   institution_name VARCHAR(255) NOT NULL,
   short_code VARCHAR(32) NOT NULL,
+  logo_url VARCHAR(255) DEFAULT '',
   affiliation VARCHAR(255) NOT NULL,
   aicte_code VARCHAR(64) NOT NULL,
   dte_code VARCHAR(64) NOT NULL,
@@ -20,6 +22,11 @@ CREATE TABLE IF NOT EXISTS site_settings (
   default_palette_id VARCHAR(40) DEFAULT 'royal-navy',
   primary_color VARCHAR(16) DEFAULT '#0F294A',
   secondary_color VARCHAR(16) DEFAULT '#B45309',
+  about_summary TEXT,
+  about_image_url VARCHAR(255) DEFAULT 'assets/images/hero_campus.jpg',
+  vision_text TEXT,
+  mission_text TEXT,
+  recruiters TEXT,
   map_embed_query VARCHAR(255) DEFAULT 'Pandharpur,Maharashtra,India',
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -169,6 +176,7 @@ CREATE TABLE IF NOT EXISTS campus_events (
   category ENUM('Event','Notice','Achievement','Circular','Placement') DEFAULT 'Notice',
   summary TEXT NOT NULL,
   content_html MEDIUMTEXT,
+  image_url VARCHAR(255) DEFAULT '',
   is_featured TINYINT(1) DEFAULT 1,
   FULLTEXT KEY ft_events (title, summary)
 ) ENGINE=InnoDB;
@@ -230,9 +238,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- ============================================================================
 -- Seed Data
 -- ============================================================================
-INSERT INTO site_settings (id, institution_name, short_code, affiliation, aicte_code, dte_code, address, phone, email, emergency_helpline, anti_ragging_helpline)
+INSERT INTO site_settings (id, trust_name, institution_name, short_code, affiliation, aicte_code, dte_code, address, phone, email, emergency_helpline, anti_ragging_helpline, about_summary, about_image_url, vision_text, mission_text, recruiters)
 VALUES (
   1,
+  'Shri Vithal Education & Research Trust''s',
   'Shri Vithal College of Engineering & Research (Autonomous)',
   'SVCOER',
   'Affiliated to PAHSUS Solapur · Approved by AICTE · Recognized u/s 2(f) & 12(B) of UGC Act',
@@ -242,7 +251,12 @@ VALUES (
   '+91 2186 225083',
   'principal@svcoer.edu.in',
   '+91 2186 225099',
-  '1800-180-5522'
+  '1800-180-5522',
+  'Established in 1998, Shri Vithal College of Engineering & Research (Autonomous) empowers rural and urban engineering scholars through NAAC A+ accredited programs, funded R&D labs, and transparent UGC NEP 2020 public disclosures.',
+  'assets/images/hero_campus.jpg',
+  'To emerge as a globally respected autonomous engineering institution driving inclusive technological innovation and ethical societal transformation under NEP 2020.',
+  'Deliver outcome-based engineering education with multidisciplinary minors and barrier-free access.\nFoster funded R&D, industrial consultancy, and entrepreneurship incubation.\nMaintain 100% institutional governance transparency aligned with UGC Public Self-Disclosure norms.',
+  'TCS\nInfosys\nPersistent Systems\nBosch India\nTata Technologies\nBharat Forge\nL&T Construction\nCapgemini'
 );
 
 INSERT INTO departments (id, slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission) VALUES

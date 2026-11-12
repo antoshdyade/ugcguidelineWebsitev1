@@ -133,6 +133,7 @@ export interface CampusEvent {
   departmentSlug?: string;
   summary: string;
   contentHtml: string;
+  imageUrl?: string;
   documentUrl?: string;
   isFeatured: boolean;
 }
@@ -204,8 +205,10 @@ export interface AuditLogEntry {
 }
 
 export interface SiteSettings {
+  trustName?: string;
   institutionName: string;
   shortCode: string;
+  logoUrl?: string;
   affiliation: string;
   aicteCode: string;
   dteCode: string;
@@ -217,6 +220,13 @@ export interface SiteSettings {
   defaultPaletteId: string;
   primaryColor: string;
   secondaryColor: string;
+  aboutSummary?: string;
+  aboutImageUrl?: string;
+  visionText?: string;
+  missionItems?: string[];
+  highlightsStats?: { label: string; value: string }[];
+  approvedBodies?: { name: string; url: string }[];
+  recruiters?: string[];
   accreditationHighlights: string[];
   topBarLinks: { label: string; url: string }[];
   footerColumns: {

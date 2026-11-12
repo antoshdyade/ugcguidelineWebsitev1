@@ -47,22 +47,31 @@ $evCount   = (int)$pdo->query('SELECT COUNT(*) FROM campus_events')->fetchColumn
 
   <div class="grid-4">
     <?php if (canAccessResource($user, 'pages')): ?>
-      <a href="manage_pages.php" class="card" style="text-decoration:none;color:inherit;"><h3>Manage Pages &amp; Categories</h3><p>Rich editor for UGC disclosure pages.</p></a>
+      <a href="manage_pages.php" class="card" style="text-decoration:none;color:inherit;"><h3>Pages &amp; Categories</h3><p>Visual WYSIWYG + HTML editor with photo &amp; PDF upload.</p></a>
     <?php endif; ?>
     <?php if (canAccessResource($user, 'departments')): ?>
-      <a href="manage_departments.php" class="card" style="text-decoration:none;color:inherit;"><h3>Manage Department Microsite</h3><p>Sub-pages, faculty directory &amp; labs.</p></a>
+      <a href="manage_departments.php" class="card" style="text-decoration:none;color:inherit;"><h3>Departments &amp; Micro-Pages</h3><p>Add departments, edit micro-pages, faculty photos &amp; labs.</p></a>
     <?php endif; ?>
     <?php if (canAccessResource($user, 'sliders_events')): ?>
-      <a href="manage_sliders.php" class="card" style="text-decoration:none;color:inherit;"><h3>Manage Sliders &amp; Ticker</h3><p>Hero banners, news ticker &amp; events.</p></a>
+      <a href="manage_sliders.php" class="card" style="text-decoration:none;color:inherit;"><h3>Sliders, Ticker &amp; Events</h3><p>Hero banners with image upload, news ticker &amp; notices.</p></a>
+    <?php endif; ?>
+    <?php if (canAccessResource($user, 'leadership')): ?>
+      <a href="manage_leadership.php" class="card" style="text-decoration:none;color:inherit;"><h3>Leadership &amp; Our Desk</h3><p>Manage Statutory Officers &amp; portraits.</p></a>
+    <?php endif; ?>
+    <?php if (canAccessResource($user, 'gallery')): ?>
+      <a href="manage_gallery.php" class="card" style="text-decoration:none;color:inherit;"><h3>Picture Gallery</h3><p>Create event albums &amp; upload photos.</p></a>
     <?php endif; ?>
     <?php if (canAccessResource($user, 'documents')): ?>
-      <a href="manage_documents.php" class="card" style="text-decoration:none;color:inherit;"><h3>Manage Documents</h3><p>Upload PDFs with MIME security check.</p></a>
+      <a href="manage_documents.php" class="card" style="text-decoration:none;color:inherit;"><h3>Document Repository</h3><p>Upload statutory PDFs with MIME check.</p></a>
+    <?php endif; ?>
+    <?php if (canAccessResource($user, 'directory')): ?>
+      <a href="manage_directory.php" class="card" style="text-decoration:none;color:inherit;"><h3>Telephone Directory</h3><p>Manage campus office extensions &amp; contacts.</p></a>
     <?php endif; ?>
     <?php if (canAccessResource($user, 'users')): ?>
-      <a href="manage_users.php" class="card" style="text-decoration:none;color:inherit;"><h3>Manage Users &amp; RBAC</h3><p>Create roles and inspect audit logs.</p></a>
+      <a href="manage_users.php" class="card" style="text-decoration:none;color:inherit;"><h3>Users, RBAC &amp; Audit Logs</h3><p>Manage roles and inspect change logs.</p></a>
     <?php endif; ?>
     <?php if (canAccessResource($user, 'settings')): ?>
-      <a href="site_settings.php" class="card" style="text-decoration:none;color:inherit;"><h3>Site Settings &amp; Theme</h3><p>Institution branding &amp; default colors.</p></a>
+      <a href="site_settings.php" class="card" style="text-decoration:none;color:inherit;"><h3>Site Settings, Logo &amp; Vision</h3><p>Logo upload, About Us, Vision/Mission &amp; theme colors.</p></a>
     <?php endif; ?>
   </div>
 </div>

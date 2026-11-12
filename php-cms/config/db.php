@@ -73,18 +73,11 @@ function formatBytes(int $bytes): string
 
 function getSiteSettings(PDO $pdo): array
 {
-    try {
-        $stmt = $pdo->query('SELECT * FROM site_settings WHERE id = 1 LIMIT 1');
-        $row = $stmt->fetch();
-        if ($row) {
-            return $row;
-        }
-    } catch (Throwable $ignored) {
-        // Fallback below if schema has not been imported yet
-    }
-    return [
+    $defaults = [
+        'trust_name' => "Shri Vithal Education & Research Trust's",
         'institution_name' => 'Shri Vithal College of Engineering & Research (Autonomous)',
         'short_code' => 'SVCOER',
+        'logo_url' => '',
         'affiliation' => 'Affiliated to PAHSUS Solapur · Approved by AICTE · UGC 2(f) & 12(B)',
         'aicte_code' => '1-49281724',
         'dte_code' => 'EN-6220',
@@ -95,6 +88,21 @@ function getSiteSettings(PDO $pdo): array
         'anti_ragging_helpline' => '1800-180-5522',
         'primary_color' => '#0F294A',
         'secondary_color' => '#B45309',
+        'about_summary' => 'Established in 1998, Shri Vithal College of Engineering & Research (Autonomous) empowers rural and urban engineering scholars through NAAC A+ accredited programs, funded R&D labs, and transparent UGC NEP 2020 public disclosures.',
+        'about_image_url' => 'assets/images/hero_campus.jpg',
+        'vision_text' => 'To emerge as a globally respected autonomous engineering institution driving inclusive technological innovation and ethical societal transformation under NEP 2020.',
+        'mission_text' => "Deliver outcome-based engineering education with multidisciplinary minors and barrier-free access.\nFoster funded R&D, industrial consultancy, and entrepreneurship incubation.\nMaintain 100% institutional governance transparency aligned with UGC Public Self-Disclosure norms.",
+        'recruiters' => "TCS\nInfosys\nPersistent Systems\nBosch India\nTata Technologies\nBharat Forge\nL&T Construction\nCapgemini",
         'map_embed_query' => 'Pandharpur,Maharashtra,India',
     ];
+    try {
+        $stmt = $pdo->query('SELECT * FROM site_settings WHERE id = 1 LIMIT 1');
+        $row = $stmt->fetch();
+        if ($row) {
+            return array_merge($defaults, array_filter($row, static fn($v) => $v !== null && $v !== ''));
+        }
+    } catch (Throwable $ignored) {
+        // Fallback below if schema has not been imported yet
+    }
+    return $defaults;
 }

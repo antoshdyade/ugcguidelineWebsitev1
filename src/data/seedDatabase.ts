@@ -1623,8 +1623,10 @@ export function createSeedDatabase(): CmsDatabase {
     ],
 
     settings: {
+      trustName: "Shri Vithal Education & Research Trust's",
       institutionName: "Shri Vithal College of Engineering & Research (Autonomous)",
       shortCode: 'SVCOER',
+      logoUrl: '',
       affiliation: 'Affiliated to PAHSUS Solapur · Approved by AICTE · Recognized u/s 2(f) & 12(B) of UGC Act',
       aicteCode: '1-49281724',
       dteCode: 'EN-6220',
@@ -1636,6 +1638,42 @@ export function createSeedDatabase(): CmsDatabase {
       defaultPaletteId: 'royal-navy',
       primaryColor: '#0F294A',
       secondaryColor: '#B45309',
+      aboutSummary:
+        'Established in 1998, Shri Vithal College of Engineering & Research (Autonomous) is a premier NEP 2020 engineering campus empowering rural and urban scholars through NAAC A+ accredited programs, funded research labs, and complete UGC public self-disclosure transparency.',
+      aboutImageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+      visionText:
+        'To emerge as a globally respected autonomous engineering institution driving inclusive technological innovation, academic excellence, and ethical societal transformation under NEP 2020.',
+      missionItems: [
+        'Deliver outcome-based engineering education with multidisciplinary minors, research internships, and barrier-free access.',
+        'Foster funded R&D, industrial consultancy, and entrepreneurship incubation addressing regional and national challenges.',
+        'Maintain 100% institutional governance transparency aligned with UGC Public Self-Disclosure norms.',
+      ],
+      highlightsStats: [
+        { label: 'Placement Rate', value: '91.1%' },
+        { label: 'Highest Package', value: '18.5 LPA' },
+        { label: 'NAAC Grade', value: 'A+ (3.42)' },
+        { label: 'NBA Accredited', value: '4 Depts' },
+        { label: 'Global Alumni', value: '11,500+' },
+      ],
+      approvedBodies: [
+        { name: 'AICTE New Delhi', url: '/page/recognition-approvals' },
+        { name: 'UGC 2(f) & 12(B)', url: '/page/recognition-approvals' },
+        { name: 'NAAC A+ Accredited', url: '/page/accreditation-ranking' },
+        { name: 'PAHSUS Solapur', url: '/page/affiliating-university' },
+        { name: 'DTE Maharashtra', url: '/page/admission-process' },
+      ],
+      recruiters: [
+        'TCS',
+        'Infosys',
+        'Persistent Systems',
+        'Bosch India',
+        'Tata Technologies',
+        'Bharat Forge',
+        'L&T Construction',
+        'Capgemini',
+        'Cognizant',
+        'Cummins India',
+      ],
       accreditationHighlights: [
         'UGC Autonomous Status',
         'NAAC A+ Accredited (3.42)',
@@ -1645,9 +1683,11 @@ export function createSeedDatabase(): CmsDatabase {
       ],
       topBarLinks: [
         { label: 'Quick Links', url: '/quick-links' },
-        { label: 'RTI Disclosure', url: '/page/rti-disclosure' },
         { label: 'FRA Fee Structure', url: '/page/prospectus-fee-structure' },
-        { label: 'Admin Portal', url: '/admin' },
+        { label: 'RTI Disclosure', url: '/page/rti-disclosure' },
+        { label: 'Mandatory Disclosures', url: '/page/about-overview' },
+        { label: 'Circulars & Notices', url: '/page/circulars-notices' },
+        { label: 'Placements', url: '/page/placement-cell' },
       ],
       footerColumns: [
         {

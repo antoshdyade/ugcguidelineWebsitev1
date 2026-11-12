@@ -4,6 +4,7 @@ import {
   Contrast,
   Eye,
   Globe,
+  GraduationCap,
   Menu,
   Moon,
   Palette,
@@ -119,6 +120,8 @@ export function PublicHeader({
     },
   ];
 
+  const dteDisplay = (settings.dteCode || 'EN-6220').replace(/^EN-/i, '');
+
   return (
     <header className="relative z-40 border-b border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-950">
       <a
@@ -135,20 +138,13 @@ export function PublicHeader({
       >
         <div className="max-w-[1380px] mx-auto flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3 overflow-x-auto">
-            <span className="hidden sm:inline font-medium text-white/90 whitespace-nowrap">
+            <span className="font-medium text-white/90 whitespace-nowrap">
               DTE: {settings.dteCode} · AICTE: {settings.aicteCode}
             </span>
             <span className="hidden md:inline text-white/40">|</span>
-            {settings.topBarLinks.slice(0, 3).map((link) => (
-              <button
-                key={link.url}
-                type="button"
-                onClick={() => onNavigate(link.url)}
-                className="text-white/90 hover:text-amber-300 underline-offset-4 hover:underline whitespace-nowrap shrink-0 transition-colors"
-              >
-                {link.label}
-              </button>
-            ))}
+            <span className="hidden md:inline text-white/85 whitespace-nowrap">
+              UGC NEP 2020 Self-Disclosure Portal
+            </span>
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -349,106 +345,136 @@ export function PublicHeader({
         </div>
       </div>
 
-      {/* Institutional Crest, Name & Global AJAX Search Bar */}
+      {/* Institutional Crest / Uploaded Logo, Trust Banner, Institute Code Pill & Global Search */}
       <div className="max-w-[1380px] mx-auto px-4 py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <button
           type="button"
           onClick={() => onNavigate('/')}
-          className="flex items-center gap-3.5 text-left group"
+          className="flex items-center gap-3.5 text-left group min-w-0"
         >
-          <div
-            className="w-12 h-12 rounded-lg flex items-center justify-center text-white shrink-0 font-display font-bold text-xl tracking-tight shadow-sm"
-            style={{ backgroundColor: 'var(--primary-color)' }}
-            aria-hidden="true"
-          >
-            SV
-          </div>
-          <div>
-            <p className="text-xs font-medium text-stone-600 dark:text-slate-400">
-              Shri Vithal Education &amp; Research Trust&apos;s
+          {settings.logoUrl ? (
+            <img
+              src={settings.logoUrl}
+              alt={`${settings.shortCode} crest`}
+              className="w-14 h-14 rounded-lg object-contain bg-white border border-stone-200 dark:border-slate-700 p-1 shrink-0 shadow-sm"
+            />
+          ) : (
+            <div
+              className="w-14 h-14 rounded-lg flex items-center justify-center text-white shrink-0 font-display font-bold text-xl tracking-tight shadow-sm"
+              style={{ backgroundColor: 'var(--primary-color)' }}
+              aria-hidden="true"
+            >
+              {settings.shortCode.slice(0, 2) || 'SV'}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-600 dark:text-slate-400 truncate">
+              {settings.trustName || "Shri Vithal Education & Research Trust's"}
             </p>
             <h1 className="font-display text-lg sm:text-xl font-bold tracking-tight text-stone-900 dark:text-white leading-tight group-hover:underline">
               {settings.institutionName}
             </h1>
-            <p className="text-xs text-stone-500 dark:text-slate-400">
+            <p className="text-xs text-stone-500 dark:text-slate-400 line-clamp-1">
               {settings.affiliation}
             </p>
           </div>
         </button>
 
-        {/* Global Live Search + Mobile Menu Trigger */}
-        <div className="flex items-center gap-2.5 w-full lg:w-auto">
-          <div ref={searchBoxRef} className="relative flex-1 lg:w-96">
-            <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-stone-400 absolute left-3 pointer-events-none" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => searchQuery.trim().length >= 2 && setSearchOpen(true)}
-                placeholder={t('searchPlaceholder')}
-                aria-label="Global search across pages, faculty, notices, and documents"
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-stone-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-600"
-              />
+        {/* Right Side: Institute Code Emblem (ftccoe-style) + Global Live Search + Mobile Menu */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full lg:w-auto shrink-0">
+          {/* Institute Code Box */}
+          <div
+            className="hidden xl:flex items-center gap-2.5 px-3.5 py-2 rounded-full border-2 text-white shrink-0 shadow-xs"
+            style={{
+              backgroundColor: 'var(--primary-color)',
+              borderColor: 'var(--secondary-color)',
+            }}
+          >
+            <GraduationCap className="w-5 h-5 text-amber-300 shrink-0" />
+            <div className="leading-tight">
+              <p className="text-[10px] uppercase tracking-widest text-white/80 font-semibold">
+                Institute Code
+              </p>
+              <p className="text-sm font-bold font-mono-tabular tracking-wide">
+                {dteDisplay}
+              </p>
             </div>
-
-            {searchOpen && searchQuery.trim().length >= 2 && (
-              <div className="absolute left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50">
-                <div className="px-3 py-2 border-b border-stone-100 dark:border-slate-800 flex items-center justify-between text-xs text-stone-500 dark:text-slate-400">
-                  <span>Search results for &ldquo;{searchQuery}&rdquo;</span>
-                  <span className="tabular-nums">{searchResults.length} found</span>
-                </div>
-                {searchResults.length === 0 ? (
-                  <p className="p-4 text-sm text-stone-500 dark:text-slate-400">
-                    No matching UGC pages, faculty, notices, or documents found.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-stone-100 dark:divide-slate-800">
-                    {searchResults.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSearchOpen(false);
-                            onNavigate(item.url);
-                          }}
-                          className="w-full text-left px-3.5 py-2.5 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors"
-                        >
-                          <div className="text-sm font-semibold text-stone-900 dark:text-white">
-                            {item.title}
-                          </div>
-                          <div className="text-xs text-stone-500 dark:text-slate-400 mt-0.5">
-                            {item.subtitle} · {item.meta}
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen((v) => !v)}
-            aria-label="Toggle navigation menu"
-            aria-expanded={mobileMenuOpen}
-            className="lg:hidden p-2 rounded-lg border border-stone-300 dark:border-slate-700 text-stone-700 dark:text-slate-200"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-2.5 flex-1 lg:w-80 xl:w-72">
+            <div ref={searchBoxRef} className="relative flex-1">
+              <div className="relative flex items-center">
+                <Search className="w-4 h-4 text-stone-400 absolute left-3 pointer-events-none" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => searchQuery.trim().length >= 2 && setSearchOpen(true)}
+                  placeholder={t('searchPlaceholder')}
+                  aria-label="Global search across pages, faculty, notices, and documents"
+                  className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-stone-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-600"
+                />
+              </div>
+
+              {searchOpen && searchQuery.trim().length >= 2 && (
+                <div className="absolute left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50">
+                  <div className="px-3 py-2 border-b border-stone-100 dark:border-slate-800 flex items-center justify-between text-xs text-stone-500 dark:text-slate-400">
+                    <span>Search results for &ldquo;{searchQuery}&rdquo;</span>
+                    <span className="tabular-nums">{searchResults.length} found</span>
+                  </div>
+                  {searchResults.length === 0 ? (
+                    <p className="p-4 text-sm text-stone-500 dark:text-slate-400">
+                      No matching UGC pages, faculty, notices, or documents found.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-stone-100 dark:divide-slate-800">
+                      {searchResults.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearchOpen(false);
+                              onNavigate(item.url);
+                            }}
+                            className="w-full text-left px-3.5 py-2.5 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors"
+                          >
+                            <div className="text-sm font-semibold text-stone-900 dark:text-white">
+                              {item.title}
+                            </div>
+                            <div className="text-xs text-stone-500 dark:text-slate-400 mt-0.5">
+                              {item.subtitle} · {item.meta}
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileMenuOpen}
+              className="lg:hidden p-2 rounded-lg border border-stone-300 dark:border-slate-700 text-stone-700 dark:text-slate-200"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Institutional Navigation Mega-Menu */}
+      {/* Main Institutional Navigation Bar (Solid Primary Bar inspired by ftccoe.ac.in) */}
       <nav
         aria-label="Primary Institutional Navigation"
-        className="border-t border-stone-200 dark:border-slate-800 bg-stone-50/90 dark:bg-slate-900/90"
+        className="text-white border-t border-white/10"
+        style={{ backgroundColor: 'var(--primary-color)' }}
       >
         <div className="max-w-[1380px] mx-auto px-4">
           {/* Desktop Single-Row Nav */}
-          <ul className="hidden lg:flex items-center gap-1 py-1">
+          <ul className="hidden lg:flex items-center gap-0.5 py-1">
             <li>
               <button
                 type="button"
@@ -456,12 +482,11 @@ export function PublicHeader({
                   setOpenDropdown(null);
                   onNavigate('/');
                 }}
-                className={`px-3 py-2 text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                className={`px-3 py-2 text-xs xl:text-sm font-semibold uppercase tracking-wide whitespace-nowrap shrink-0 rounded transition-colors ${
                   currentPath === '/'
-                    ? 'text-white'
-                    : 'text-stone-700 dark:text-slate-200 hover:bg-stone-200/70 dark:hover:bg-slate-800'
+                    ? 'bg-white/20 text-amber-300'
+                    : 'text-white/95 hover:bg-white/10'
                 }`}
-                style={currentPath === '/' ? { backgroundColor: 'var(--primary-color)' } : undefined}
               >
                 {t('home')}
               </button>
@@ -480,10 +505,10 @@ export function PublicHeader({
                     type="button"
                     aria-expanded={isOpen}
                     onClick={() => setOpenDropdown(isOpen ? null : group.key)}
-                    className="inline-flex items-center gap-1 px-2.5 py-2 text-sm font-medium text-stone-700 dark:text-slate-200 hover:bg-stone-200/70 dark:hover:bg-slate-800 rounded whitespace-nowrap shrink-0 transition-colors"
+                    className="inline-flex items-center gap-1 px-2.5 py-2 text-xs xl:text-sm font-medium text-white/95 hover:bg-white/10 rounded whitespace-nowrap shrink-0 transition-colors"
                   >
                     <span>{group.label}</span>
-                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                    <ChevronDown className="w-3.5 h-3.5 opacity-75" />
                   </button>
 
                   {isOpen && (
@@ -510,7 +535,7 @@ export function PublicHeader({
                           {group.departments && (
                             <>
                               <li className="pt-2 pb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 border-t border-stone-100 dark:border-slate-800 mt-1">
-                                Department Microsites
+                                Department Microsites ({group.departments.length})
                               </li>
                               {group.departments.map((dept) => (
                                 <li key={dept.id}>
@@ -539,27 +564,10 @@ export function PublicHeader({
             <li>
               <button
                 type="button"
-                onClick={() => onNavigate('/quick-links')}
-                className={`px-2.5 py-2 text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath.startsWith('/quick-links')
-                    ? 'text-white'
-                    : 'text-stone-700 dark:text-slate-200 hover:bg-stone-200/70 dark:hover:bg-slate-800'
-                }`}
-                style={currentPath.startsWith('/quick-links') ? { backgroundColor: 'var(--primary-color)' } : undefined}
-              >
-                {t('quickLinks')}
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
                 onClick={() => onNavigate('/gallery')}
-                className={`px-2.5 py-2 text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath === '/gallery'
-                    ? 'text-white'
-                    : 'text-stone-700 dark:text-slate-200 hover:bg-stone-200/70 dark:hover:bg-slate-800'
+                className={`px-2.5 py-2 text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                  currentPath === '/gallery' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
                 }`}
-                style={currentPath === '/gallery' ? { backgroundColor: 'var(--primary-color)' } : undefined}
               >
                 {t('gallery')}
               </button>
@@ -568,12 +576,9 @@ export function PublicHeader({
               <button
                 type="button"
                 onClick={() => onNavigate('/contact')}
-                className={`px-2.5 py-2 text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath === '/contact'
-                    ? 'text-white'
-                    : 'text-stone-700 dark:text-slate-200 hover:bg-stone-200/70 dark:hover:bg-slate-800'
+                className={`px-2.5 py-2 text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                  currentPath === '/contact' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
                 }`}
-                style={currentPath === '/contact' ? { backgroundColor: 'var(--primary-color)' } : undefined}
               >
                 {t('contact')}
               </button>
@@ -582,7 +587,7 @@ export function PublicHeader({
 
           {/* Mobile Drawer Nav */}
           {mobileMenuOpen && (
-            <div className="lg:hidden py-3 space-y-2 border-t border-stone-200 dark:border-slate-800">
+            <div className="lg:hidden py-3 space-y-2 border-t border-white/15">
               <div className="grid grid-cols-2 gap-1.5">
                 <button
                   type="button"
@@ -590,7 +595,7 @@ export function PublicHeader({
                     setMobileMenuOpen(false);
                     onNavigate('/');
                   }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700"
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
                 >
                   {t('home')}
                 </button>
@@ -600,7 +605,7 @@ export function PublicHeader({
                     setMobileMenuOpen(false);
                     onNavigate('/quick-links');
                   }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700"
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
                 >
                   {t('quickLinks')}
                 </button>
@@ -610,7 +615,7 @@ export function PublicHeader({
                     setMobileMenuOpen(false);
                     onNavigate('/gallery');
                   }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700"
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
                 >
                   {t('gallery')}
                 </button>
@@ -620,13 +625,13 @@ export function PublicHeader({
                     setMobileMenuOpen(false);
                     onNavigate('/contact');
                   }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700"
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
                 >
                   {t('contact')}
                 </button>
               </div>
               {categories.map((cat) => (
-                <details key={cat.id} className="bg-white dark:bg-slate-800 rounded border border-stone-200 dark:border-slate-700 px-3 py-2">
+                <details key={cat.id} className="bg-white text-slate-900 rounded px-3 py-2">
                   <summary className="text-sm font-semibold cursor-pointer">
                     {cat.name} ({cat.ugcCode})
                   </summary>
@@ -639,7 +644,7 @@ export function PublicHeader({
                           setMobileMenuOpen(false);
                           onNavigate(`/page/${pg.slug}`);
                         }}
-                        className="block w-full text-left py-1 text-xs text-stone-600 dark:text-slate-300"
+                        className="block w-full text-left py-1 text-xs text-stone-600"
                       >
                         {pg.title}
                       </button>
@@ -653,7 +658,7 @@ export function PublicHeader({
                             setMobileMenuOpen(false);
                             onNavigate(`/department/${d.slug}`);
                           }}
-                          className="block w-full text-left py-1 text-xs font-semibold text-amber-700 dark:text-amber-400"
+                          className="block w-full text-left py-1 text-xs font-semibold text-amber-700"
                         >
                           Dept: {d.name}
                         </button>
@@ -665,6 +670,29 @@ export function PublicHeader({
           )}
         </div>
       </nav>
+
+      {/* Secondary Quick-Access Utility Strip (CMS-Managed Top Bar Links, ftccoe-style sub-nav) */}
+      {settings.topBarLinks.length > 0 && (
+        <div className="bg-slate-900 dark:bg-slate-950 text-white border-t border-white/10">
+          <div className="max-w-[1380px] mx-auto px-4 py-1.5 flex items-center gap-4 overflow-x-auto text-xs">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-400 whitespace-nowrap shrink-0">
+              Statutory &amp; Quick Access:
+            </span>
+            {settings.topBarLinks.map((link, idx) => (
+              <React.Fragment key={`${link.url}-${idx}`}>
+                {idx > 0 && <span className="text-white/25 select-none">|</span>}
+                <button
+                  type="button"
+                  onClick={() => onNavigate(link.url)}
+                  className="text-slate-200 hover:text-amber-300 whitespace-nowrap shrink-0 transition-colors"
+                >
+                  {link.label}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

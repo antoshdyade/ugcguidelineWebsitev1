@@ -127,7 +127,9 @@ export type AdminResource =
   | 'sliders_events'
   | 'departments'
   | 'documents'
-  | 'gallery';
+  | 'gallery'
+  | 'leadership'
+  | 'directory';
 
 export function canUserAccessResource(
   user: Pick<CmsUser, 'role' | 'assignedDepartmentId' | 'isActive'> | null,
@@ -146,8 +148,10 @@ export function canUserAccessResource(
       return false;
     case 'sliders_events':
     case 'gallery':
+    case 'directory':
       return role === 'content_editor';
     case 'pages':
+    case 'leadership':
       return role === 'content_editor' || role === 'iqac_officer';
     case 'documents':
       return role === 'iqac_officer' || role === 'content_editor';

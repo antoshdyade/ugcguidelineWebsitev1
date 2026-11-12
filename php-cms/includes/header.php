@@ -2,12 +2,13 @@
 declare(strict_types=1);
 $settings = getSiteSettings($pdo);
 $navCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC')->fetchAll();
-$navDepts = $pdo->query('SELECT id, slug, code, name FROM departments ORDER BY sort_order ASC')->fetchAll();
+$navDepts = $pdo->query('SELECT id, slug, code, name FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $navPagesStmt = $pdo->query('SELECT id, category_id, slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC');
 $pagesByCat = [];
 foreach ($navPagesStmt->fetchAll() as $pg) {
     $pagesByCat[$pg['category_id']][] = $pg;
 }
+$dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '6220');
 ?>
 <!doctype html>
 <html lang="en">
@@ -55,17 +56,28 @@ foreach ($navPagesStmt->fetchAll() as $pg) {
 
   <div class="container header-brand-row">
     <a href="index.php" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px;">
-      <div style="width:48px;height:48px;border-radius:8px;background:var(--primary-color);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;">SV</div>
+      <?php if (!empty($settings['logo_url'])): ?>
+        <img src="<?= e($settings['logo_url']) ?>" alt="<?= e($settings['short_code']) ?> logo" style="width:52px;height:52px;object-fit:contain;border-radius:8px;border:1px solid var(--border-color);background:#fff;padding:3px;">
+      <?php else: ?>
+        <div style="width:52px;height:52px;border-radius:8px;background:var(--primary-color);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;"><?= e(substr($settings['short_code'], 0, 2)) ?></div>
+      <?php endif; ?>
       <div>
+        <small style="text-transform:uppercase;font-weight:700;letter-spacing:0.06em;color:var(--text-muted);display:block;font-size:0.72rem;"><?= e($settings['trust_name']) ?></small>
         <strong style="font-size:1.2rem;display:block;font-family:'Playfair Display',serif;"><?= e($settings['institution_name']) ?></strong>
         <small style="color:var(--text-muted);"><?= e($settings['affiliation']) ?></small>
       </div>
     </a>
 
-    <form action="search.php" method="get" style="position:relative;min-width:280px;flex:0 1 360px;">
-      <input id="global-search-input" type="search" name="q" placeholder="Search UGC disclosures, faculty, documents..." aria-label="Global search" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;">
-      <div id="global-search-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px;z-index:80;max-height:300px;overflow-y:auto;"></div>
-    </form>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="background:var(--primary-color);color:#fff;border:2px solid var(--secondary-color);border-radius:999px;padding:6px 16px;text-align:center;">
+        <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;opacity:0.85;">Institute Code</div>
+        <div style="font-weight:700;font-size:0.95rem;"><?= e($dteDisplay) ?></div>
+      </div>
+      <form action="search.php" method="get" style="position:relative;min-width:250px;flex:0 1 320px;">
+        <input id="global-search-input" type="search" name="q" placeholder="Search UGC disclosures, faculty, documents..." aria-label="Global search" style="width:100%;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;">
+        <div id="global-search-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card-bg);border:1px solid var(--border-color);border-radius:8px;z-index:80;max-height:300px;overflow-y:auto;"></div>
+      </form>
+    </div>
   </div>
 
   <nav class="nav-bar" aria-label="Main Navigation">
