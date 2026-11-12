@@ -63,6 +63,7 @@ export function AdminDashboard({
   onPublicDataChanged: () => Promise<void>;
 }) {
   const [user, setUser] = useState<CmsUser | null>(null);
+  const [sessionToken, setSessionToken] = useState<string>('');
   const [csrfToken, setCsrfToken] = useState<string>('');
   const [authChecked, setAuthChecked] = useState(false);
 
@@ -72,6 +73,8 @@ export function AdminDashboard({
   const [loginBusy, setLoginBusy] = useState(false);
 
   const [state, setState] = useState<AdminStatePayload | null>(null);
+  const [stateLoading, setStateLoading] = useState(false);
+  const [stateError, setStateError] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [statusMsg, setStatusMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
@@ -129,28 +132,100 @@ export function AdminDashboard({
     setTimeout(() => setStatusMsg(null), 4500);
   };
 
-  const fetchAdminState = async () => {
-    const resp = await fetch('/api/admin/state');
-    if (resp.ok) {
+  const clearStoredSession = () => {
+    try {
+      window.sessionStorage.removeItem('svcoer_admin_session');
+    } catch {
+      // Ignore storage access restriction
+    }
+    setSessionToken('');
+    setCsrfToken('');
+  };
+
+  const saveStoredSession = (token: string, csrf: string) => {
+    setSessionToken(token);
+    setCsrfToken(csrf);
+    try {
+      window.sessionStorage.setItem('svcoer_admin_session', JSON.stringify({ sessionToken: token, csrfToken: csrf }));
+    } catch {
+      // Ignore storage access restriction
+    }
+  };
+
+  const getStoredToken = (): string => {
+    if (sessionToken) return sessionToken;
+    try {
+      const raw = window.sessionStorage.getItem('svcoer_admin_session');
+      if (!raw) return '';
+      const parsed = JSON.parse(raw) as { sessionToken?: string };
+      return parsed.sessionToken || '';
+    } catch {
+      return '';
+    }
+  };
+
+  const fetchAdminState = async (tokenOverride?: string): Promise<boolean> => {
+    const activeToken = tokenOverride ?? getStoredToken();
+    setStateLoading(true);
+    setStateError('');
+    try {
+      const headers: Record<string, string> = {};
+      if (activeToken) {
+        headers.Authorization = `Bearer ${activeToken}`;
+      }
+      const resp = await fetch('/api/admin/state', {
+        credentials: 'include',
+        headers,
+      });
+      if (resp.status === 401) {
+        clearStoredSession();
+        setUser(null);
+        setState(null);
+        setLoginError('Session expired or cookies blocked. Please sign in again.');
+        return false;
+      }
+      if (!resp.ok) {
+        const errPayload = await resp.json().catch(() => ({}));
+        setStateError(errPayload.error || `Failed to load dashboard data (HTTP ${resp.status}).`);
+        return false;
+      }
       const data = (await resp.json()) as AdminStatePayload;
       setState(data);
       setSettingsDraft(data.settings);
+      return true;
+    } catch {
+      setStateError('Unable to reach CMS server while loading workspace data.');
+      return false;
+    } finally {
+      setStateLoading(false);
     }
   };
 
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch('/api/auth/me');
+        const storedToken = getStoredToken();
+        const headers: Record<string, string> = {};
+        if (storedToken) {
+          headers.Authorization = `Bearer ${storedToken}`;
+        }
+        const resp = await fetch('/api/auth/me', {
+          credentials: 'include',
+          headers,
+        });
         if (resp.ok) {
           const data = await resp.json();
           if (data.authenticated && data.user) {
             setUser(data.user);
             setCsrfToken(data.csrfToken);
+            if (storedToken) setSessionToken(storedToken);
             if (data.user.assignedDepartmentId) {
               setSelectedDeptId(data.user.assignedDepartmentId);
+              setActiveTab('departments');
             }
-            await fetchAdminState();
+            await fetchAdminState(storedToken);
+          } else {
+            clearStoredSession();
           }
         }
       } finally {
@@ -166,6 +241,7 @@ export function AdminDashboard({
     try {
       const resp = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
@@ -174,15 +250,16 @@ export function AdminDashboard({
         setLoginError(data.error || 'Authentication failed.');
         return;
       }
+      const token = String(data.sessionToken || '');
+      saveStoredSession(token, String(data.csrfToken || ''));
       setUser(data.user);
-      setCsrfToken(data.csrfToken);
       if (data.user.assignedDepartmentId) {
         setSelectedDeptId(data.user.assignedDepartmentId);
         setActiveTab('departments');
       } else {
         setActiveTab('overview');
       }
-      await fetchAdminState();
+      await fetchAdminState(token);
     } catch {
       setLoginError('Network error while connecting to CMS server.');
     } finally {
@@ -191,26 +268,40 @@ export function AdminDashboard({
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    clearStoredSession();
     setUser(null);
-    setCsrfToken('');
     setState(null);
+    setStateError('');
   };
 
   const adminFetch = async (url: string, method: string, body?: unknown) => {
+    const activeToken = getStoredToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken,
+    };
+    if (activeToken) {
+      headers.Authorization = `Bearer ${activeToken}`;
+    }
     const resp = await fetch(url, {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-Token': csrfToken,
-      },
+      credentials: 'include',
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = await resp.json().catch(() => ({}));
+    if (resp.status === 401) {
+      clearStoredSession();
+      setUser(null);
+      setState(null);
+      setLoginError('Session expired. Please sign in again.');
+      throw new Error('Session expired.');
+    }
     if (!resp.ok) {
       throw new Error(data.error || 'Operation failed');
     }
-    await fetchAdminState();
+    await fetchAdminState(activeToken);
     await onPublicDataChanged();
     return data;
   };
@@ -430,6 +521,40 @@ export function AdminDashboard({
             </div>
           )}
         </div>
+
+        {/* Loading / Error Resilience so main area is never blank */}
+        {!state && (
+          <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
+            {stateLoading ? (
+              <p className="text-sm font-medium text-stone-600 dark:text-slate-300">
+                Loading CMS console modules and UGC audit metrics...
+              </p>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">
+                  {stateError || 'CMS state could not be loaded.'}
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fetchAdminState()}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    Retry Loading
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-700"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* OVERVIEW TAB */}
         {activeTab === 'overview' && state && (

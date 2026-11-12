@@ -3,13 +3,27 @@ declare(strict_types=1);
 
 /**
  * Secure PDO Database Connection & Site Configuration
- * Deployable on XAMPP / LAMP / cPanel with PHP 8.x & MySQL 8.x
+ * Deployable on Linux Webmin/Virtualmin, LAMP, cPanel & XAMPP (PHP 8.x & MySQL 8.x)
  */
-define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
-define('DB_NAME', getenv('DB_NAME') ?: 'svcoer_ugc_cms');
-define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASS') ?: '');
-define('DB_CHARSET', 'utf8mb4');
+if (file_exists(__DIR__ . '/config.local.php')) {
+    require_once __DIR__ . '/config.local.php';
+}
+
+if (!defined('DB_HOST')) {
+    define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+}
+if (!defined('DB_NAME')) {
+    define('DB_NAME', getenv('DB_NAME') ?: 'svcoer_ugc_cms');
+}
+if (!defined('DB_USER')) {
+    define('DB_USER', getenv('DB_USER') ?: 'root');
+}
+if (!defined('DB_PASS')) {
+    define('DB_PASS', getenv('DB_PASS') ?: '');
+}
+if (!defined('DB_CHARSET')) {
+    define('DB_CHARSET', 'utf8mb4');
+}
 
 function getDB(): PDO
 {
@@ -21,7 +35,22 @@ function getDB(): PDO
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ];
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        try {
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+        } catch (PDOException $ex) {
+            http_response_code(503);
+            $setupPath = (strpos($_SERVER['SCRIPT_NAME'] ?? '', '/admin/') !== false) ? '../setup.php' : 'setup.php';
+            echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Database Configuration Required</title>'
+                . '<style>body{font-family:system-ui,sans-serif;background:#f5f5f4;color:#1c1917;padding:2rem;}'
+                . '.box{max-width:640px;margin:2rem auto;background:#fff;border:1px solid #e7e5e4;border-radius:12px;padding:1.75rem;}'
+                . 'code{background:#f5f5f4;padding:2px 6px;border-radius:4px;}</style></head><body>'
+                . '<div class="box"><h1 style="margin-top:0;color:#0f294a;">Database Connection Not Configured</h1>'
+                . '<p>Could not connect to MySQL database <code>' . htmlspecialchars(DB_NAME, ENT_QUOTES, 'UTF-8') . '</code> on <code>' . htmlspecialchars(DB_HOST, ENT_QUOTES, 'UTF-8') . '</code>.</p>'
+                . '<p><strong>Webmin / Linux Fix:</strong> Create <code>config/config.local.php</code> with your MySQL credentials or run <a href="' . htmlspecialchars($setupPath, ENT_QUOTES, 'UTF-8') . '">setup.php</a> for pre-flight diagnostics.</p>'
+                . '<p style="font-size:0.85rem;color:#78716c;">Detail: ' . htmlspecialchars($ex->getMessage(), ENT_QUOTES, 'UTF-8') . '</p>'
+                . '</div></body></html>';
+            exit;
+        }
     }
     return $pdo;
 }
@@ -44,8 +73,16 @@ function formatBytes(int $bytes): string
 
 function getSiteSettings(PDO $pdo): array
 {
-    $stmt = $pdo->query('SELECT * FROM site_settings WHERE id = 1 LIMIT 1');
-    return $stmt->fetch() ?: [
+    try {
+        $stmt = $pdo->query('SELECT * FROM site_settings WHERE id = 1 LIMIT 1');
+        $row = $stmt->fetch();
+        if ($row) {
+            return $row;
+        }
+    } catch (Throwable $ignored) {
+        // Fallback below if schema has not been imported yet
+    }
+    return [
         'institution_name' => 'Shri Vithal College of Engineering & Research (Autonomous)',
         'short_code' => 'SVCOER',
         'affiliation' => 'Affiliated to PAHSUS Solapur · Approved by AICTE · UGC 2(f) & 12(B)',

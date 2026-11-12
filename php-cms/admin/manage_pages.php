@@ -41,8 +41,6 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
   <meta charset="UTF-8">
   <title>Manage UGC Pages</title>
   <link rel="stylesheet" href="../assets/css/style.css">
-  <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
-  <script>tinymce.init({ selector: '#page-editor', plugins: 'table lists link image code', toolbar: 'undo redo | styles | bold italic | alignleft aligncenter | bullist numlist | table link | code' });</script>
 </head>
 <body class="container" style="padding:2rem 1rem;">
   <p><a href="dashboard.php">&larr; Dashboard</a></p>
@@ -62,7 +60,15 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
     </div>
     <input type="text" name="title" required placeholder="Page Title" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
     <input type="text" name="subtitle" placeholder="Subtitle / UGC Reference" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
-    <textarea id="page-editor" name="content_html" rows="8"><p>Enter disclosure details...</p></textarea>
+
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+      <button type="button" class="btn-secondary" onclick="insertTag('<h2>Section Heading</h2>\n')">+ H2 Heading</button>
+      <button type="button" class="btn-secondary" onclick="insertTag('<p>Paragraph text here.</p>\n')">+ Paragraph</button>
+      <button type="button" class="btn-secondary" onclick="insertTag('<ul>\n  <li>Item 1</li>\n  <li>Item 2</li>\n</ul>\n')">+ Bullet List</button>
+      <button type="button" class="btn-secondary" onclick="insertTag('<table>\n  <thead><tr><th>Item</th><th>Details</th></tr></thead>\n  <tbody><tr><td>Row 1</td><td>Value</td></tr></tbody>\n</table>\n')">+ Table</button>
+      <button type="button" class="btn-secondary" onclick="insertTag('<a href=&quot;uploads/document.pdf&quot; target=&quot;_blank&quot;>Download PDF</a>\n')">+ PDF Link</button>
+    </div>
+    <textarea id="page-editor" name="content_html" rows="10" style="width:100%;padding:0.65rem;font-family:monospace;border:1px solid var(--border-color);border-radius:6px;"><h2>Disclosure Overview</h2><p>Enter institutional disclosure details...</p></textarea>
     <label style="display:block;margin:0.75rem 0;"><input type="checkbox" name="is_published" checked> Publish Immediately</label>
     <button type="submit" class="btn-primary">Save &amp; Publish Page</button>
   </form>
@@ -90,5 +96,13 @@ $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categorie
       </tbody>
     </table>
   </div>
+  <script>
+    function insertTag(snippet) {
+      var ta = document.getElementById('page-editor');
+      var start = ta.selectionStart || ta.value.length;
+      ta.value = ta.value.slice(0, start) + snippet + ta.value.slice(ta.selectionEnd || start);
+      ta.focus();
+    }
+  </script>
 </body>
 </html>

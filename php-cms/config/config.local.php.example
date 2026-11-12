@@ -1,0 +1,9 @@
+<?php
+/**
+ * Local Database Override for Linux Webmin / Virtualmin / LAMP Hosting
+ * Copy this file to config/config.local.php and fill in your MySQL credentials.
+ */
+define('DB_HOST', '127.0.0.1');
+define('DB_NAME', 'svcoer_ugc_cms');
+define('DB_USER', 'svcoer_user');
+define('DB_PASS', 'YOUR_STRONG_MYSQL_PASSWORD');

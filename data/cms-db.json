@@ -1177,7 +1177,7 @@
       "assignedDepartmentId": null,
       "isActive": true,
       "passwordHash": "3c0f2de707ffb014e4efc14825d963f6:b3432bcc063a45495c3eb6d31b12fd9cce0c3be775665a15e11ee36c215d8b58f10b02e69c4e776aacb257437001669b6a8fe8f3e375d6956f7d9a93f46aeb4a",
-      "lastLoginAt": "2026-11-12 19:54"
+      "lastLoginAt": "2026-11-12 20:13"
     },
     {
       "id": 2,
@@ -1197,7 +1197,7 @@
       "assignedDepartmentId": 1,
       "isActive": true,
       "passwordHash": "c1166aebea3bc6ef7bc2b550013dad01:d3247044c8ffcc83358f8dc09aea8dcbcec98a27fe306d39afeb994344b3964cff39660fb63ef30d88b0ce37898cbfbb5d917da1f06d2d23d9f35e72e2d47a9d",
-      "lastLoginAt": "2026-11-10 11:05"
+      "lastLoginAt": "2026-11-12 20:12"
     },
     {
       "id": 4,
@@ -1211,6 +1211,42 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": 6,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-12 20:13:02"
+    },
+    {
+      "id": 5,
+      "actorEmail": "hod.cse@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "hod.cse@svcoer.edu.in",
+      "timestamp": "2026-11-12 20:12:38"
+    },
+    {
+      "id": 4,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-12 20:12:23"
+    },
+    {
+      "id": 3,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-12 20:11:43"
+    },
     {
       "id": 2,
       "actorEmail": "admin@svcoer.edu.in",

@@ -1,8 +1,8 @@
 -- ============================================================================
 -- SVCOER UGC NEP 2020 Public Self-Disclosure CMS — MySQL 8.x Schema & Seed Data
+-- Webmin Note: Create your database first in Webmin -> Servers -> MySQL Database Server,
+-- select that database, and then execute/import this SQL file.
 -- ============================================================================
-CREATE DATABASE IF NOT EXISTS svcoer_ugc_cms CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE svcoer_ugc_cms;
 
 -- 1. Site Settings
 CREATE TABLE IF NOT EXISTS site_settings (
@@ -251,16 +251,16 @@ INSERT INTO departments (id, slug, code, name, short_name, established_year, int
 (3, 'civil', 'CIVIL', 'Civil Engineering', 'Civil', 2001, 60, 'NBA Accredited (2024-2027)', 'Dr. Suhas V. Patwardhan', 'Structural engineering and NABL-aligned material testing consultancy.', 'To engineer resilient, sustainable infrastructure.', 'Train socially responsible civil engineers.'),
 (4, 'entc', 'ENTC', 'Electronics & Telecommunication Engineering', 'E&TC', 1998, 120, 'NBA Accredited (2024-2027)', 'Dr. Vandana P. Chavan', 'VLSI chip design, Texas Instruments Embedded Centre, and 5G RF Lab.', 'To excel in semiconductor design and embedded intelligence.', 'Empower students with hardware-software co-design expertise.');
 
--- Default RBAC Passwords:
--- admin@svcoer.edu.in / Admin@123
--- pro@svcoer.edu.in / Editor@123
+-- Default RBAC Passwords (real bcrypt hashes; also re-initializable via setup.php):
+-- admin@svcoer.edu.in   / Admin@123
+-- pro@svcoer.edu.in     / Editor@123
 -- hod.cse@svcoer.edu.in / Dept@123
--- iqac@svcoer.edu.in / Iqac@123
+-- iqac@svcoer.edu.in    / Iqac@123
 INSERT INTO users (full_name, email, password_hash, role, assigned_department_id) VALUES
-('Dr. Vikramaditya Kulkarni', 'admin@svcoer.edu.in', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'super_admin', NULL),
-('Prof. Sneha Patwardhan (PRO)', 'pro@svcoer.edu.in', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'content_editor', NULL),
-('Dr. Anjali K. Deshpande (CSE)', 'hod.cse@svcoer.edu.in', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'department_admin', 1),
-('Dr. M. M. Pawar (IQAC)', 'iqac@svcoer.edu.in', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'iqac_officer', NULL);
+('Dr. Vikramaditya Kulkarni', 'admin@svcoer.edu.in', '$2y$12$jJ07I06ebDMeJEN7QsY4uev.xxoHmgN40Xv76YkLti6qYm0OH5tpa', 'super_admin', NULL),
+('Prof. Sneha Patwardhan (PRO)', 'pro@svcoer.edu.in', '$2y$12$MvanoDnpi8VLqiGnv0aaqO4zdMoaqtfNV0n7yUHQm.JjoAHxpov3u', 'content_editor', NULL),
+('Dr. Anjali K. Deshpande (CSE)', 'hod.cse@svcoer.edu.in', '$2y$12$IuYIZs0/0nNl5UBpoIcBoO2F8MAYzpAR1khT64OdYwWocLJAxIMfu', 'department_admin', 1),
+('Dr. M. M. Pawar (IQAC)', 'iqac@svcoer.edu.in', '$2y$12$BsZtjgY0Plf8R1M3Asu3iuV8BfaIwSoS.7elVQNYjaWxjrp1mB7z2', 'iqac_officer', NULL);
 
 INSERT INTO categories (id, slug, name, ugc_code, description, sort_order) VALUES
 (1, 'about-hei', 'About HEI', 'Section 5(a)', 'Overview, Act & Statutes, IDP, Affiliating University, NAAC/NBA/NIRF, UGC 2(f)/12B, Annual Reports & Accounts.', 1),
@@ -331,6 +331,24 @@ INSERT INTO documents (title, category, file_url, file_name, file_size_bytes, mi
 ('UGC Guidelines on Public Self-Disclosure (NEP 2020)', 'UGC & AICTE Approvals', 'uploads/UGC-Public-Self-Disclosure-Guidelines.pdf', 'UGC-Public-Self-Disclosure-Guidelines.pdf', 512400, 'application/pdf', '2026-10-01', 'IQAC Officer'),
 ('FRA Approved Fee Structure 2026-27', 'Fee Structure', 'uploads/FRA-Fee-Structure-2026-27.pdf', 'FRA-Fee-Structure-2026-27.pdf', 342100, 'application/pdf', '2026-09-24', 'IQAC Officer'),
 ('Academic Calendar 2026-27', 'Academic Calendar', 'uploads/SVCOER-Academic-Calendar-2026-27.pdf', 'SVCOER-Academic-Calendar-2026-27.pdf', 284000, 'application/pdf', '2026-07-02', 'IQAC Officer');
+
+INSERT INTO campus_events (title, event_date, category, summary, content_html, is_featured) VALUES
+('FRA Approved Fee Structure 2026-27 Published', '2026-10-12', 'Notice', 'Fees Regulating Authority approved B.Tech and M.Tech tuition & development fees.', '<p>Fees Regulating Authority approved fee structure published for AY 2026-27.</p>', 1),
+('National Conference on Sustainable Engineering (NCSE-2026)', '2026-11-18', 'Event', 'Two-day AICTE-sponsored conference hosted by Mechanical & Civil departments.', '<p>Call for papers open for UG, PG, and Ph.D. scholars.</p>', 1),
+('SVCOER CSE Team Wins Smart India Hackathon Hardware Edition', '2026-09-20', 'Achievement', 'First prize in Smart Agriculture IoT Edge Analytics track.', '<p>Team ByteKnights secured national first rank with INR 1,00,000 prize.</p>', 1),
+('End Semester Examination Form Submission Schedule (Winter 2026)', '2026-10-25', 'Circular', 'Online exam form submission via Autonomous ERP portal.', '<p>Students must verify ABC ID before submitting forms.</p>', 1);
+
+INSERT INTO gallery_albums (id, title, category, event_date, cover_url) VALUES
+(1, 'Campus Infrastructure & Central Library', 'Campus', '2026-08-15', 'assets/images/hero_campus.jpg'),
+(2, 'Annual Convocation Ceremony 2026', 'Convocation', '2026-06-22', 'assets/images/convocation.jpg'),
+(3, 'Industry 4.0 Robotics & AI Laboratories', 'Laboratories', '2026-09-10', 'assets/images/hero_lab.jpg'),
+(4, 'Central Reading Atrium & Digital Knowledge Center', 'Library', '2026-07-18', 'assets/images/hero_library.jpg');
+
+INSERT INTO gallery_photos (album_id, image_url, caption, alt_text) VALUES
+(1, 'assets/images/hero_campus.jpg', 'Aerial view of SVCOER Autonomous Academic Complex', 'Aerial campus complex'),
+(2, 'assets/images/convocation.jpg', 'Graduating B.Tech batch receiving autonomous degrees', 'Convocation ceremony'),
+(3, 'assets/images/hero_lab.jpg', 'Students experimenting in Tata CIII Robotics & AI Lab', 'Robotics laboratory'),
+(4, 'assets/images/hero_library.jpg', 'Central Library reading atrium with 42,000+ volumes', 'Central library atrium');
 
 INSERT INTO telephone_directory (section, officer_name, designation, extension, direct_phone, email) VALUES
 ('Principal Office', 'Dr. B. P. Ronge', 'Principal & Director', '101', '+91 2186 225083', 'principal@svcoer.edu.in'),

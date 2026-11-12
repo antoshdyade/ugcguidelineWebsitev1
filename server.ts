@@ -98,6 +98,22 @@ function parseCookies(cookieHeader: string | undefined): Record<string, string> 
   return out;
 }
 
+function extractSessionToken(req: express.Request): string | undefined {
+  const authHeader = req.headers.authorization;
+  if (authHeader && /^Bearer\s+/i.test(authHeader)) {
+    return authHeader.replace(/^Bearer\s+/i, '').trim();
+  }
+  const cookies = parseCookies(req.headers.cookie);
+  return cookies.svcoer_session;
+}
+
+function buildSessionCookie(req: express.Request, value: string, maxAgeSeconds: number): string {
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const isHttps = req.secure || proto === 'https';
+  const sameSite = isHttps ? 'SameSite=None; Secure' : 'SameSite=Lax';
+  return `svcoer_session=${encodeURIComponent(value)}; Path=/; HttpOnly; ${sameSite}; Max-Age=${maxAgeSeconds}`;
+}
+
 function sanitizeUser(u: CmsDatabase['users'][number]): CmsUser {
   const { passwordHash: _omit, ...rest } = u;
   return rest;
@@ -105,6 +121,7 @@ function sanitizeUser(u: CmsDatabase['users'][number]): CmsUser {
 
 async function startServer() {
   const app = express();
+  app.set('trust proxy', true);
   app.use(express.json({ limit: '15mb' }));
 
   // Serve uploaded safe assets statically
@@ -159,21 +176,17 @@ async function startServer() {
     addAudit(sanitizeUser(user), 'LOGIN', 'Session', user.email);
     saveDatabase();
 
-    res.setHeader(
-      'Set-Cookie',
-      `svcoer_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=43200`,
-    );
-    res.json({ user: sanitizeUser(user), csrfToken });
+    res.setHeader('Set-Cookie', buildSessionCookie(req, token, 43200));
+    res.json({ user: sanitizeUser(user), csrfToken, sessionToken: token });
   });
 
-  app.post('/api/auth/logout', (_req, res) => {
-    res.setHeader('Set-Cookie', 'svcoer_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+  app.post('/api/auth/logout', (req, res) => {
+    res.setHeader('Set-Cookie', buildSessionCookie(req, '', 0));
     res.json({ ok: true });
   });
 
   app.get('/api/auth/me', (req, res) => {
-    const cookies = parseCookies(req.headers.cookie);
-    const session = verifySession(cookies.svcoer_session);
+    const session = verifySession(extractSessionToken(req));
     if (!session) {
       res.json({ authenticated: false, user: null, csrfToken: null });
       return;
@@ -189,8 +202,7 @@ async function startServer() {
   // Auth + CSRF + RBAC middleware
   function requireAdmin(resource?: AdminResource, getDeptId?: (req: express.Request) => number | null) {
     return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-      const cookies = parseCookies(req.headers.cookie);
-      const session = verifySession(cookies.svcoer_session);
+      const session = verifySession(extractSessionToken(req));
       if (!session) {
         res.status(401).json({ error: 'Authentication required.' });
         return;

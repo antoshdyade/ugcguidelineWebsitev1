@@ -2,9 +2,24 @@
 declare(strict_types=1);
 
 if (session_status() === PHP_SESSION_NONE) {
+    $currentSavePath = session_save_path() ?: sys_get_temp_dir();
+    if (!@is_writable($currentSavePath)) {
+        $fallbackSessions = __DIR__ . '/../uploads/.sessions';
+        if (!is_dir($fallbackSessions)) {
+            @mkdir($fallbackSessions, 0700, true);
+        }
+        if (is_dir($fallbackSessions) && is_writable($fallbackSessions)) {
+            session_save_path($fallbackSessions);
+        } else {
+            session_save_path(sys_get_temp_dir());
+        }
+    }
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     session_set_cookie_params([
         'lifetime' => 43200,
         'path'     => '/',
+        'secure'   => $isHttps,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);

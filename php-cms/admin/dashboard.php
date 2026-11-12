@@ -15,12 +15,19 @@ $evCount   = (int)$pdo->query('SELECT COUNT(*) FROM campus_events')->fetchColumn
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CMS Dashboard — <?= e($user['role']) ?></title>
   <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
 <div class="container" style="padding:2rem 1rem;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;border-bottom:1px solid var(--border-color);padding-bottom:1rem;">
+  <?php if (file_exists(__DIR__ . '/../setup.php')): ?>
+    <div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:0.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:0.85rem;">
+      <strong>Security Reminder:</strong> Delete <code>setup.php</code> from your Webmin <code>public_html</code> directory now that installation is complete.
+    </div>
+  <?php endif; ?>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;border-bottom:1px solid var(--border-color);padding-bottom:1rem;">
     <div>
       <small style="text-transform:uppercase;color:var(--secondary-color);font-weight:700;"><?= e($user['role']) ?></small>
       <h1 style="margin:0;">Welcome, <?= e($user['full_name']) ?></h1>
