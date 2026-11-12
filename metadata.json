@@ -1,0 +1,6 @@
+{
+  "name": "Shri Vithal College of Engineering & Research (Autonomous) — UGC CMS",
+  "description": "UGC NEP 2020 Self-Disclosure Compliant Institutional Website and Enterprise Multi-Tier RBAC Content Management System.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

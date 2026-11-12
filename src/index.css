@@ -1,0 +1,203 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --primary-color: #0F294A;
+  --secondary-color: #B45309;
+  --primary-soft: #EFF4FA;
+  --surface-bg: #FAF9F6;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-scale: 1;
+}
+
+html {
+  font-size: calc(16px * var(--font-scale));
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--surface-bg);
+  color: #1C1917;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.dark body {
+  background-color: #0B1120;
+  color: #F1F5F9;
+}
+
+/* Dyslexia-Friendly Font Toggle */
+html.dyslexia-font body,
+html.dyslexia-font h1,
+html.dyslexia-font h2,
+html.dyslexia-font h3,
+html.dyslexia-font h4,
+html.dyslexia-font p,
+html.dyslexia-font a,
+html.dyslexia-font button,
+html.dyslexia-font td,
+html.dyslexia-font th,
+html.dyslexia-font li {
+  font-family: 'Atkinson Hyperlegible', sans-serif !important;
+  letter-spacing: 0.02em;
+  word-spacing: 0.08em;
+}
+
+/* High Contrast Accessibility Mode (Yellow on Black) */
+html.high-contrast,
+html.high-contrast body {
+  background-color: #000000 !important;
+  color: #FFE600 !important;
+}
+
+html.high-contrast a,
+html.high-contrast button,
+html.high-contrast h1,
+html.high-contrast h2,
+html.high-contrast h3,
+html.high-contrast h4,
+html.high-contrast th,
+html.high-contrast td,
+html.high-contrast label {
+  color: #FFE600 !important;
+  border-color: #FFE600 !important;
+}
+
+html.high-contrast header,
+html.high-contrast nav,
+html.high-contrast section,
+html.high-contrast article,
+html.high-contrast aside,
+html.high-contrast footer,
+html.high-contrast main,
+html.high-contrast div[class*="bg-"] {
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+html.high-contrast input,
+html.high-contrast select,
+html.high-contrast textarea {
+  background-color: #111111 !important;
+  color: #FFE600 !important;
+  border: 2px solid #FFE600 !important;
+}
+
+/* Link & Heading Highlighter */
+html.highlight-links a:not(.no-highlight),
+html.highlight-links button:not(.no-highlight) {
+  outline: 2px solid #D97706 !important;
+  outline-offset: 2px;
+  text-decoration: underline !important;
+}
+
+html.highlight-links h1,
+html.highlight-links h2,
+html.highlight-links h3 {
+  background-color: rgba(217, 119, 6, 0.14);
+  outline: 1px dashed #D97706;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Smooth Ticker Marquee */
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 42s linear infinite;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+  }
+}
+
+/* Rich editorial HTML prose styling for dynamic CMS pages */
+.cms-prose h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  color: var(--primary-color);
+}
+
+.dark .cms-prose h2 {
+  color: #93C5FD;
+}
+
+.cms-prose h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.cms-prose p {
+  margin-bottom: 1rem;
+  line-height: 1.75;
+}
+
+.cms-prose ul, .cms-prose ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1rem;
+  list-style-type: disc;
+}
+
+.cms-prose li {
+  margin-bottom: 0.35rem;
+  line-height: 1.65;
+}
+
+.cms-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cms-prose th,
+.cms-prose td {
+  border: 1px solid #E5E7EB;
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+}
+
+.dark .cms-prose th,
+.dark .cms-prose td {
+  border-color: #334155;
+}
+
+.cms-prose th {
+  background-color: #F3F4F6;
+  font-weight: 600;
+}
+
+.dark .cms-prose th {
+  background-color: #1E293B;
+}
