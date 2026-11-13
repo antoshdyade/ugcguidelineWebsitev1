@@ -42,20 +42,9 @@ if (!empty($_GET['edit'])) {
     $s->execute([(int)$_GET['edit']]);
     $editing = $s->fetch() ?: null;
 }
-$profiles = $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order ASC, id ASC')->fetchAll();
+$adminPageTitle = 'Leadership & Governance Desk (Our Desk)';
+require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Manage Leadership &amp; Our Desk</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
-</head>
-<body class="container" style="padding:2rem 1rem;">
-  <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1>Leadership &amp; Governance Desk (Our Desk)</h1>
-  <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
-  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
 
   <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
     <h2 style="margin-top:0;"><?= $editing ? 'Edit Officer: ' . e($editing['name']) : 'Add Statutory Officer / Desk Profile' ?></h2>
@@ -95,5 +84,4 @@ $profiles = $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order A
       </div>
     <?php endforeach; ?>
   </div>
-</body>
-</html>
+<?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

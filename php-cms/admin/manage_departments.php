@@ -9,6 +9,18 @@ $isFullDeptAdmin = in_array($user['role'], ['super_admin', 'content_editor'], tr
 $msg = '';
 $err = '';
 
+$pageTypes = [
+    'general'               => 'General Rich Content Page',
+    'gallery'               => 'Department Photo Gallery',
+    'notice_board'          => 'Notice Board & Circulars',
+    'events'                => 'Events & Technical Workshops',
+    'notes_syllabus'        => 'Notes & Syllabus Repository',
+    'celebrations'          => 'Celebrations & Cultural Highlights',
+    'achievements_students' => 'Student Achievements',
+    'achievements_faculty'  => 'Faculty Achievements & Patents',
+    'library'               => 'Department Library Details',
+];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
@@ -21,9 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else $err = $up['error'];
         }
         if ($err === '') {
-            $slug = preg_replace('/[^a-z0-9-]/', '-', strtolower(trim($_POST['slug'])));
+            $slug = trim(preg_replace('/[^a-z0-9-]+/', '-', strtolower(trim($_POST['slug']))), '-');
             $code = strtoupper(preg_replace('/[^A-Z0-9]/', '', strtoupper(trim($_POST['code']))));
-            $stmt = $pdo->prepare('INSERT INTO departments (slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission, hero_image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt = $pdo->prepare('INSERT INTO departments (slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission, hero_image_url, faculty_field_schema_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
                 $slug,
                 $code,
@@ -37,9 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim($_POST['vision'] ?? ''),
                 trim($_POST['mission'] ?? ''),
                 $heroUrl,
+                json_encode(['Google Scholar', 'ORCID ID', 'Patents Granted']),
             ]);
             $newId = (int)$pdo->lastInsertId();
-            $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, content_html, sort_order, updated_at) VALUES (?, "about", "About Department", ?, 1, CURDATE())')
+            $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, sort_order, updated_at) VALUES (?, "about", "About Department", "general", ?, 1, CURDATE())')
                 ->execute([$newId, '<h2>' . e(trim($_POST['name'])) . '</h2><p>' . e(trim($_POST['overview'])) . '</p>']);
             logAudit($pdo, $user, 'CREATE_DEPARTMENT', 'Department', $_POST['name']);
             header('Location: manage_departments.php?dept_id=' . $newId . '&msg=created');
@@ -81,42 +94,225 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 logAudit($pdo, $user, 'UPDATE_DEPARTMENT', 'Department', $_POST['name']);
                 $msg = 'Department profile updated.';
             }
+        } elseif ($action === 'update_library_schema') {
+            $libPhoto = trim($_POST['existing_library_photo'] ?? 'assets/images/hero_library.jpg');
+            if (!empty($_FILES['library_photo']['name'])) {
+                $up = handleSecureUpload($_FILES['library_photo'], __DIR__ . '/../uploads');
+                if ($up['ok']) $libPhoto = $up['file_url'];
+                else $err = $up['error'];
+            }
+            if ($err === '') {
+                $libPayload = [
+                    'name'              => trim($_POST['lib_name'] ?? ''),
+                    'volumesCount'      => (int)($_POST['lib_volumes'] ?? 0),
+                    'journalsCount'     => (int)($_POST['lib_journals'] ?? 0),
+                    'eResourcesSummary' => trim($_POST['lib_eresources'] ?? ''),
+                    'incharge'          => trim($_POST['lib_incharge'] ?? ''),
+                    'timings'           => trim($_POST['lib_timings'] ?? ''),
+                    'description'       => trim($_POST['lib_description'] ?? ''),
+                    'photoUrl'          => $libPhoto,
+                ];
+                $schemaLines = array_values(array_filter(array_map('trim', explode(',', (string)($_POST['faculty_schema'] ?? '')))));
+                $pdo->prepare('UPDATE departments SET library_json = ?, faculty_field_schema_json = ? WHERE id = ?')
+                    ->execute([
+                        $libPayload['name'] !== '' ? json_encode($libPayload, JSON_UNESCAPED_UNICODE) : null,
+                        json_encode($schemaLines, JSON_UNESCAPED_UNICODE),
+                        $deptId,
+                    ]);
+                logAudit($pdo, $user, 'UPDATE_DEPT_LIBRARY_SCHEMA', 'Department', 'Dept #' . $deptId);
+                $msg = 'Department library photo/details & faculty field schema saved.';
+            }
         } elseif ($action === 'save_subpage') {
-            $slug = preg_replace('/[^a-z0-9-]/', '-', strtolower(trim($_POST['slug'])));
+            $slug = trim(preg_replace('/[^a-z0-9-]+/', '-', strtolower(trim($_POST['slug']))), '-');
+            $ptype = array_key_exists($_POST['page_type'] ?? '', $pageTypes) ? $_POST['page_type'] : 'general';
             if (!empty($_POST['subpage_id'])) {
-                $stmt = $pdo->prepare('UPDATE department_subpages SET slug = ?, title = ?, content_html = ?, is_published = ?, updated_at = CURDATE() WHERE id = ? AND department_id = ?');
-                $stmt->execute([$slug, trim($_POST['title']), $_POST['content_html'] ?? '<p></p>', isset($_POST['is_published']) ? 1 : 0, (int)$_POST['subpage_id'], $deptId]);
+                $stmt = $pdo->prepare('UPDATE department_subpages SET slug = ?, title = ?, page_type = ?, content_html = ?, is_published = ?, updated_at = CURDATE() WHERE id = ? AND department_id = ?');
+                $stmt->execute([$slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', isset($_POST['is_published']) ? 1 : 0, (int)$_POST['subpage_id'], $deptId]);
                 logAudit($pdo, $user, 'UPDATE_DEPT_SUBPAGE', 'Department', $_POST['title']);
                 $msg = 'Department micro-page updated.';
             } else {
-                $stmt = $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, content_html, is_published, updated_at) VALUES (?, ?, ?, ?, ?, CURDATE())');
-                $stmt->execute([$deptId, $slug, trim($_POST['title']), $_POST['content_html'] ?? '<p></p>', isset($_POST['is_published']) ? 1 : 0]);
+                $stmt = $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, is_published, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
+                $stmt->execute([$deptId, $slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', isset($_POST['is_published']) ? 1 : 0]);
                 logAudit($pdo, $user, 'CREATE_DEPT_SUBPAGE', 'Department', $_POST['title']);
                 $msg = 'Department micro-page created.';
+            }
+        } elseif ($action === 'add_subpage_photo' && !empty($_POST['subpage_id'])) {
+            $spId = (int)$_POST['subpage_id'];
+            $st = $pdo->prepare('SELECT photos_json FROM department_subpages WHERE id = ? AND department_id = ?');
+            $st->execute([$spId, $deptId]);
+            $row = $st->fetch();
+            if ($row && !empty($_FILES['gallery_photo']['name'])) {
+                $up = handleSecureUpload($_FILES['gallery_photo'], __DIR__ . '/../uploads');
+                if ($up['ok']) {
+                    $photos = !empty($row['photos_json']) ? json_decode((string)$row['photos_json'], true) : [];
+                    if (!is_array($photos)) $photos = [];
+                    $photos[] = ['url' => $up['file_url'], 'caption' => trim($_POST['photo_caption'] ?? '')];
+                    $pdo->prepare('UPDATE department_subpages SET photos_json = ?, updated_at = CURDATE() WHERE id = ? AND department_id = ?')
+                        ->execute([json_encode($photos, JSON_UNESCAPED_UNICODE), $spId, $deptId]);
+                    $msg = 'Photo added to department micro-page gallery.';
+                } else {
+                    $err = $up['error'];
+                }
+            } else {
+                $err = 'Please select an image file to upload.';
+            }
+        } elseif ($action === 'delete_subpage_photo' && !empty($_POST['subpage_id'])) {
+            $spId = (int)$_POST['subpage_id'];
+            $idx = (int)($_POST['photo_index'] ?? -1);
+            $st = $pdo->prepare('SELECT photos_json FROM department_subpages WHERE id = ? AND department_id = ?');
+            $st->execute([$spId, $deptId]);
+            $row = $st->fetch();
+            if ($row) {
+                $photos = !empty($row['photos_json']) ? json_decode((string)$row['photos_json'], true) : [];
+                if (is_array($photos) && isset($photos[$idx])) {
+                    array_splice($photos, $idx, 1);
+                    $pdo->prepare('UPDATE department_subpages SET photos_json = ? WHERE id = ? AND department_id = ?')
+                        ->execute([json_encode(array_values($photos), JSON_UNESCAPED_UNICODE), $spId, $deptId]);
+                    $msg = 'Photo removed from micro-page.';
+                }
+            }
+        } elseif ($action === 'add_subpage_item' && !empty($_POST['subpage_id'])) {
+            $spId = (int)$_POST['subpage_id'];
+            $st = $pdo->prepare('SELECT items_json FROM department_subpages WHERE id = ? AND department_id = ?');
+            $st->execute([$spId, $deptId]);
+            $row = $st->fetch();
+            if ($row) {
+                $itemPhoto = '';
+                if (!empty($_FILES['item_photo']['name'])) {
+                    $up = handleSecureUpload($_FILES['item_photo'], __DIR__ . '/../uploads');
+                    if ($up['ok']) $itemPhoto = $up['file_url'];
+                    else $err = $up['error'];
+                }
+                $itemLink = trim($_POST['item_link_url'] ?? '');
+                if ($err === '' && !empty($_FILES['item_file']['name'])) {
+                    $upDoc = handleSecureUpload($_FILES['item_file'], __DIR__ . '/../uploads');
+                    if ($upDoc['ok']) $itemLink = $upDoc['file_url'];
+                    else $err = $upDoc['error'];
+                } elseif ($err === '' && $itemLink !== '' && strpos($itemLink, 'uploads/') !== 0 && !validateExternalUrl($itemLink)) {
+                    $err = 'Item link must be a valid https:// / http:// link (e.g. Google Drive) or uploaded file.';
+                }
+                if ($err === '') {
+                    $items = !empty($row['items_json']) ? json_decode((string)$row['items_json'], true) : [];
+                    if (!is_array($items)) $items = [];
+                    $items[] = [
+                        'id'        => 'item-' . bin2hex(random_bytes(4)),
+                        'title'     => trim($_POST['item_title'] ?? 'Notice / Entry'),
+                        'date'      => trim($_POST['item_date'] ?? date('Y-m-d')),
+                        'badge'     => trim($_POST['item_badge'] ?? 'Update'),
+                        'summary'   => trim($_POST['item_summary'] ?? ''),
+                        'photoUrl'  => $itemPhoto,
+                        'linkUrl'   => $itemLink,
+                        'linkLabel' => trim($_POST['item_link_label'] ?? '') ?: 'Open Resource',
+                    ];
+                    $pdo->prepare('UPDATE department_subpages SET items_json = ?, updated_at = CURDATE() WHERE id = ? AND department_id = ?')
+                        ->execute([json_encode($items, JSON_UNESCAPED_UNICODE), $spId, $deptId]);
+                    $msg = 'Structured item added to micro-page.';
+                }
+            }
+        } elseif ($action === 'delete_subpage_item' && !empty($_POST['subpage_id'])) {
+            $spId = (int)$_POST['subpage_id'];
+            $idx = (int)($_POST['item_index'] ?? -1);
+            $st = $pdo->prepare('SELECT items_json FROM department_subpages WHERE id = ? AND department_id = ?');
+            $st->execute([$spId, $deptId]);
+            $row = $st->fetch();
+            if ($row) {
+                $items = !empty($row['items_json']) ? json_decode((string)$row['items_json'], true) : [];
+                if (is_array($items) && isset($items[$idx])) {
+                    array_splice($items, $idx, 1);
+                    $pdo->prepare('UPDATE department_subpages SET items_json = ? WHERE id = ? AND department_id = ?')
+                        ->execute([json_encode(array_values($items), JSON_UNESCAPED_UNICODE), $spId, $deptId]);
+                    $msg = 'Item removed.';
+                }
             }
         } elseif ($action === 'delete_subpage') {
             $pdo->prepare('DELETE FROM department_subpages WHERE id = ? AND department_id = ?')->execute([(int)$_POST['subpage_id'], $deptId]);
             $msg = 'Micro-page deleted.';
-        } elseif ($action === 'add_faculty') {
-            $photoUrl = 'assets/images/principal.jpg';
+        } elseif ($action === 'add_faculty' || $action === 'update_faculty') {
+            $photoUrl = trim($_POST['existing_photo'] ?? 'assets/images/principal.jpg');
             if (!empty($_FILES['photo']['name'])) {
                 $up = handleSecureUpload($_FILES['photo'], __DIR__ . '/../uploads');
                 if ($up['ok']) $photoUrl = $up['file_url'];
                 else $err = $up['error'];
             }
+            $extProfileUrl = trim($_POST['external_profile_url'] ?? '');
+            if ($err === '' && $extProfileUrl !== '' && !validateExternalUrl($extProfileUrl)) {
+                $err = 'External faculty profile URL must start with https:// or http://';
+            }
+            $customMap = [];
+            $cfKeys = $_POST['cf_key'] ?? [];
+            $cfVals = $_POST['cf_val'] ?? [];
+            foreach ($cfKeys as $idx => $k) {
+                $k = trim((string)$k);
+                $v = trim((string)($cfVals[$idx] ?? ''));
+                if ($k !== '' && $v !== '') {
+                    $customMap[$k] = $v;
+                }
+            }
+            $customJson = !empty($customMap) ? json_encode($customMap, JSON_UNESCAPED_UNICODE) : null;
+
             if ($err === '') {
-                $stmt = $pdo->prepare('INSERT INTO faculty (department_id, name, designation, qualification, specialization, email, experience_years, photo_url, is_hod) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->execute([$deptId, trim($_POST['name']), trim($_POST['designation']), trim($_POST['qualification']), trim($_POST['specialization']), trim($_POST['email']), (int)($_POST['experience_years'] ?? 5), $photoUrl, isset($_POST['is_hod']) ? 1 : 0]);
-                logAudit($pdo, $user, 'ADD_FACULTY', 'Faculty', $_POST['name']);
-                $msg = 'Faculty member added.';
+                if ($action === 'update_faculty' && !empty($_POST['faculty_id'])) {
+                    $stmt = $pdo->prepare('UPDATE faculty SET name = ?, designation = ?, qualification = ?, specialization = ?, email = ?, phone = ?, experience_years = ?, photo_url = ?, external_profile_url = ?, external_profile_label = ?, custom_fields_json = ?, is_hod = ? WHERE id = ? AND department_id = ?');
+                    $stmt->execute([
+                        trim($_POST['name']),
+                        trim($_POST['designation']),
+                        trim($_POST['qualification']),
+                        trim($_POST['specialization']),
+                        trim($_POST['email']),
+                        trim($_POST['phone'] ?? '') ?: null,
+                        (int)($_POST['experience_years'] ?? 5),
+                        $photoUrl,
+                        $extProfileUrl !== '' ? $extProfileUrl : null,
+                        trim($_POST['external_profile_label'] ?? '') ?: null,
+                        $customJson,
+                        isset($_POST['is_hod']) ? 1 : 0,
+                        (int)$_POST['faculty_id'],
+                        $deptId,
+                    ]);
+                    logAudit($pdo, $user, 'UPDATE_FACULTY', 'Faculty', $_POST['name']);
+                    $msg = 'Faculty profile updated.';
+                } else {
+                    $stmt = $pdo->prepare('INSERT INTO faculty (department_id, name, designation, qualification, specialization, email, phone, experience_years, photo_url, external_profile_url, external_profile_label, custom_fields_json, is_hod) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                    $stmt->execute([
+                        $deptId,
+                        trim($_POST['name']),
+                        trim($_POST['designation']),
+                        trim($_POST['qualification']),
+                        trim($_POST['specialization']),
+                        trim($_POST['email']),
+                        trim($_POST['phone'] ?? '') ?: null,
+                        (int)($_POST['experience_years'] ?? 5),
+                        $photoUrl,
+                        $extProfileUrl !== '' ? $extProfileUrl : null,
+                        trim($_POST['external_profile_label'] ?? '') ?: null,
+                        $customJson,
+                        isset($_POST['is_hod']) ? 1 : 0,
+                    ]);
+                    logAudit($pdo, $user, 'ADD_FACULTY', 'Faculty', $_POST['name']);
+                    $msg = 'Faculty member added.';
+                }
             }
         } elseif ($action === 'delete_faculty') {
             $pdo->prepare('DELETE FROM faculty WHERE id = ? AND department_id = ?')->execute([(int)$_POST['faculty_id'], $deptId]);
             $msg = 'Faculty member removed.';
-        } elseif ($action === 'add_lab') {
-            $pdo->prepare('INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, incharge) VALUES (?, ?, ?, ?, ?)')
-                ->execute([$deptId, trim($_POST['name']), (int)$_POST['area_sqft'], trim($_POST['equipment_summary']), trim($_POST['incharge'])]);
-            $msg = 'Laboratory added.';
+        } elseif ($action === 'add_lab' || $action === 'update_lab') {
+            $labPhoto = trim($_POST['existing_lab_photo'] ?? '');
+            if (!empty($_FILES['lab_photo']['name'])) {
+                $up = handleSecureUpload($_FILES['lab_photo'], __DIR__ . '/../uploads');
+                if ($up['ok']) $labPhoto = $up['file_url'];
+                else $err = $up['error'];
+            }
+            if ($err === '') {
+                if ($action === 'update_lab' && !empty($_POST['lab_id'])) {
+                    $pdo->prepare('UPDATE department_labs SET name = ?, area_sqft = ?, equipment_summary = ?, incharge = ?, photo_url = ? WHERE id = ? AND department_id = ?')
+                        ->execute([trim($_POST['name']), (int)$_POST['area_sqft'], trim($_POST['equipment_summary']), trim($_POST['incharge']), $labPhoto ?: null, (int)$_POST['lab_id'], $deptId]);
+                    $msg = 'Laboratory updated.';
+                } else {
+                    $pdo->prepare('INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, incharge, photo_url) VALUES (?, ?, ?, ?, ?, ?)')
+                        ->execute([$deptId, trim($_POST['name']), (int)$_POST['area_sqft'], trim($_POST['equipment_summary']), trim($_POST['incharge']), $labPhoto ?: null]);
+                    $msg = 'Laboratory added.';
+                }
+            }
         } elseif ($action === 'delete_lab') {
             $pdo->prepare('DELETE FROM department_labs WHERE id = ? AND department_id = ?')->execute([(int)$_POST['lab_id'], $deptId]);
             $msg = 'Laboratory removed.';
@@ -140,6 +336,20 @@ if (!empty($_GET['edit_sub'])) {
     $editSub = $st->fetch() ?: null;
 }
 
+$editFac = null;
+if (!empty($_GET['edit_fac'])) {
+    $st = $pdo->prepare('SELECT * FROM faculty WHERE id = ? AND department_id = ?');
+    $st->execute([(int)$_GET['edit_fac'], $activeDeptId]);
+    $editFac = $st->fetch() ?: null;
+}
+
+$editLab = null;
+if (!empty($_GET['edit_lab'])) {
+    $st = $pdo->prepare('SELECT * FROM department_labs WHERE id = ? AND department_id = ?');
+    $st->execute([(int)$_GET['edit_lab'], $activeDeptId]);
+    $editLab = $st->fetch() ?: null;
+}
+
 $subPages = $pdo->prepare('SELECT * FROM department_subpages WHERE department_id = ? ORDER BY sort_order ASC, id ASC');
 $subPages->execute([$activeDeptId]);
 $subs = $subPages->fetchAll();
@@ -151,24 +361,22 @@ $facultyList = $facStmt->fetchAll();
 $labStmt = $pdo->prepare('SELECT * FROM department_labs WHERE department_id = ? ORDER BY id ASC');
 $labStmt->execute([$activeDeptId]);
 $labs = $labStmt->fetchAll();
-?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Manage Departments &amp; Microsites</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
-  <script src="../assets/js/editor.js" defer></script>
-</head>
-<body class="container" style="padding:2rem 1rem;">
-  <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1>Departments &amp; Micro-Page Manager</h1>
-  <?php if ($msg || !empty($_GET['msg'])): ?><p style="color:#15803d;font-weight:600;"><?= e($msg ?: 'Action completed.') ?></p><?php endif; ?>
-  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
 
+$activeLib = ($activeDept && !empty($activeDept['library_json'])) ? json_decode((string)$activeDept['library_json'], true) : [];
+if (!is_array($activeLib)) $activeLib = [];
+$activeSchema = ($activeDept && !empty($activeDept['faculty_field_schema_json'])) ? json_decode((string)$activeDept['faculty_field_schema_json'], true) : ['Google Scholar', 'ORCID ID'];
+if (!is_array($activeSchema)) $activeSchema = [];
+
+if (!$msg && !empty($_GET['msg'])) {
+    $msg = 'Department action completed.';
+}
+
+$adminPageTitle = 'Departments & Customizable Micro-Pages';
+require_once __DIR__ . '/../includes/admin_layout_top.php';
+?>
   <div style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
     <?php foreach ($deptList as $d): ?>
-      <a href="?dept_id=<?= (int)$d['id'] ?>" class="btn-primary" style="<?= (int)$d['id'] === $activeDeptId ? '' : 'opacity:0.6;' ?>"><?= e($d['name']) ?> (<?= e($d['code']) ?>)</a>
+      <a href="?dept_id=<?= (int)$d['id'] ?>" class="btn-primary" style="<?= (int)$d['id'] === $activeDeptId ? '' : 'opacity:0.62;' ?>"><?= e($d['name']) ?> (<?= e($d['code']) ?>)</a>
     <?php endforeach; ?>
   </div>
 
@@ -224,32 +432,154 @@ $labs = $labStmt->fetchAll();
       <button type="submit" class="btn-primary">Save Department Profile</button>
     </form>
 
+    <!-- Department Library Photo & Faculty Custom Field Schema -->
+    <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
+      <h2 style="margin-top:0;">Department Library (With Photo Upload) &amp; Faculty Custom Field Presets</h2>
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="update_library_schema">
+      <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+      <input type="hidden" name="existing_library_photo" value="<?= e($activeLib['photoUrl'] ?? 'assets/images/hero_library.jpg') ?>">
+
+      <div class="grid-3" style="margin-bottom:0.6rem;">
+        <label>Library Title
+          <input type="text" name="lib_name" value="<?= e($activeLib['name'] ?? '') ?>" placeholder="CSE Departmental Library" style="width:100%;padding:0.45rem;">
+        </label>
+        <label>Volumes Count
+          <input type="number" name="lib_volumes" value="<?= (int)($activeLib['volumesCount'] ?? 0) ?>" style="width:100%;padding:0.45rem;">
+        </label>
+        <label>Journals Count
+          <input type="number" name="lib_journals" value="<?= (int)($activeLib['journalsCount'] ?? 0) ?>" style="width:100%;padding:0.45rem;">
+        </label>
+        <label>Library In-Charge
+          <input type="text" name="lib_incharge" value="<?= e($activeLib['incharge'] ?? '') ?>" style="width:100%;padding:0.45rem;">
+        </label>
+        <label>Timings
+          <input type="text" name="lib_timings" value="<?= e($activeLib['timings'] ?? 'Mon–Sat, 8:30 AM – 6:30 PM') ?>" style="width:100%;padding:0.45rem;">
+        </label>
+        <label>Library Photo Upload (JPG/PNG/WEBP)
+          <input type="file" name="library_photo" accept="image/jpeg,image/png,image/webp" style="display:block;margin-top:4px;">
+        </label>
+      </div>
+      <div class="grid-2" style="margin-bottom:0.6rem;">
+        <label>E-Resources Summary
+          <input type="text" name="lib_eresources" value="<?= e($activeLib['eResourcesSummary'] ?? '') ?>" placeholder="IEEE Xplore, ACM, NPTEL..." style="width:100%;padding:0.45rem;">
+        </label>
+        <label>Department Custom Faculty Profile Fields (comma-separated presets)
+          <input type="text" name="faculty_schema" value="<?= e(implode(', ', $activeSchema)) ?>" placeholder="Google Scholar, ORCID ID, Scopus Author ID, Patents" style="width:100%;padding:0.45rem;">
+        </label>
+      </div>
+      <label style="display:block;margin-bottom:0.75rem;">Library Description
+        <textarea name="lib_description" rows="2" style="width:100%;padding:0.45rem;"><?= e($activeLib['description'] ?? '') ?></textarea>
+      </label>
+      <button type="submit" class="btn-primary">Save Library &amp; Faculty Field Schema</button>
+    </form>
+
+    <!-- Customizable Micro-Pages (Gallery, Notice Board, Notes/Syllabus, Events, Celebrations, Achievements) -->
     <div class="card" style="margin-bottom:1.5rem;">
-      <h2 style="margin-top:0;"><?= $editSub ? 'Edit Micro-Page: ' . e($editSub['title']) : 'Add / Manage Department Micro-Pages' ?></h2>
+      <h2 style="margin-top:0;"><?= $editSub ? 'Edit Micro-Page: ' . e($editSub['title']) : 'Add / Manage Department Micro-Pages (Gallery, Notice Board, Notes/Syllabus, Achievements)' ?></h2>
       <form method="post" style="margin-bottom:1rem;">
         <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
         <input type="hidden" name="action" value="save_subpage">
         <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
         <?php if ($editSub): ?><input type="hidden" name="subpage_id" value="<?= (int)$editSub['id'] ?>"><?php endif; ?>
-        <div class="grid-2" style="margin-bottom:0.5rem;">
-          <input type="text" name="title" required value="<?= e($editSub['title'] ?? '') ?>" placeholder="Micro-Page Title" style="padding:0.5rem;">
-          <input type="text" name="slug" required value="<?= e($editSub['slug'] ?? '') ?>" placeholder="url-slug" style="padding:0.5rem;">
+        <div class="grid-3" style="margin-bottom:0.5rem;">
+          <input type="text" name="title" required value="<?= e($editSub['title'] ?? '') ?>" placeholder="Micro-Page Title (e.g. Department Gallery)" style="padding:0.5rem;">
+          <input type="text" name="slug" required value="<?= e($editSub['slug'] ?? '') ?>" placeholder="url-slug (e.g. gallery)" style="padding:0.5rem;">
+          <select name="page_type" style="padding:0.5rem;">
+            <?php foreach ($pageTypes as $pk => $pl): ?>
+              <option value="<?= e($pk) ?>" <?= (($editSub['page_type'] ?? 'general') === $pk) ? 'selected' : '' ?>><?= e($pl) ?></option>
+            <?php endforeach; ?>
+          </select>
         </div>
-        <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" name="content_html" rows="8"><?= htmlspecialchars($editSub['content_html'] ?? '<p>Department micro-page content...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
+        <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="upload_handler.php" name="content_html" rows="8"><?= htmlspecialchars($editSub['content_html'] ?? '<p>Department micro-page content...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
         <label style="display:block;margin:0.5rem 0;"><input type="checkbox" name="is_published" <?= (!$editSub || !empty($editSub['is_published'])) ? 'checked' : '' ?>> Published</label>
         <button type="submit" class="btn-primary"><?= $editSub ? 'Update Micro-Page' : 'Save Micro-Page' ?></button>
-        <?php if ($editSub): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Cancel</a><?php endif; ?>
+        <?php if ($editSub): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Finish Editing</a><?php endif; ?>
       </form>
+
+      <?php if ($editSub):
+        $editPhotos = !empty($editSub['photos_json']) ? json_decode((string)$editSub['photos_json'], true) : [];
+        if (!is_array($editPhotos)) $editPhotos = [];
+        $editItems = !empty($editSub['items_json']) ? json_decode((string)$editSub['items_json'], true) : [];
+        if (!is_array($editItems)) $editItems = [];
+      ?>
+        <div class="grid-2" style="margin:1.25rem 0;padding:1rem;background:var(--surface-bg);border:1px solid var(--border-color);border-radius:10px;">
+          <div>
+            <h3 style="margin-top:0;">Photos Inside "<?= e($editSub['title']) ?>" (<?= count($editPhotos) ?>)</h3>
+            <form method="post" enctype="multipart/form-data" style="margin-bottom:0.75rem;">
+              <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+              <input type="hidden" name="action" value="add_subpage_photo">
+              <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+              <input type="hidden" name="subpage_id" value="<?= (int)$editSub['id'] ?>">
+              <input type="text" name="photo_caption" placeholder="Photo Caption" style="width:100%;padding:0.45rem;margin-bottom:0.4rem;">
+              <input type="file" name="gallery_photo" accept="image/jpeg,image/png,image/webp" required style="margin-bottom:0.4rem;display:block;">
+              <button type="submit" class="btn-primary" style="font-size:0.8rem;">+ Upload Photo to Micro-Page</button>
+            </form>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:0.5rem;">
+              <?php foreach ($editPhotos as $pIdx => $ph): ?>
+                <div style="border:1px solid var(--border-color);border-radius:6px;overflow:hidden;background:#fff;">
+                  <img src="../<?= e($ph['url'] ?? '') ?>" alt="" style="width:100%;height:70px;object-fit:cover;">
+                  <div style="padding:4px;font-size:0.72rem;"><?= e($ph['caption'] ?? '') ?></div>
+                  <form method="post" style="padding:0 4px 4px;">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                    <input type="hidden" name="action" value="delete_subpage_photo">
+                    <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+                    <input type="hidden" name="subpage_id" value="<?= (int)$editSub['id'] ?>">
+                    <input type="hidden" name="photo_index" value="<?= $pIdx ?>">
+                    <button type="submit" class="btn-secondary" style="width:100%;padding:2px;font-size:0.7rem;">Remove</button>
+                  </form>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+
+          <div>
+            <h3 style="margin-top:0;">Notices / Notes / Achievements Items (<?= count($editItems) ?>)</h3>
+            <form method="post" enctype="multipart/form-data" style="margin-bottom:0.75rem;">
+              <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+              <input type="hidden" name="action" value="add_subpage_item">
+              <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+              <input type="hidden" name="subpage_id" value="<?= (int)$editSub['id'] ?>">
+              <input type="text" name="item_title" required placeholder="Item Title (e.g. Sem VI Notes / SIH Winner)" style="width:100%;padding:0.45rem;margin-bottom:0.35rem;">
+              <div class="grid-2" style="margin-bottom:0.35rem;">
+                <input type="date" name="item_date" value="<?= date('Y-m-d') ?>" style="padding:0.4rem;">
+                <input type="text" name="item_badge" value="Notice" placeholder="Badge (Notice / Syllabus / Winner)" style="padding:0.4rem;">
+              </div>
+              <textarea name="item_summary" rows="2" placeholder="Summary details..." style="width:100%;padding:0.4rem;margin-bottom:0.35rem;"></textarea>
+              <label style="display:block;font-size:0.78rem;margin-bottom:0.35rem;">Item Thumbnail Photo (Optional): <input type="file" name="item_photo" accept="image/jpeg,image/png,image/webp"></label>
+              <label style="display:block;font-size:0.78rem;margin-bottom:0.35rem;">Attach File (PDF/DOCX): <input type="file" name="item_file"></label>
+              <input type="url" name="item_link_url" placeholder="Or Paste Google Drive / External Download URL (https://...)" style="width:100%;padding:0.4rem;margin-bottom:0.35rem;">
+              <input type="text" name="item_link_label" placeholder="Button Label (e.g. Open Google Drive)" style="width:100%;padding:0.4rem;margin-bottom:0.45rem;">
+              <button type="submit" class="btn-primary" style="font-size:0.8rem;">+ Add Structured Item</button>
+            </form>
+            <?php foreach ($editItems as $iIdx => $it): ?>
+              <div style="padding:0.4rem 0.5rem;border:1px solid var(--border-color);border-radius:6px;background:#fff;margin-bottom:0.35rem;display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <div style="font-size:0.78rem;"><strong><?= e($it['title'] ?? '') ?></strong> <small>(<?= e($it['badge'] ?? '') ?>)</small></div>
+                <form method="post">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="delete_subpage_item">
+                  <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+                  <input type="hidden" name="subpage_id" value="<?= (int)$editSub['id'] ?>">
+                  <input type="hidden" name="item_index" value="<?= $iIdx ?>">
+                  <button type="submit" class="btn-secondary" style="padding:2px 6px;font-size:0.72rem;">Remove</button>
+                </form>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      <?php endif; ?>
+
       <table class="data-table">
-        <thead><tr><th>Micro-Page Title</th><th>Slug</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Micro-Page Title</th><th>Type</th><th>Slug</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
           <?php foreach ($subs as $s): ?>
             <tr>
               <td><?= e($s['title']) ?></td>
+              <td><?= e($pageTypes[$s['page_type'] ?? 'general'] ?? ($s['page_type'] ?? 'general')) ?></td>
               <td><?= e($s['slug']) ?></td>
               <td><?= !empty($s['is_published']) ? 'Published' : 'Draft' ?></td>
-              <td>
-                <a href="?dept_id=<?= $activeDeptId ?>&edit_sub=<?= (int)$s['id'] ?>" class="btn-primary" style="padding:0.3rem 0.6rem;font-size:0.8rem;">Edit</a>
+              <td style="white-space:nowrap;">
+                <a href="?dept_id=<?= $activeDeptId ?>&edit_sub=<?= (int)$s['id'] ?>" class="btn-primary" style="padding:0.3rem 0.6rem;font-size:0.8rem;">Edit &amp; Media</a>
                 <form method="post" style="display:inline;" onsubmit="return confirm('Delete micro-page?');">
                   <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                   <input type="hidden" name="action" value="delete_subpage">
@@ -264,51 +594,93 @@ $labs = $labStmt->fetchAll();
       </table>
     </div>
 
-    <div class="grid-2">
-      <form method="post" enctype="multipart/form-data" class="card">
-        <h2 style="margin-top:0;">Add Faculty Profile (With Photo Upload)</h2>
-        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-        <input type="hidden" name="action" value="add_faculty">
-        <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
-        <input type="text" name="name" required placeholder="Faculty Full Name" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <input type="text" name="designation" required placeholder="Designation" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <input type="text" name="qualification" required placeholder="Qualification" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <input type="text" name="specialization" required placeholder="Specialization" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <input type="email" name="email" required placeholder="Email" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <input type="number" name="experience_years" value="10" placeholder="Years Experience" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <label style="display:block;font-size:0.85rem;margin-bottom:0.5rem;">Faculty Photo: <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"></label>
-        <label style="display:block;margin-bottom:0.5rem;"><input type="checkbox" name="is_hod"> Mark as HoD</label>
-        <button type="submit" class="btn-primary">Add Faculty</button>
-        <ul style="margin-top:1rem;">
-          <?php foreach ($facultyList as $f): ?>
-            <li style="margin-bottom:0.4rem;">
-              <?= e($f['name']) ?> — <?= e($f['designation']) ?>
-              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_faculty"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="faculty_id" value="<?= (int)$f['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 6px;font-size:0.75rem;">Remove</button></form>
-            </li>
-          <?php endforeach; ?>
-        </ul>
-      </form>
+    <!-- Faculty & Laboratories -->
+    <div class="grid-2" style="align-items:start;">
+      <div class="card">
+        <?php
+        $editFacCustom = ($editFac && !empty($editFac['custom_fields_json'])) ? json_decode((string)$editFac['custom_fields_json'], true) : [];
+        if (!is_array($editFacCustom)) $editFacCustom = [];
+        $mergedCustomKeys = array_unique(array_merge($activeSchema, array_keys($editFacCustom)));
+        ?>
+        <h2 style="margin-top:0;"><?= $editFac ? 'Edit Faculty: ' . e($editFac['name']) : 'Add Customizable Faculty Profile' ?></h2>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+          <input type="hidden" name="action" value="<?= $editFac ? 'update_faculty' : 'add_faculty' ?>">
+          <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+          <?php if ($editFac): ?><input type="hidden" name="faculty_id" value="<?= (int)$editFac['id'] ?>"><?php endif; ?>
+          <input type="hidden" name="existing_photo" value="<?= e($editFac['photo_url'] ?? 'assets/images/principal.jpg') ?>">
 
-      <form method="post" class="card">
-        <h2 style="margin-top:0;">Add Laboratory</h2>
-        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-        <input type="hidden" name="action" value="add_lab">
-        <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
-        <input type="text" name="name" required placeholder="Laboratory Name" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <input type="number" name="area_sqft" required placeholder="Area (Sq.Ft.)" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <input type="text" name="incharge" required placeholder="Lab In-Charge" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-        <textarea name="equipment_summary" rows="3" required placeholder="Equipment & software details..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"></textarea>
-        <button type="submit" class="btn-primary">Add Laboratory</button>
-        <ul style="margin-top:1rem;">
-          <?php foreach ($labs as $l): ?>
-            <li style="margin-bottom:0.4rem;">
-              <?= e($l['name']) ?> (<?= (int)$l['area_sqft'] ?> sq.ft.)
-              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_lab"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="lab_id" value="<?= (int)$l['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 6px;font-size:0.75rem;">Remove</button></form>
+          <input type="text" name="name" required value="<?= e($editFac['name'] ?? '') ?>" placeholder="Faculty Full Name" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
+          <input type="text" name="designation" required value="<?= e($editFac['designation'] ?? '') ?>" placeholder="Designation" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
+          <input type="text" name="qualification" required value="<?= e($editFac['qualification'] ?? '') ?>" placeholder="Qualification (e.g. Ph.D., M.Tech)" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
+          <input type="text" name="specialization" required value="<?= e($editFac['specialization'] ?? '') ?>" placeholder="Area of Expertise / Specialization" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
+          <div class="grid-2" style="margin-bottom:0.45rem;">
+            <input type="email" name="email" required value="<?= e($editFac['email'] ?? '') ?>" placeholder="Email" style="padding:0.45rem;">
+            <input type="text" name="phone" value="<?= e($editFac['phone'] ?? '') ?>" placeholder="Phone (Optional)" style="padding:0.45rem;">
+          </div>
+          <div class="grid-2" style="margin-bottom:0.45rem;">
+            <input type="number" name="experience_years" value="<?= (int)($editFac['experience_years'] ?? 10) ?>" placeholder="Years Experience" style="padding:0.45rem;">
+            <input type="url" name="external_profile_url" value="<?= e($editFac['external_profile_url'] ?? '') ?>" placeholder="External Profile URL (Scholar/LinkedIn)" style="padding:0.45rem;">
+          </div>
+          <input type="text" name="external_profile_label" value="<?= e($editFac['external_profile_label'] ?? '') ?>" placeholder="External Link Label (e.g. Google Scholar Profile)" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
+
+          <div style="border:1px solid var(--border-color);border-radius:8px;padding:0.65rem;margin-bottom:0.5rem;background:var(--surface-bg);">
+            <strong style="display:block;font-size:0.82rem;margin-bottom:0.4rem;">Custom Faculty Fields (Add/Edit Values):</strong>
+            <?php foreach ($mergedCustomKeys as $ck): ?>
+              <div style="display:flex;gap:0.4rem;margin-bottom:0.35rem;">
+                <input type="text" name="cf_key[]" value="<?= e($ck) ?>" placeholder="Field Label" style="width:42%;padding:0.35rem;font-size:0.8rem;">
+                <input type="text" name="cf_val[]" value="<?= e((string)($editFacCustom[$ck] ?? '')) ?>" placeholder="Value (leave blank to omit)" style="flex:1;padding:0.35rem;font-size:0.8rem;">
+              </div>
+            <?php endforeach; ?>
+            <div style="display:flex;gap:0.4rem;">
+              <input type="text" name="cf_key[]" placeholder="+ Extra Field Name" style="width:42%;padding:0.35rem;font-size:0.8rem;">
+              <input type="text" name="cf_val[]" placeholder="Value" style="flex:1;padding:0.35rem;font-size:0.8rem;">
+            </div>
+          </div>
+
+          <label style="display:block;font-size:0.85rem;margin-bottom:0.45rem;">Faculty Photo: <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"></label>
+          <label style="display:block;margin-bottom:0.5rem;"><input type="checkbox" name="is_hod" <?= !empty($editFac['is_hod']) ? 'checked' : '' ?>> Mark as HoD</label>
+          <button type="submit" class="btn-primary"><?= $editFac ? 'Update Faculty' : 'Add Faculty' ?></button>
+          <?php if ($editFac): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Cancel</a><?php endif; ?>
+        </form>
+        <ul style="margin-top:1rem;padding-left:1.1rem;">
+          <?php foreach ($facultyList as $f): ?>
+            <li style="margin-bottom:0.45rem;font-size:0.86rem;">
+              <strong><?= e($f['name']) ?></strong> — <?= e($f['designation']) ?>
+              <a href="?dept_id=<?= $activeDeptId ?>&edit_fac=<?= (int)$f['id'] ?>" class="btn-primary" style="padding:2px 7px;font-size:0.74rem;margin-left:4px;">Edit</a>
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_faculty"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="faculty_id" value="<?= (int)$f['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 7px;font-size:0.74rem;">Remove</button></form>
             </li>
           <?php endforeach; ?>
         </ul>
-      </form>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0;"><?= $editLab ? 'Edit Laboratory: ' . e($editLab['name']) : 'Add Laboratory (With Photo Upload)' ?></h2>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+          <input type="hidden" name="action" value="<?= $editLab ? 'update_lab' : 'add_lab' ?>">
+          <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+          <?php if ($editLab): ?><input type="hidden" name="lab_id" value="<?= (int)$editLab['id'] ?>"><?php endif; ?>
+          <input type="hidden" name="existing_lab_photo" value="<?= e($editLab['photo_url'] ?? '') ?>">
+
+          <input type="text" name="name" required value="<?= e($editLab['name'] ?? '') ?>" placeholder="Laboratory Name" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
+          <input type="number" name="area_sqft" required value="<?= (int)($editLab['area_sqft'] ?? 1200) ?>" placeholder="Area (Sq.Ft.)" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
+          <input type="text" name="incharge" required value="<?= e($editLab['incharge'] ?? '') ?>" placeholder="Lab In-Charge" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
+          <textarea name="equipment_summary" rows="3" required placeholder="Equipment & software details..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"><?= e($editLab['equipment_summary'] ?? '') ?></textarea>
+          <label style="display:block;font-size:0.85rem;margin-bottom:0.65rem;">Laboratory Photo (JPG/PNG/WEBP): <input type="file" name="lab_photo" accept="image/jpeg,image/png,image/webp"></label>
+          <button type="submit" class="btn-primary"><?= $editLab ? 'Update Laboratory' : 'Add Laboratory' ?></button>
+          <?php if ($editLab): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Cancel</a><?php endif; ?>
+        </form>
+        <ul style="margin-top:1rem;padding-left:1.1rem;">
+          <?php foreach ($labs as $l): ?>
+            <li style="margin-bottom:0.45rem;font-size:0.86rem;">
+              <strong><?= e($l['name']) ?></strong> (<?= (int)$l['area_sqft'] ?> sq.ft.)
+              <a href="?dept_id=<?= $activeDeptId ?>&edit_lab=<?= (int)$l['id'] ?>" class="btn-primary" style="padding:2px 7px;font-size:0.74rem;margin-left:4px;">Edit</a>
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_lab"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="lab_id" value="<?= (int)$l['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 7px;font-size:0.74rem;">Remove</button></form>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
     </div>
   <?php endif; ?>
-</body>
-</html>
+<?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

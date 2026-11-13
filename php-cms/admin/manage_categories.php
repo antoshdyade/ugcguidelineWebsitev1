@@ -100,20 +100,10 @@ if (!empty($_GET['edit'])) {
 $cats = $pdo->query(
     'SELECT c.*, (SELECT COUNT(*) FROM pages p WHERE p.category_id = c.id) AS page_count FROM categories c ORDER BY c.sort_order ASC, c.id ASC'
 )->fetchAll();
+$adminPageTitle = 'Manage Header Categories & Autonomous Sections';
+require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Manage Categories &amp; Navigation</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
-</head>
-<body class="container" style="padding:2rem 1rem;">
-  <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1>Manage Header Categories &amp; Autonomous Sections</h1>
-  <p style="color:var(--text-muted);">Create new top-level sections (e.g. Examination, Autonomous Cell, Skill Development), reorder menu items, and control homepage directory visibility without coding.</p>
-  <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
-  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
+  <p style="color:var(--text-muted);margin-top:0;">Create new top-level sections (e.g. Examination, Autonomous Cell, Skill Development), reorder menu items, and control homepage directory visibility without coding.</p>
 
   <form method="post" class="card" style="margin-bottom:1.5rem;">
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -212,5 +202,4 @@ $cats = $pdo->query(
       </tbody>
     </table>
   </div>
-</body>
-</html>
+<?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

@@ -1,6 +1,7 @@
 import type {
   CmsDatabase,
   CmsDocument,
+  CmsPage,
   CmsUser,
   SearchResultItem,
   UserRole,
@@ -47,6 +48,42 @@ export function formatBytes(bytes: number): string {
   );
   const val = bytes / Math.pow(1024, idx);
   return `${val >= 10 || idx === 0 ? val.toFixed(0) : val.toFixed(1)} ${units[idx]}`;
+}
+
+export function validateExternalDocumentUrl(
+  rawUrl: string,
+): { valid: boolean; normalizedUrl?: string; reason?: string } {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) {
+    return { valid: false, reason: 'External link URL is required.' };
+  }
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('file:')
+  ) {
+    return { valid: false, reason: 'Unsafe URL scheme is blocked for security.' };
+  }
+  if (trimmed.startsWith('/uploads/') || trimmed.startsWith('/assets/')) {
+    return { valid: true, normalizedUrl: trimmed };
+  }
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return {
+      valid: false,
+      reason: 'External URL must start with https:// or http:// (or a local /uploads/ path).',
+    };
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (!parsed.hostname || !parsed.hostname.includes('.')) {
+      return { valid: false, reason: 'External URL must include a valid domain name.' };
+    }
+    return { valid: true, normalizedUrl: parsed.toString() };
+  } catch {
+    return { valid: false, reason: 'Invalid URL format.' };
+  }
 }
 
 const BLOCKED_EXTENSIONS = new Set([
@@ -132,8 +169,13 @@ export type AdminResource =
   | 'leadership'
   | 'directory';
 
+export type RbacUserLike = Pick<
+  CmsUser,
+  'role' | 'assignedDepartmentId' | 'allowedCategories' | 'allowedPageIds' | 'isActive'
+>;
+
 export function canUserAccessResource(
-  user: Pick<CmsUser, 'role' | 'assignedDepartmentId' | 'isActive'> | null,
+  user: RbacUserLike | null,
   resource: AdminResource,
   targetDepartmentId?: number | null,
 ): boolean {
@@ -141,6 +183,10 @@ export function canUserAccessResource(
   const role: UserRole = user.role;
 
   if (role === 'super_admin') return true;
+
+  const hasExplicitPageScope =
+    (user.allowedCategories?.length ?? 0) > 0 ||
+    (user.allowedPageIds?.length ?? 0) > 0;
 
   switch (resource) {
     case 'users':
@@ -152,11 +198,21 @@ export function canUserAccessResource(
     case 'directory':
       return role === 'content_editor';
     case 'categories':
-    case 'pages':
     case 'leadership':
       return role === 'content_editor' || role === 'iqac_officer';
+    case 'pages':
+      return (
+        role === 'content_editor' ||
+        role === 'iqac_officer' ||
+        role === 'exam_controller' ||
+        hasExplicitPageScope
+      );
     case 'documents':
-      return role === 'iqac_officer' || role === 'content_editor';
+      return (
+        role === 'iqac_officer' ||
+        role === 'content_editor' ||
+        role === 'exam_controller'
+      );
     case 'departments':
       if (role !== 'department_admin') return false;
       if (targetDepartmentId === undefined || targetDepartmentId === null) {
@@ -166,6 +222,47 @@ export function canUserAccessResource(
     default:
       return false;
   }
+}
+
+export function canUserAccessCategory(
+  user: RbacUserLike | null,
+  categorySlug: string,
+): boolean {
+  if (!user || !user.isActive) return false;
+  if (user.role === 'super_admin') return true;
+  const allowedCats = user.allowedCategories ?? [];
+  const allowedPages = user.allowedPageIds ?? [];
+  if (allowedCats.length > 0) {
+    return allowedCats.includes(categorySlug);
+  }
+  if (allowedPages.length > 0) {
+    // User is restricted to explicit individual page IDs rather than full categories
+    return false;
+  }
+  if (user.role === 'exam_controller') {
+    return categorySlug === 'examination';
+  }
+  return user.role === 'content_editor' || user.role === 'iqac_officer';
+}
+
+export function canUserAccessPage(
+  user: RbacUserLike | null,
+  page: Pick<CmsPage, 'id' | 'categorySlug'>,
+): boolean {
+  if (!user || !user.isActive) return false;
+  if (user.role === 'super_admin') return true;
+  const allowedCats = user.allowedCategories ?? [];
+  const allowedPages = user.allowedPageIds ?? [];
+  if (allowedCats.length > 0 || allowedPages.length > 0) {
+    return (
+      allowedPages.includes(page.id) ||
+      allowedCats.includes(page.categorySlug)
+    );
+  }
+  if (user.role === 'exam_controller') {
+    return page.categorySlug === 'examination';
+  }
+  return user.role === 'content_editor' || user.role === 'iqac_officer';
 }
 
 export function filterDocuments(
@@ -254,13 +351,16 @@ export function searchCmsContent(
       doc.category.toLowerCase().includes(q) ||
       doc.fileName.toLowerCase().includes(q)
     ) {
+      const isExternal = doc.sourceType === 'external';
       results.push({
         id: `doc-${doc.id}`,
         type: 'document',
         title: doc.title,
-        subtitle: `${doc.category} · ${formatBytes(doc.fileSizeBytes)}`,
+        subtitle: isExternal
+          ? `${doc.category} · External Link`
+          : `${doc.category} · ${formatBytes(doc.fileSizeBytes)}`,
         url: `/quick-links?q=${encodeURIComponent(doc.title)}`,
-        meta: `Downloadable PDF · ${doc.uploadedAt}`,
+        meta: `${isExternal ? 'External Document' : 'Downloadable PDF'} · ${doc.uploadedAt}`,
       });
     }
   }

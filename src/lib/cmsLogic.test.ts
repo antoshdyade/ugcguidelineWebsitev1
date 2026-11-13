@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canUserAccessCategory,
+  canUserAccessPage,
   canUserAccessResource,
   filterDocuments,
   formatBytes,
   searchCmsContent,
+  validateExternalDocumentUrl,
   validateUploadMeta,
 } from './cmsLogic';
 import type { CmsDocument } from '../types/cms';
@@ -32,11 +35,30 @@ test('validateUploadMeta blocks executable extensions and double extensions', ()
   assert.ok(validPng.safeFilename?.endsWith('.png'));
 });
 
-test('canUserAccessResource enforces strict multi-tier RBAC and department scoping', () => {
+test('validateExternalDocumentUrl accepts Google Drive URLs and blocks javascript/data schemes', () => {
+  const driveUrl = validateExternalDocumentUrl('https://drive.google.com/file/d/1AbCdEfG/view?usp=sharing');
+  assert.equal(driveUrl.valid, true);
+  assert.ok(driveUrl.normalizedUrl?.startsWith('https://drive.google.com/'));
+
+  const localUpload = validateExternalDocumentUrl('/uploads/syllabus.pdf');
+  assert.equal(localUpload.valid, true);
+
+  const xssBlocked = validateExternalDocumentUrl('javascript:alert(1)');
+  assert.equal(xssBlocked.valid, false);
+
+  const dataBlocked = validateExternalDocumentUrl('data:text/html,<script>alert(1)</script>');
+  assert.equal(dataBlocked.valid, false);
+
+  const emptyBlocked = validateExternalDocumentUrl('   ');
+  assert.equal(emptyBlocked.valid, false);
+});
+
+test('canUserAccessResource enforces strict multi-tier RBAC, exam_controller, and department scoping', () => {
   const superAdmin = { role: 'super_admin' as const, assignedDepartmentId: null, isActive: true };
   const deptAdminCSE = { role: 'department_admin' as const, assignedDepartmentId: 1, isActive: true };
   const iqacOfficer = { role: 'iqac_officer' as const, assignedDepartmentId: null, isActive: true };
   const contentEditor = { role: 'content_editor' as const, assignedDepartmentId: null, isActive: true };
+  const examController = { role: 'exam_controller' as const, assignedDepartmentId: null, isActive: true };
 
   assert.equal(canUserAccessResource(superAdmin, 'users'), true);
   assert.equal(canUserAccessResource(deptAdminCSE, 'users'), false);
@@ -52,6 +74,37 @@ test('canUserAccessResource enforces strict multi-tier RBAC and department scopi
   assert.equal(canUserAccessResource(deptAdminCSE, 'categories'), false);
   assert.equal(canUserAccessResource(superAdmin, 'categories'), true);
   assert.equal(canUserAccessResource(contentEditor, 'settings'), false);
+
+  assert.equal(canUserAccessResource(examController, 'pages'), true);
+  assert.equal(canUserAccessResource(examController, 'documents'), true);
+  assert.equal(canUserAccessResource(examController, 'users'), false);
+  assert.equal(canUserAccessResource(examController, 'settings'), false);
+});
+
+test('canUserAccessCategory and canUserAccessPage enforce granular per-category and per-page RBAC', () => {
+  const examController = {
+    role: 'exam_controller' as const,
+    assignedDepartmentId: null,
+    allowedCategories: ['examination'],
+    allowedPageIds: [],
+    isActive: true,
+  };
+  assert.equal(canUserAccessCategory(examController, 'examination'), true);
+  assert.equal(canUserAccessCategory(examController, 'about-hei'), false);
+  assert.equal(canUserAccessPage(examController, { id: 10, categorySlug: 'examination' }), true);
+  assert.equal(canUserAccessPage(examController, { id: 1, categorySlug: 'about-hei' }), false);
+
+  const singlePageEditor = {
+    role: 'department_admin' as const,
+    assignedDepartmentId: 1,
+    allowedCategories: [],
+    allowedPageIds: [42, 43],
+    isActive: true,
+  };
+  assert.equal(canUserAccessResource(singlePageEditor, 'pages'), true);
+  assert.equal(canUserAccessCategory(singlePageEditor, 'about-hei'), false);
+  assert.equal(canUserAccessPage(singlePageEditor, { id: 42, categorySlug: 'about-hei' }), true);
+  assert.equal(canUserAccessPage(singlePageEditor, { id: 99, categorySlug: 'about-hei' }), false);
 });
 
 test('searchCmsContent finds published pages, faculty, and documents while excluding unpublished pages', () => {

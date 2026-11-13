@@ -84,19 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $hs = $s['home_sections'] ?? [];
 $stats = $s['highlights_stats'] ?? [];
+$adminPageTitle = 'Site Settings, Branding & Homepage Charter';
+require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Site Settings</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
-</head>
-<body class="container" style="padding:2rem 1rem;">
-  <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1>Site Settings, Branding &amp; Homepage Charter</h1>
-  <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
-  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
 
   <form method="post" enctype="multipart/form-data" class="card" style="max-width:860px;">
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -174,5 +164,4 @@ $stats = $s['highlights_stats'] ?? [];
 
     <button type="submit" class="btn-primary">Save Complete Settings &amp; Homepage Layout</button>
   </form>
-</body>
-</html>
+<?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

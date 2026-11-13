@@ -19,7 +19,7 @@ $dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '6220');
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= e($pageTitle ?? $settings['institution_name']) ?></title>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/style.css?v=2">
   <style>
     :root {
       --primary-color: <?= e($settings['primary_color']) ?>;

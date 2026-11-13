@@ -66,12 +66,64 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
     return match ($resource) {
         'users', 'settings', 'audit_logs' => false,
         'sliders_events', 'gallery', 'directory' => $role === 'content_editor',
-        'pages', 'categories'             => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'documents', 'leadership'         => in_array($role, ['iqac_officer', 'content_editor'], true),
+        'categories'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'pages'                           => in_array($role, ['content_editor', 'iqac_officer', 'exam_controller'], true),
+        'documents'                       => in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true),
+        'leadership'                      => in_array($role, ['iqac_officer', 'content_editor'], true),
         'departments'                     => $role === 'department_admin'
             && ($targetDeptId === null ? !empty($user['assigned_department_id']) : (int)$user['assigned_department_id'] === $targetDeptId),
         default                           => false,
     };
+}
+
+function canAccessCategory(array $user, string $categorySlug): bool
+{
+    $role = $user['role'] ?? '';
+    if ($role === 'super_admin') {
+        return true;
+    }
+    $allowedCats = $user['allowed_categories'] ?? null;
+    if (is_array($allowedCats) && count($allowedCats) > 0) {
+        return in_array($categorySlug, $allowedCats, true);
+    }
+    if ($role === 'exam_controller') {
+        return $categorySlug === 'examination';
+    }
+    return in_array($role, ['content_editor', 'iqac_officer'], true);
+}
+
+function canAccessPage(array $user, array $page, ?string $categorySlug = null): bool
+{
+    $role = $user['role'] ?? '';
+    if ($role === 'super_admin') {
+        return true;
+    }
+    $allowedPages = $user['allowed_page_ids'] ?? null;
+    if (is_array($allowedPages) && count($allowedPages) > 0) {
+        return in_array((int)($page['id'] ?? 0), array_map('intval', $allowedPages), true);
+    }
+    $catSlug = $categorySlug ?? ($page['category_slug'] ?? $page['cat_slug'] ?? '');
+    if ($catSlug !== '') {
+        return canAccessCategory($user, $catSlug);
+    }
+    return canAccessResource($user, 'pages');
+}
+
+function validateExternalUrl(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '') {
+        return false;
+    }
+    if (!preg_match('#^https?://#i', $url)) {
+        return false;
+    }
+    return filter_var($url, FILTER_VALIDATE_URL) !== false;
+}
+
+function isExternalHttpUrl(?string $url): bool
+{
+    return $url !== null && preg_match('#^https?://#i', trim($url)) === 1;
 }
 
 function requireRoleAccess(string $resource, ?int $targetDeptId = null): array

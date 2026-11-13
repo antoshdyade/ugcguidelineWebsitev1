@@ -5,12 +5,22 @@ import crypto from 'node:crypto';
 import { createServer as createViteServer } from 'vite';
 import { createSeedDatabase, hashPassword, verifyPassword } from './src/data/seedDatabase';
 import {
+  canUserAccessCategory,
+  canUserAccessPage,
   canUserAccessResource,
   searchCmsContent,
+  validateExternalDocumentUrl,
   validateUploadMeta,
   type AdminResource,
 } from './src/lib/cmsLogic';
-import type { CmsCategory, CmsDatabase, CmsUser, UserRole } from './src/types/cms';
+import type {
+  CmsCategory,
+  CmsDatabase,
+  CmsUser,
+  CustomHomeComponent,
+  HomeComponentPlacement,
+  UserRole,
+} from './src/types/cms';
 
 const PORT = 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -28,13 +38,15 @@ function loadDatabase(): CmsDatabase {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw) as CmsDatabase;
       const isPreExamUpgrade = !parsed.settings?.homeSections;
+      let needsSave = isPreExamUpgrade;
+
       let categories: CmsCategory[] = (parsed.categories || seed.categories).map((c) => ({
         ...c,
         shortLabel: c.shortLabel || c.name,
         showInMenu: c.showInMenu !== false,
         showOnHome: c.showOnHome !== false,
       }));
-      let pages = parsed.pages || seed.pages;
+      const pages = parsed.pages || seed.pages;
 
       if (isPreExamUpgrade) {
         const examCat = seed.categories.find((c) => c.slug === 'examination');
@@ -52,11 +64,24 @@ function loadDatabase(): CmsDatabase {
         }
       }
 
+      const users = [...(parsed.users || seed.users)];
+      const seedCoe = seed.users.find((u) => u.email === 'coe@coe.sveri.ac.in');
+      if (seedCoe && !users.some((u) => u.email.toLowerCase() === seedCoe.email.toLowerCase())) {
+        users.push(seedCoe);
+        needsSave = true;
+      }
+
+      const customHomeComponents = parsed.settings?.customHomeComponents ?? seed.settings.customHomeComponents ?? [];
+      if (!parsed.settings?.customHomeComponents) {
+        needsSave = true;
+      }
+
       const merged: CmsDatabase = {
         ...seed,
         ...parsed,
         categories,
         pages,
+        users,
         settings: {
           ...seed.settings,
           ...(parsed.settings || {}),
@@ -64,9 +89,10 @@ function loadDatabase(): CmsDatabase {
             ...seed.settings.homeSections!,
             ...(parsed.settings?.homeSections || {}),
           },
+          customHomeComponents,
         },
       };
-      if (isPreExamUpgrade) {
+      if (needsSave) {
         fs.writeFileSync(DB_FILE, JSON.stringify(merged, null, 2), 'utf-8');
       }
       return merged;
@@ -85,7 +111,7 @@ function saveDatabase() {
 }
 
 function addAudit(actor: CmsUser, action: string, entityType: string, entityTitle: string) {
-  const nextId = (db.auditLogs[0]?.id ?? 0) + 1;
+  const nextId = Math.max(0, ...db.auditLogs.map((entry) => entry.id)) + 1;
   db.auditLogs.unshift({
     id: nextId,
     actorEmail: actor.email,
@@ -422,7 +448,7 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  // Pages CRUD
+  // Pages CRUD (enforces granular per-category & per-page RBAC)
   app.post('/api/admin/pages', requireAdmin('pages'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const { categorySlug, slug, title, subtitle, contentHtml, attachedPdfUrl, attachedPdfLabel, isPublished } =
@@ -430,6 +456,19 @@ async function startServer() {
     if (!title || !slug || !categorySlug) {
       res.status(400).json({ error: 'Category, slug, and title are required.' });
       return;
+    }
+    if (!canUserAccessCategory(actor, String(categorySlug))) {
+      res.status(403).json({
+        error: `RBAC Restriction: Your account does not have permission to create pages inside "${categorySlug}".`,
+      });
+      return;
+    }
+    if (attachedPdfUrl && String(attachedPdfUrl).trim()) {
+      const urlCheck = validateExternalDocumentUrl(String(attachedPdfUrl));
+      if (!urlCheck.valid) {
+        res.status(400).json({ error: urlCheck.reason || 'Invalid attached document URL.' });
+        return;
+      }
     }
     const cleanSlug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '-');
     if (db.pages.some((p) => p.slug === cleanSlug)) {
@@ -444,8 +483,8 @@ async function startServer() {
       title: String(title),
       subtitle: String(subtitle || ''),
       contentHtml: String(contentHtml || '<p></p>'),
-      attachedPdfUrl: attachedPdfUrl ? String(attachedPdfUrl) : undefined,
-      attachedPdfLabel: attachedPdfLabel ? String(attachedPdfLabel) : undefined,
+      attachedPdfUrl: attachedPdfUrl ? String(attachedPdfUrl).trim() : undefined,
+      attachedPdfLabel: attachedPdfLabel ? String(attachedPdfLabel).trim() : undefined,
       isPublished: Boolean(isPublished ?? true),
       sortOrder: db.pages.filter((p) => p.categorySlug === categorySlug).length + 1,
       updatedAt: new Date().toISOString().slice(0, 10),
@@ -465,15 +504,32 @@ async function startServer() {
       res.status(404).json({ error: 'Page not found.' });
       return;
     }
+    if (!canUserAccessPage(actor, page)) {
+      res.status(403).json({ error: 'RBAC Restriction: You are not authorized to edit this page.' });
+      return;
+    }
     const { title, subtitle, contentHtml, categorySlug, isPublished, attachedPdfUrl, attachedPdfLabel, sortOrder } = req.body;
+    if (categorySlug !== undefined && categorySlug !== page.categorySlug && !canUserAccessCategory(actor, String(categorySlug))) {
+      res.status(403).json({
+        error: `RBAC Restriction: Your account cannot move pages into "${categorySlug}".`,
+      });
+      return;
+    }
+    if (attachedPdfUrl && String(attachedPdfUrl).trim()) {
+      const urlCheck = validateExternalDocumentUrl(String(attachedPdfUrl));
+      if (!urlCheck.valid) {
+        res.status(400).json({ error: urlCheck.reason || 'Invalid attached document URL.' });
+        return;
+      }
+    }
     if (title !== undefined) page.title = String(title);
     if (subtitle !== undefined) page.subtitle = String(subtitle);
     if (contentHtml !== undefined) page.contentHtml = String(contentHtml);
     if (categorySlug !== undefined) page.categorySlug = categorySlug;
     if (isPublished !== undefined) page.isPublished = Boolean(isPublished);
     if (sortOrder !== undefined) page.sortOrder = Number(sortOrder);
-    if (attachedPdfUrl !== undefined) page.attachedPdfUrl = attachedPdfUrl || undefined;
-    if (attachedPdfLabel !== undefined) page.attachedPdfLabel = attachedPdfLabel || undefined;
+    if (attachedPdfUrl !== undefined) page.attachedPdfUrl = String(attachedPdfUrl).trim() || undefined;
+    if (attachedPdfLabel !== undefined) page.attachedPdfLabel = String(attachedPdfLabel).trim() || undefined;
     page.updatedAt = new Date().toISOString().slice(0, 10);
     page.updatedBy = actor.fullName;
     addAudit(actor, 'UPDATE_PAGE', 'Page', page.title);
@@ -487,6 +543,10 @@ async function startServer() {
     const idx = db.pages.findIndex((p) => p.id === id);
     if (idx === -1) {
       res.status(404).json({ error: 'Page not found.' });
+      return;
+    }
+    if (!canUserAccessPage(actor, db.pages[idx])) {
+      res.status(403).json({ error: 'RBAC Restriction: You are not authorized to delete this page.' });
       return;
     }
     const [removed] = db.pages.splice(idx, 1);
@@ -507,7 +567,7 @@ async function startServer() {
         res.status(404).json({ error: 'Department not found.' });
         return;
       }
-      const { title, slug, contentHtml, isPublished } = req.body;
+      const { title, slug, pageType, contentHtml, photos, items, isPublished } = req.body;
       if (!title || !slug) {
         res.status(400).json({ error: 'Title and slug are required.' });
         return;
@@ -519,7 +579,10 @@ async function startServer() {
         departmentId: deptId,
         slug: cleanSlug,
         title: String(title),
+        pageType: pageType || 'general',
         contentHtml: String(contentHtml || '<p></p>'),
+        photos: Array.isArray(photos) ? photos : [],
+        items: Array.isArray(items) ? items : [],
         sortOrder: dept.subPages.length + 1,
         isPublished: Boolean(isPublished ?? true),
         updatedAt: new Date().toISOString().slice(0, 10),
@@ -545,7 +608,14 @@ async function startServer() {
         return;
       }
       if (req.body.title !== undefined) sub.title = String(req.body.title);
+      if (req.body.slug !== undefined) {
+        sub.slug = String(req.body.slug).toLowerCase().replace(/[^a-z0-9-]/g, '-');
+      }
+      if (req.body.pageType !== undefined) sub.pageType = req.body.pageType;
       if (req.body.contentHtml !== undefined) sub.contentHtml = String(req.body.contentHtml);
+      if (Array.isArray(req.body.photos)) sub.photos = req.body.photos;
+      if (Array.isArray(req.body.items)) sub.items = req.body.items;
+      if (req.body.sortOrder !== undefined) sub.sortOrder = Number(req.body.sortOrder);
       if (req.body.isPublished !== undefined) sub.isPublished = Boolean(req.body.isPublished);
       sub.updatedAt = new Date().toISOString().slice(0, 10);
       addAudit(actor, 'UPDATE_DEPT_SUBPAGE', dept.shortName, sub.title);
@@ -589,7 +659,20 @@ async function startServer() {
         res.status(404).json({ error: 'Department not found.' });
         return;
       }
-      const { name, designation, qualification, specialization, email, experienceYears, photoUrl, isHod } = req.body;
+      const {
+        name,
+        designation,
+        qualification,
+        specialization,
+        email,
+        phone,
+        experienceYears,
+        photoUrl,
+        externalProfileUrl,
+        externalProfileLabel,
+        customFields,
+        isHod,
+      } = req.body;
       if (!name || !designation) {
         res.status(400).json({ error: 'Faculty name and designation are required.' });
         return;
@@ -603,8 +686,12 @@ async function startServer() {
         qualification: String(qualification || 'M.Tech'),
         specialization: String(specialization || 'Engineering'),
         email: String(email || ''),
+        phone: phone ? String(phone) : undefined,
         experienceYears: Number(experienceYears || 1),
         photoUrl: String(photoUrl || '/src/assets/images/leadership_principal_1794512597061.jpg'),
+        externalProfileUrl: externalProfileUrl ? String(externalProfileUrl).trim() : undefined,
+        externalProfileLabel: externalProfileLabel ? String(externalProfileLabel).trim() : undefined,
+        customFields: Array.isArray(customFields) ? customFields : [],
         isHod: Boolean(isHod ?? false),
         sortOrder: dept.faculty.length + 1,
       };
@@ -631,8 +718,16 @@ async function startServer() {
       if (req.body.qualification !== undefined) fac.qualification = String(req.body.qualification);
       if (req.body.specialization !== undefined) fac.specialization = String(req.body.specialization);
       if (req.body.email !== undefined) fac.email = String(req.body.email);
+      if (req.body.phone !== undefined) fac.phone = String(req.body.phone).trim() || undefined;
       if (req.body.experienceYears !== undefined) fac.experienceYears = Number(req.body.experienceYears);
       if (req.body.photoUrl !== undefined) fac.photoUrl = String(req.body.photoUrl);
+      if (req.body.externalProfileUrl !== undefined) {
+        fac.externalProfileUrl = String(req.body.externalProfileUrl).trim() || undefined;
+      }
+      if (req.body.externalProfileLabel !== undefined) {
+        fac.externalProfileLabel = String(req.body.externalProfileLabel).trim() || undefined;
+      }
+      if (Array.isArray(req.body.customFields)) fac.customFields = req.body.customFields;
       if (req.body.isHod !== undefined) fac.isHod = Boolean(req.body.isHod);
       addAudit(actor, 'UPDATE_FACULTY', dept.shortName, fac.name);
       saveDatabase();
@@ -674,7 +769,7 @@ async function startServer() {
         res.status(404).json({ error: 'Department not found.' });
         return;
       }
-      const { name, areaSqFt, equipmentSummary, incharge } = req.body;
+      const { name, areaSqFt, equipmentSummary, incharge, photoUrl } = req.body;
       if (!name) {
         res.status(400).json({ error: 'Laboratory name is required.' });
         return;
@@ -687,11 +782,34 @@ async function startServer() {
         areaSqFt: Number(areaSqFt || 1200),
         equipmentSummary: String(equipmentSummary || ''),
         incharge: String(incharge || dept.hodName),
+        photoUrl: photoUrl ? String(photoUrl) : undefined,
       };
       dept.labs.push(lab);
       addAudit(actor, 'ADD_LAB', dept.shortName, lab.name);
       saveDatabase();
       res.status(201).json(lab);
+    },
+  );
+
+  app.put(
+    '/api/admin/departments/:deptId/labs/:labId',
+    requireAdmin('departments', (req) => Number(req.params.deptId)),
+    (req, res) => {
+      const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+      const dept = db.departments.find((d) => d.id === Number(req.params.deptId));
+      const lab = dept?.labs.find((l) => l.id === Number(req.params.labId));
+      if (!dept || !lab) {
+        res.status(404).json({ error: 'Laboratory not found.' });
+        return;
+      }
+      if (req.body.name !== undefined) lab.name = String(req.body.name);
+      if (req.body.areaSqFt !== undefined) lab.areaSqFt = Number(req.body.areaSqFt);
+      if (req.body.equipmentSummary !== undefined) lab.equipmentSummary = String(req.body.equipmentSummary);
+      if (req.body.incharge !== undefined) lab.incharge = String(req.body.incharge);
+      if (req.body.photoUrl !== undefined) lab.photoUrl = req.body.photoUrl ? String(req.body.photoUrl) : undefined;
+      addAudit(actor, 'UPDATE_LAB', dept.shortName, lab.name);
+      saveDatabase();
+      res.json(lab);
     },
   );
 
@@ -820,6 +938,12 @@ async function startServer() {
       }
       if (req.body.establishedYear !== undefined) dept.establishedYear = Number(req.body.establishedYear);
       if (req.body.intakeCapacity !== undefined) dept.intakeCapacity = Number(req.body.intakeCapacity);
+      if (req.body.library !== undefined) {
+        dept.library = req.body.library ? { ...req.body.library } : undefined;
+      }
+      if (Array.isArray(req.body.facultyFieldSchema)) {
+        dept.facultyFieldSchema = req.body.facultyFieldSchema.map((s: unknown) => String(s).trim()).filter(Boolean);
+      }
       addAudit(actor, 'UPDATE_DEPARTMENT', 'Department', dept.name);
       saveDatabase();
       res.json(dept);
@@ -1203,12 +1327,62 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  // Documents / Media Manager with strict MIME & executable upload blocking
+  // Documents / Media Manager with strict MIME & executable upload blocking OR validated external link
   app.post('/api/admin/documents', requireAdmin('documents'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
-    const { title, category, fileName, mimeType, fileSizeBytes, base64Content, isQuickLink } = req.body;
-    if (!title || !category || !fileName) {
-      res.status(400).json({ error: 'Document title, category, and filename are required.' });
+    const {
+      title,
+      category,
+      sourceType,
+      externalUrl,
+      fileName,
+      mimeType,
+      fileSizeBytes,
+      base64Content,
+      isQuickLink,
+    } = req.body;
+    if (!title || !category) {
+      res.status(400).json({ error: 'Document title and category are required.' });
+      return;
+    }
+
+    const nextId = Math.max(1, ...db.documents.map((d) => d.id)) + 1;
+
+    if (sourceType === 'external') {
+      const urlCheck = validateExternalDocumentUrl(String(externalUrl || ''));
+      if (!urlCheck.valid || !urlCheck.normalizedUrl) {
+        res.status(400).json({ error: urlCheck.reason || 'Invalid external document URL.' });
+        return;
+      }
+      let displayFileName = urlCheck.normalizedUrl;
+      try {
+        const parsed = new URL(urlCheck.normalizedUrl);
+        displayFileName = `${parsed.hostname}${parsed.pathname}`.slice(0, 80);
+      } catch {
+        displayFileName = urlCheck.normalizedUrl.slice(0, 80);
+      }
+      const doc = {
+        id: nextId,
+        title: String(title).trim(),
+        category,
+        fileUrl: urlCheck.normalizedUrl,
+        fileName: displayFileName,
+        fileSizeBytes: 0,
+        mimeType: 'text/uri-list',
+        sourceType: 'external' as const,
+        uploadedAt: new Date().toISOString().slice(0, 10),
+        uploadedBy: actor.fullName,
+        isQuickLink: Boolean(isQuickLink ?? true),
+      };
+      db.documents.unshift(doc);
+      addAudit(actor, 'ADD_EXTERNAL_DOCUMENT', 'Document', doc.title);
+      saveDatabase();
+      res.status(201).json(doc);
+      return;
+    }
+
+    if (!fileName) {
+      res.status(400).json({ error: 'File name is required for uploaded documents.' });
       return;
     }
     const validation = validateUploadMeta(
@@ -1230,15 +1404,15 @@ async function startServer() {
       fileUrl = `/uploads/${validation.safeFilename}`;
     }
 
-    const nextId = Math.max(1, ...db.documents.map((d) => d.id)) + 1;
     const doc = {
       id: nextId,
-      title: String(title),
+      title: String(title).trim(),
       category,
       fileUrl,
       fileName: validation.safeFilename,
       fileSizeBytes: Number(fileSizeBytes || 204800),
       mimeType: String(mimeType || 'application/pdf'),
+      sourceType: 'upload' as const,
       uploadedAt: new Date().toISOString().slice(0, 10),
       uploadedBy: actor.fullName,
       isQuickLink: Boolean(isQuickLink ?? true),
@@ -1262,15 +1436,115 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  // Homepage Custom HTML Components Builder CRUD (Super Admin or Content Editor)
+  app.post('/api/admin/home-components', requireAdmin('sliders_events'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { title, placement, contentHtml, isActive } = req.body as {
+      title?: string;
+      placement?: HomeComponentPlacement;
+      contentHtml?: string;
+      isActive?: boolean;
+    };
+    if (!title || !contentHtml) {
+      res.status(400).json({ error: 'Component title and HTML content are required.' });
+      return;
+    }
+    const validPlacements: HomeComponentPlacement[] = [
+      'after-hero',
+      'after-about',
+      'after-depts',
+      'before-footer',
+    ];
+    const safePlacement: HomeComponentPlacement = validPlacements.includes(placement as HomeComponentPlacement)
+      ? (placement as HomeComponentPlacement)
+      : 'after-about';
+    const list = db.settings.customHomeComponents ?? [];
+    const nextId = Math.max(0, ...list.map((c) => c.id)) + 1;
+    const created: CustomHomeComponent = {
+      id: nextId,
+      title: String(title).trim(),
+      placement: safePlacement,
+      sortOrder: list.length + 1,
+      isActive: Boolean(isActive ?? true),
+      contentHtml: String(contentHtml),
+    };
+    db.settings.customHomeComponents = [...list, created];
+    addAudit(actor, 'CREATE_HOME_COMPONENT', 'HomeComponent', created.title);
+    saveDatabase();
+    res.status(201).json(created);
+  });
+
+  app.put('/api/admin/home-components/reorder', requireAdmin('sliders_events'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    const list = db.settings.customHomeComponents ?? [];
+    orderedIds.forEach((id, idx) => {
+      const item = list.find((c) => c.id === Number(id));
+      if (item) item.sortOrder = idx + 1;
+    });
+    list.sort((a, b) => a.sortOrder - b.sortOrder);
+    db.settings.customHomeComponents = list;
+    addAudit(actor, 'REORDER_HOME_COMPONENTS', 'HomeComponent', 'Updated homepage custom components order');
+    saveDatabase();
+    res.json(list);
+  });
+
+  app.put('/api/admin/home-components/:id', requireAdmin('sliders_events'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const list = db.settings.customHomeComponents ?? [];
+    const comp = list.find((c) => c.id === Number(req.params.id));
+    if (!comp) {
+      res.status(404).json({ error: 'Homepage component not found.' });
+      return;
+    }
+    if (req.body.title !== undefined) comp.title = String(req.body.title).trim();
+    if (req.body.placement !== undefined) comp.placement = req.body.placement;
+    if (req.body.contentHtml !== undefined) comp.contentHtml = String(req.body.contentHtml);
+    if (req.body.isActive !== undefined) comp.isActive = Boolean(req.body.isActive);
+    if (req.body.sortOrder !== undefined) comp.sortOrder = Number(req.body.sortOrder);
+    addAudit(actor, 'UPDATE_HOME_COMPONENT', 'HomeComponent', comp.title);
+    saveDatabase();
+    res.json(comp);
+  });
+
+  app.delete('/api/admin/home-components/:id', requireAdmin('sliders_events'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const list = db.settings.customHomeComponents ?? [];
+    const idx = list.findIndex((c) => c.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Homepage component not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    db.settings.customHomeComponents = list;
+    addAudit(actor, 'DELETE_HOME_COMPONENT', 'HomeComponent', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
   // Users & RBAC management (Super Admin only)
   app.post('/api/admin/users', requireAdmin('users'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
-    const { fullName, email, password, role, assignedDepartmentId } = req.body as {
+    const {
+      fullName,
+      email,
+      password,
+      role,
+      assignedDepartmentId,
+      allowedCategories,
+      allowedPageIds,
+    } = req.body as {
       fullName?: string;
       email?: string;
       password?: string;
       role?: UserRole;
       assignedDepartmentId?: number | null;
+      allowedCategories?: string[];
+      allowedPageIds?: number[];
     };
     if (!fullName || !email || !password || !role) {
       res.status(400).json({ error: 'Name, email, password, and role are required.' });
@@ -1281,12 +1555,20 @@ async function startServer() {
       return;
     }
     const nextId = Math.max(1, ...db.users.map((u) => u.id)) + 1;
+    const defaultCats =
+      Array.isArray(allowedCategories)
+        ? allowedCategories
+        : role === 'exam_controller'
+        ? ['examination']
+        : [];
     const newUser = {
       id: nextId,
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
       role,
       assignedDepartmentId: role === 'department_admin' ? Number(assignedDepartmentId || 1) : null,
+      allowedCategories: defaultCats,
+      allowedPageIds: Array.isArray(allowedPageIds) ? allowedPageIds.map(Number) : [],
       isActive: true,
       passwordHash: hashPassword(password),
     };
@@ -1294,6 +1576,42 @@ async function startServer() {
     addAudit(actor, 'CREATE_USER', 'User', `${newUser.email} (${newUser.role})`);
     saveDatabase();
     res.status(201).json(sanitizeUser(newUser));
+  });
+
+  app.put('/api/admin/users/:id/permissions', requireAdmin('users'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const target = db.users.find((u) => u.id === Number(req.params.id));
+    if (!target) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+    const { role, assignedDepartmentId, allowedCategories, allowedPageIds } = req.body as {
+      role?: UserRole;
+      assignedDepartmentId?: number | null;
+      allowedCategories?: string[];
+      allowedPageIds?: number[];
+    };
+    if (role !== undefined && target.id !== actor.id) {
+      target.role = role;
+    }
+    if (assignedDepartmentId !== undefined) {
+      target.assignedDepartmentId =
+        target.role === 'department_admin' ? Number(assignedDepartmentId || 1) : null;
+    }
+    if (Array.isArray(allowedCategories)) {
+      target.allowedCategories = allowedCategories.map(String);
+    }
+    if (Array.isArray(allowedPageIds)) {
+      target.allowedPageIds = allowedPageIds.map(Number).filter(Number.isFinite);
+    }
+    addAudit(
+      actor,
+      'UPDATE_USER_PERMISSIONS',
+      'User',
+      `${target.email} (${(target.allowedCategories ?? []).length} cats, ${(target.allowedPageIds ?? []).length} pages)`,
+    );
+    saveDatabase();
+    res.json(sanitizeUser(target));
   });
 
   app.put('/api/admin/users/:id/toggle', requireAdmin('users'), (req, res) => {

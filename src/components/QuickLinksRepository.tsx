@@ -91,51 +91,69 @@ export function QuickLinksRepository({ documents, initialQuery = '' }: QuickLink
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 dark:divide-slate-800">
-                {filtered.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-stone-50/70 dark:hover:bg-slate-800/40">
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-start gap-2.5">
-                        <FileText className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-semibold text-stone-900 dark:text-white">{doc.title}</p>
-                          <p className="text-xs text-stone-500 dark:text-slate-400 font-mono-tabular">
-                            {doc.fileName}
-                          </p>
+                {filtered.map((doc) => {
+                  const isExternal = doc.sourceType === 'external' || /^https?:\/\//i.test(doc.fileUrl);
+                  return (
+                    <tr key={doc.id} className="hover:bg-stone-50/70 dark:hover:bg-slate-800/40">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-start gap-2.5">
+                          <FileText className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-semibold text-stone-900 dark:text-white">{doc.title}</p>
+                            <p className="text-xs text-stone-500 dark:text-slate-400 font-mono-tabular">
+                              {isExternal ? `External Link · ${doc.fileName}` : doc.fileName}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-stone-700 dark:text-slate-300 whitespace-nowrap">
-                      {doc.category}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono-tabular text-stone-600 dark:text-slate-400 whitespace-nowrap">
-                      {formatBytes(doc.fileSizeBytes)}
-                    </td>
-                    <td className="py-3.5 px-4 font-mono-tabular text-stone-600 dark:text-slate-400 whitespace-nowrap">
-                      {doc.uploadedAt}
-                    </td>
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewDoc(doc)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 text-xs font-medium hover:bg-stone-100 dark:hover:bg-slate-800"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>Preview</span>
-                        </button>
-                        <a
-                          href={doc.fileUrl}
-                          download={doc.fileName}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold text-white"
-                          style={{ backgroundColor: 'var(--primary-color)' }}
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Download</span>
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3.5 px-4 text-stone-700 dark:text-slate-300 whitespace-nowrap">
+                        {doc.category}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono-tabular text-stone-600 dark:text-slate-400 whitespace-nowrap">
+                        {isExternal ? 'External URL' : formatBytes(doc.fileSizeBytes)}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono-tabular text-stone-600 dark:text-slate-400 whitespace-nowrap">
+                        {doc.uploadedAt}
+                      </td>
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-2">
+                          {!isExternal && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDoc(doc)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 text-xs font-medium hover:bg-stone-100 dark:hover:bg-slate-800"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Preview</span>
+                            </button>
+                          )}
+                          {isExternal ? (
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold text-white"
+                              style={{ backgroundColor: 'var(--primary-color)' }}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Open Link</span>
+                            </a>
+                          ) : (
+                            <a
+                              href={doc.fileUrl}
+                              download={doc.fileName}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold text-white"
+                              style={{ backgroundColor: 'var(--primary-color)' }}
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Download</span>
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -155,18 +173,20 @@ export function QuickLinksRepository({ documents, initialQuery = '' }: QuickLink
               <div>
                 <h2 className="text-sm font-bold text-stone-900 dark:text-white">{previewDoc.title}</h2>
                 <p className="text-xs text-stone-500 dark:text-slate-400">
-                  {previewDoc.category} · {formatBytes(previewDoc.fileSizeBytes)}
+                  {previewDoc.category} ·{' '}
+                  {previewDoc.sourceType === 'external' ? 'External Document Link' : formatBytes(previewDoc.fileSizeBytes)}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <a
                   href={previewDoc.fileUrl}
-                  download={previewDoc.fileName}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold text-white"
                   style={{ backgroundColor: 'var(--primary-color)' }}
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Download</span>
+                  <span>Open / Download</span>
                 </a>
                 <button
                   type="button"

@@ -57,19 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $sliders = $pdo->query('SELECT * FROM sliders ORDER BY sort_order ASC, id DESC')->fetchAll();
 $ticker  = $pdo->query('SELECT * FROM ticker_items ORDER BY sort_order ASC, id DESC')->fetchAll();
 $events  = $pdo->query('SELECT * FROM campus_events ORDER BY event_date DESC')->fetchAll();
+$adminPageTitle = 'Homepage Sliders, News Ticker & Events';
+require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Manage Sliders, Ticker &amp; Events</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
-</head>
-<body class="container" style="padding:2rem 1rem;">
-  <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1>Homepage Sliders, News Ticker &amp; Events</h1>
-  <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
-  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
 
   <div class="grid-3" style="margin-bottom:1.5rem;">
     <form method="post" enctype="multipart/form-data" class="card">
@@ -138,5 +128,4 @@ $events  = $pdo->query('SELECT * FROM campus_events ORDER BY event_date DESC')->
       <?php endforeach; ?>
     </div>
   </div>
-</body>
-</html>
+<?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

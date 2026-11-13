@@ -8,33 +8,62 @@ $pdo = getDB();
 $msg = '';
 $err = '';
 
+$allCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
+$catsById = [];
+$cats = [];
+foreach ($allCats as $c) {
+    $catsById[(int)$c['id']] = $c;
+    if (canAccessCategory($user, $c['slug'])) {
+        $cats[] = $c;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
 
     if ($action === 'create' || $action === 'update') {
-        $pdfUrl = trim($_POST['attached_pdf_url'] ?? '');
-        $pdfLabel = trim($_POST['attached_pdf_label'] ?? '');
-        if (!empty($_FILES['pdf_file']['name'])) {
-            $up = handleSecureUpload($_FILES['pdf_file'], __DIR__ . '/../uploads');
-            if ($up['ok']) {
-                $pdfUrl = $up['file_url'];
-                if ($pdfLabel === '') {
-                    $pdfLabel = 'Download Attachment (' . $_FILES['pdf_file']['name'] . ')';
-                }
-            } else {
-                $err = $up['error'];
+        $targetCatId = (int)($_POST['category_id'] ?? 0);
+        $targetCat = $catsById[$targetCatId] ?? null;
+
+        if (!$targetCat || !canAccessCategory($user, $targetCat['slug'])) {
+            $err = 'Access Denied: Your RBAC role does not allow editing pages in this category.';
+        } elseif ($action === 'update' && !empty($_POST['page_id'])) {
+            $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
+            $chk->execute([(int)$_POST['page_id']]);
+            $existing = $chk->fetch();
+            if (!$existing || !canAccessPage($user, $existing, $existing['cat_slug'])) {
+                $err = 'Access Denied: You do not have permission to edit this specific page.';
             }
         }
+
         if ($err === '') {
-            $slug = preg_replace('/[^a-z0-9-]/', '-', strtolower(trim($_POST['slug'])));
+            $pdfUrl = trim($_POST['attached_pdf_url'] ?? '');
+            $pdfLabel = trim($_POST['attached_pdf_label'] ?? '');
+            if (!empty($_FILES['pdf_file']['name'])) {
+                $up = handleSecureUpload($_FILES['pdf_file'], __DIR__ . '/../uploads');
+                if ($up['ok']) {
+                    $pdfUrl = $up['file_url'];
+                    if ($pdfLabel === '') {
+                        $pdfLabel = 'Download Attachment (' . $_FILES['pdf_file']['name'] . ')';
+                    }
+                } else {
+                    $err = $up['error'];
+                }
+            } elseif ($pdfUrl !== '' && strpos($pdfUrl, 'uploads/') !== 0 && !validateExternalUrl($pdfUrl)) {
+                $err = 'Attachment URL must be a relative uploads/... path or a valid https:// / http:// link (e.g. Google Drive).';
+            }
+        }
+
+        if ($err === '') {
+            $slug = trim(preg_replace('/[^a-z0-9-]+/', '-', strtolower(trim($_POST['slug']))), '-');
             $sortOrder = max(1, (int)($_POST['sort_order'] ?? 1));
             if ($action === 'update' && !empty($_POST['page_id'])) {
                 $stmt = $pdo->prepare(
                     'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, is_published = ?, sort_order = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?'
                 );
                 $stmt->execute([
-                    (int)$_POST['category_id'],
+                    $targetCatId,
                     $slug,
                     trim($_POST['title']),
                     trim($_POST['subtitle'] ?? ''),
@@ -53,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'INSERT INTO pages (category_id, slug, title, subtitle, content_html, attached_pdf_url, attached_pdf_label, is_published, sort_order, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())'
                 );
                 $stmt->execute([
-                    (int)$_POST['category_id'],
+                    $targetCatId,
                     $slug,
                     trim($_POST['title']),
                     trim($_POST['subtitle'] ?? ''),
@@ -69,55 +98,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'delete') {
-        $stmt = $pdo->prepare('DELETE FROM pages WHERE id = ?');
-        $stmt->execute([(int)$_POST['page_id']]);
-        logAudit($pdo, $user, 'DELETE_PAGE', 'Page', 'ID #' . (int)$_POST['page_id']);
-        $msg = 'Page deleted.';
+        $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
+        $chk->execute([(int)$_POST['page_id']]);
+        $existing = $chk->fetch();
+        if (!$existing || !canAccessPage($user, $existing, $existing['cat_slug'])) {
+            $err = 'Access Denied: Cannot delete a page outside your RBAC scope.';
+        } else {
+            $stmt = $pdo->prepare('DELETE FROM pages WHERE id = ?');
+            $stmt->execute([(int)$_POST['page_id']]);
+            logAudit($pdo, $user, 'DELETE_PAGE', 'Page', $existing['title']);
+            $msg = 'Page deleted.';
+        }
     }
 }
 
 $editingPage = null;
 if (!empty($_GET['edit'])) {
-    $st = $pdo->prepare('SELECT * FROM pages WHERE id = ? LIMIT 1');
+    $st = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
     $st->execute([(int)$_GET['edit']]);
-    $editingPage = $st->fetch() ?: null;
+    $cand = $st->fetch() ?: null;
+    if ($cand && canAccessPage($user, $cand, $cand['cat_slug'])) {
+        $editingPage = $cand;
+    } elseif ($cand) {
+        $err = 'Access Denied: Requested page is outside your RBAC permission scope.';
+    }
 }
 
 $filterCatId = !empty($_GET['cat']) ? (int)$_GET['cat'] : 0;
-$cats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
 if ($filterCatId > 0) {
-    $stPg = $pdo->prepare('SELECT p.*, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? ORDER BY p.sort_order ASC, p.id DESC');
+    $stPg = $pdo->prepare('SELECT p.*, c.name AS cat_name, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.category_id = ? ORDER BY p.sort_order ASC, p.id DESC');
     $stPg->execute([$filterCatId]);
-    $pages = $stPg->fetchAll();
+    $rawPages = $stPg->fetchAll();
 } else {
-    $pages = $pdo->query('SELECT p.*, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id ORDER BY c.sort_order ASC, p.sort_order ASC, p.id DESC')->fetchAll();
+    $rawPages = $pdo->query('SELECT p.*, c.name AS cat_name, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id ORDER BY c.sort_order ASC, p.sort_order ASC, p.id DESC')->fetchAll();
 }
-?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Manage UGC Pages</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
-  <script src="../assets/js/editor.js" defer></script>
-</head>
-<body class="container" style="padding:2rem 1rem;">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
-    <p><a href="dashboard.php">&larr; Dashboard</a></p>
-    <a href="manage_categories.php" class="btn-secondary">Manage Categories &amp; Nav &rarr;</a>
-  </div>
-  <h1><?= $editingPage ? 'Edit Page: ' . e($editingPage['title']) : 'Manage Dynamic UGC &amp; Autonomous Micro-Pages' ?></h1>
-  <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
-  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
+$pages = array_values(array_filter($rawPages, static fn($pg) => canAccessPage($user, $pg, $pg['cat_slug'])));
 
-  <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:1rem;">
-    <a href="manage_pages.php" class="<?= $filterCatId === 0 ? 'btn-primary' : 'btn-secondary' ?>" style="font-size:0.8rem;padding:0.35rem 0.7rem;">All Categories</a>
-    <?php foreach ($cats as $c): ?>
-      <a href="?cat=<?= (int)$c['id'] ?>" class="<?= $filterCatId === (int)$c['id'] ? 'btn-primary' : 'btn-secondary' ?>" style="font-size:0.8rem;padding:0.35rem 0.7rem;">
-        <?= e($c['name']) ?>
-      </a>
-    <?php endforeach; ?>
+$adminPageTitle = $editingPage ? 'Edit Page: ' . $editingPage['title'] : 'Manage Dynamic UGC & Autonomous Micro-Pages';
+require_once __DIR__ . '/../includes/admin_layout_top.php';
+?>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.85rem;">
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+      <a href="manage_pages.php" class="<?= $filterCatId === 0 ? 'btn-primary' : 'btn-secondary' ?>" style="font-size:0.8rem;padding:0.35rem 0.7rem;">All Permitted Categories</a>
+      <?php foreach ($cats as $c): ?>
+        <a href="?cat=<?= (int)$c['id'] ?>" class="<?= $filterCatId === (int)$c['id'] ? 'btn-primary' : 'btn-secondary' ?>" style="font-size:0.8rem;padding:0.35rem 0.7rem;">
+          <?= e($c['name']) ?>
+        </a>
+      <?php endforeach; ?>
+    </div>
+    <?php if (canAccessResource($user, 'categories')): ?>
+      <a href="manage_categories.php" class="btn-secondary" style="font-size:0.8rem;padding:0.35rem 0.75rem;">Manage Categories &amp; Nav &rarr;</a>
+    <?php endif; ?>
   </div>
+
+  <?php if (!empty($user['allowed_page_ids'])): ?>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;padding:0.65rem 0.9rem;border-radius:8px;font-size:0.82rem;margin-bottom:1rem;">
+      <strong>Per-Page RBAC Active:</strong> You are authorized to edit <?= count($pages) ?> specifically assigned disclosure page(s).
+    </div>
+  <?php elseif ($user['role'] === 'exam_controller'): ?>
+    <div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:0.65rem 0.9rem;border-radius:8px;font-size:0.82rem;margin-bottom:1rem;">
+      <strong>Examination Controller Scope:</strong> Scoped strictly to Examination Cell &amp; CoE micro-pages.
+    </div>
+  <?php endif; ?>
 
   <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -143,15 +185,15 @@ if ($filterCatId > 0) {
     <input type="text" name="subtitle" value="<?= e($editingPage['subtitle'] ?? '') ?>" placeholder="Subtitle / UGC Reference" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
 
     <label style="display:block;font-weight:600;margin-bottom:0.35rem;">Page Content (Visual Word-Style Editor &amp; Optional HTML Source Toggle):</label>
-    <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" name="content_html" rows="10"><?= htmlspecialchars($editingPage['content_html'] ?? '<h2>Disclosure Overview</h2><p>Enter institutional disclosure details...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
+    <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="upload_handler.php" name="content_html" rows="10"><?= htmlspecialchars($editingPage['content_html'] ?? '<h2>Disclosure Overview</h2><p>Enter institutional disclosure details...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
 
     <div class="grid-2" style="margin:0.75rem 0;">
       <label style="font-size:0.85rem;">Upload Attached PDF (Optional):
         <input type="file" name="pdf_file" accept="application/pdf" style="display:block;margin-top:4px;">
       </label>
-      <label style="font-size:0.85rem;">Or PDF URL / Label:
-        <input type="text" name="attached_pdf_url" value="<?= e($editingPage['attached_pdf_url'] ?? '') ?>" placeholder="uploads/document.pdf" style="width:100%;padding:0.4rem;margin-bottom:4px;">
-        <input type="text" name="attached_pdf_label" value="<?= e($editingPage['attached_pdf_label'] ?? '') ?>" placeholder="Download Official PDF" style="width:100%;padding:0.4rem;">
+      <label style="font-size:0.85rem;">Or Paste External / Google Drive PDF Link &amp; Label:
+        <input type="text" name="attached_pdf_url" value="<?= e($editingPage['attached_pdf_url'] ?? '') ?>" placeholder="https://drive.google.com/... or uploads/document.pdf" style="width:100%;padding:0.4rem;margin-bottom:4px;">
+        <input type="text" name="attached_pdf_label" value="<?= e($editingPage['attached_pdf_label'] ?? '') ?>" placeholder="Download Official PDF / Open Google Drive" style="width:100%;padding:0.4rem;">
       </label>
     </div>
 
@@ -188,5 +230,4 @@ if ($filterCatId > 0) {
       </tbody>
     </table>
   </div>
-</body>
-</html>
+<?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

@@ -42,13 +42,19 @@ require_once __DIR__ . '/includes/header.php';
   <table class="data-table">
     <thead><tr><th>Document Title</th><th>Category</th><th>Size</th><th>Date</th><th>Action</th></tr></thead>
     <tbody>
-      <?php foreach ($docs as $d): ?>
+      <?php foreach ($docs as $d): $isExt = preg_match('#^https?://#i', (string)$d['file_url']) === 1; ?>
         <tr>
-          <td><strong><?= e($d['title']) ?></strong><br><small><?= e($d['file_name']) ?></small></td>
+          <td><strong><?= e($d['title']) ?></strong><br><small><?= $isExt ? 'External Download Link' : e($d['file_name']) ?></small></td>
           <td><?= e($d['category']) ?></td>
-          <td><?= e(formatBytes((int)$d['file_size_bytes'])) ?></td>
+          <td><?= $isExt ? 'External URL' : e(formatBytes((int)$d['file_size_bytes'])) ?></td>
           <td><?= e($d['uploaded_at']) ?></td>
-          <td><a href="<?= e($d['file_url']) ?>" download class="btn-primary">Download</a></td>
+          <td>
+            <?php if ($isExt): ?>
+              <a href="<?= e($d['file_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-secondary">Open Link &nearr;</a>
+            <?php else: ?>
+              <a href="<?= e($d['file_url']) ?>" download class="btn-primary">Download</a>
+            <?php endif; ?>
+          </td>
         </tr>
       <?php endforeach; ?>
     </tbody>

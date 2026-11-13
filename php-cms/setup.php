@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * SVCOER UGC CMS — Linux Webmin / Virtualmin Pre-Flight Setup & Diagnostics
+ * SVCOER UGC CMS — Linux Webmin / Virtualmin Pre-Flight Setup, Schema Upgrade & Diagnostics
  * IMPORTANT: Delete this file from public_html/ once deployment checks pass!
  */
 require_once __DIR__ . '/config/db.php';
@@ -15,10 +15,27 @@ $uploadsWritable = is_dir($uploadsDir) ? is_writable($uploadsDir) : @mkdir($uplo
 $sessionPath = session_save_path() ?: sys_get_temp_dir();
 $sessionOk = is_writable($sessionPath) || is_writable(__DIR__ . '/uploads');
 
+$cssPath = __DIR__ . '/assets/css/style.css';
+$editorJsPath = __DIR__ . '/assets/js/editor.js';
+$htaccessPath = __DIR__ . '/.htaccess';
+
+$isWorldReadable = static function (string $path): bool {
+    if (!file_exists($path) || !is_readable($path)) {
+        return false;
+    }
+    $perms = @fileperms($path);
+    return $perms === false ? is_readable($path) : (($perms & 0x0004) !== 0);
+};
+
+$cssOk = $isWorldReadable($cssPath);
+$editorOk = $isWorldReadable($editorJsPath);
+$htaccessOk = file_exists($htaccessPath) && is_readable($htaccessPath);
+
 $dbConnected = false;
 $dbError = '';
 $tablesCount = 0;
 $usersCount = 0;
+$hasHomeComponents = false;
 $actionMsg = '';
 
 try {
@@ -30,6 +47,7 @@ try {
     $dbConnected = true;
     $tables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
     $tablesCount = count($tables);
+    $hasHomeComponents = in_array('custom_home_components', $tables, true);
     if (in_array('users', $tables, true)) {
         $usersCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
     }
@@ -37,21 +55,65 @@ try {
     $dbError = $ex->getMessage();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected && ($_POST['action'] ?? '') === 'reset_passwords') {
-    if ($tablesCount > 0 && $usersCount > 0) {
-        $defaults = [
-            'admin@svcoer.edu.in'   => 'Admin@123',
-            'pro@svcoer.edu.in'     => 'Editor@123',
-            'hod.cse@svcoer.edu.in' => 'Dept@123',
-            'iqac@svcoer.edu.in'    => 'Iqac@123',
-        ];
-        $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE email = ?');
-        foreach ($defaults as $email => $pw) {
-            $stmt->execute([password_hash($pw, PASSWORD_DEFAULT), $email]);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
+    $act = $_POST['action'] ?? '';
+    if ($act === 'reset_passwords') {
+        if ($tablesCount > 0 && $usersCount > 0) {
+            $defaults = [
+                'admin@svcoer.edu.in'   => 'Admin@123',
+                'pro@svcoer.edu.in'     => 'Editor@123',
+                'hod.cse@svcoer.edu.in' => 'Dept@123',
+                'iqac@svcoer.edu.in'    => 'Iqac@123',
+                'coe@coe.sveri.ac.in'   => 'Exam@123',
+            ];
+            $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE email = ?');
+            foreach ($defaults as $email => $pw) {
+                $stmt->execute([password_hash($pw, PASSWORD_DEFAULT), $email]);
+            }
+            $chkCoe = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+            $chkCoe->execute(['coe@coe.sveri.ac.in']);
+            if (!$chkCoe->fetch()) {
+                try {
+                    $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('super_admin','content_editor','department_admin','iqac_officer','exam_controller') NOT NULL");
+                } catch (Throwable $ignored) {}
+                try {
+                    $pdo->prepare('INSERT INTO users (full_name, email, password_hash, role, assigned_department_id, allowed_categories_json) VALUES (?, ?, ?, ?, NULL, ?)')
+                        ->execute(['Dr. M. S. Kumbhar (Controller of Examinations)', 'coe@coe.sveri.ac.in', password_hash('Exam@123', PASSWORD_DEFAULT), 'exam_controller', '["examination"]']);
+                } catch (Throwable $ignored) {}
+            }
+            $actionMsg = 'All 5 default RBAC account passwords (including coe@coe.sveri.ac.in) re-hashed with native PHP password_hash() and activated.';
+        } else {
+            $actionMsg = 'Please import database.sql into your MySQL database first.';
         }
-        $actionMsg = 'All 4 default RBAC account passwords re-hashed with native PHP password_hash() and activated.';
-    } else {
-        $actionMsg = 'Please import database.sql into your MySQL database first.';
+    } elseif ($act === 'upgrade_schema' && $tablesCount > 0) {
+        $alters = [
+            "ALTER TABLE departments ADD COLUMN library_json TEXT NULL",
+            "ALTER TABLE departments ADD COLUMN faculty_field_schema_json TEXT NULL",
+            "ALTER TABLE users MODIFY COLUMN role ENUM('super_admin','content_editor','department_admin','iqac_officer','exam_controller') NOT NULL",
+            "ALTER TABLE users ADD COLUMN allowed_categories_json TEXT NULL",
+            "ALTER TABLE users ADD COLUMN allowed_page_ids_json TEXT NULL",
+            "ALTER TABLE pages MODIFY COLUMN attached_pdf_url VARCHAR(500) NULL",
+            "ALTER TABLE department_subpages ADD COLUMN page_type VARCHAR(40) DEFAULT 'general'",
+            "ALTER TABLE department_subpages ADD COLUMN photos_json MEDIUMTEXT NULL",
+            "ALTER TABLE department_subpages ADD COLUMN items_json MEDIUMTEXT NULL",
+            "ALTER TABLE faculty ADD COLUMN phone VARCHAR(40) NULL",
+            "ALTER TABLE faculty ADD COLUMN external_profile_url VARCHAR(500) NULL",
+            "ALTER TABLE faculty ADD COLUMN external_profile_label VARCHAR(120) NULL",
+            "ALTER TABLE faculty ADD COLUMN custom_fields_json TEXT NULL",
+            "ALTER TABLE department_labs ADD COLUMN photo_url VARCHAR(255) NULL",
+            "ALTER TABLE documents ADD COLUMN source_type VARCHAR(20) DEFAULT 'upload'",
+            "ALTER TABLE documents MODIFY COLUMN file_url VARCHAR(500) NOT NULL",
+            "CREATE TABLE IF NOT EXISTS custom_home_components (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(180) NOT NULL, placement ENUM('after-hero','after-about','after-depts','before-footer') DEFAULT 'after-hero', html_content MEDIUMTEXT NOT NULL, sort_order INT DEFAULT 1, is_active TINYINT(1) DEFAULT 1, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
+        ];
+        foreach ($alters as $sql) {
+            try {
+                $pdo->exec($sql);
+            } catch (Throwable $ignored) {
+                // Column already exists
+            }
+        }
+        $hasHomeComponents = true;
+        $actionMsg = 'Database schema upgraded cleanly with new tables and columns.';
     }
 }
 ?>
@@ -61,14 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected && ($_POST['action'] ?
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SVCOER PHP CMS — Webmin Pre-Flight Check</title>
-  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="stylesheet" href="assets/css/style.css?v=2">
 </head>
-<body class="container" style="padding:2rem 1rem;max-width:820px;">
+<body class="container" style="padding:2rem 1rem;max-width:860px;">
   <div class="card">
-    <p style="color:#b45309;font-weight:700;font-size:0.8rem;margin:0;">WEBMIN / LINUX HOSTING DIAGNOSTICS</p>
+    <p style="color:#b45309;font-weight:700;font-size:0.8rem;margin:0;">WEBMIN / UBUNTU LINUX HOSTING DIAGNOSTICS</p>
     <h1 style="margin:0.25rem 0 1rem;">SVCOER UGC CMS Setup Check</h1>
     <?php if ($actionMsg): ?>
-      <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:0.75rem;border-radius:8px;margin-bottom:1rem;"><?= e($actionMsg) ?></div>
+      <div class="alert-ok"><?= e($actionMsg) ?></div>
     <?php endif; ?>
 
     <table class="data-table">
@@ -77,23 +139,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected && ($_POST['action'] ?
         <tr><td>PHP Version (&ge; 8.0)</td><td><?= $phpOk ? 'PASS' : 'FAIL' ?></td><td>Running PHP <?= e(PHP_VERSION) ?></td></tr>
         <tr><td>MySQL PDO (pdo_mysql)</td><td><?= $pdoOk ? 'PASS' : 'FAIL' ?></td><td><?= $pdoOk ? 'Loaded' : 'Install php8.x-mysql and restart Apache/PHP-FPM' ?></td></tr>
         <tr><td>Fileinfo MIME Check</td><td><?= $finfoOk ? 'PASS' : 'FAIL' ?></td><td><?= $finfoOk ? 'Loaded' : 'Enable php-fileinfo extension' ?></td></tr>
-        <tr><td>Uploads Directory</td><td><?= $uploadsWritable ? 'PASS' : 'FAIL' ?></td><td><code>uploads/</code> <?= $uploadsWritable ? 'writable' : 'needs chmod 755 & owner match' ?></td></tr>
+        <tr><td>CSS Stylesheet (<code>assets/css/style.css</code>)</td><td><?= $cssOk ? 'PASS' : 'FAIL' ?></td><td><?= $cssOk ? 'Exists &amp; world-readable (0644)' : 'Missing or chmod blocked! Run: chmod 644 assets/css/style.css' ?></td></tr>
+        <tr><td>Visual Block Editor (<code>assets/js/editor.js</code>)</td><td><?= $editorOk ? 'PASS' : 'FAIL' ?></td><td><?= $editorOk ? 'Exists &amp; world-readable (0644)' : 'Missing or chmod blocked! Run: chmod 644 assets/js/editor.js' ?></td></tr>
+        <tr><td>Apache Root <code>.htaccess</code></td><td><?= $htaccessOk ? 'PASS' : 'WARN' ?></td><td><?= $htaccessOk ? 'Present (MIME types &amp; DirectoryIndex configured)' : 'Upload .htaccess to public_html/' ?></td></tr>
+        <tr><td>Uploads Directory</td><td><?= $uploadsWritable ? 'PASS' : 'FAIL' ?></td><td><code>uploads/</code> <?= $uploadsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
         <tr><td>PHP Sessions</td><td><?= $sessionOk ? 'PASS' : 'FAIL' ?></td><td>Save path: <code><?= e($sessionPath) ?></code></td></tr>
         <tr><td>MySQL Connection</td><td><?= $dbConnected ? 'PASS' : 'FAIL' ?></td><td><?= $dbConnected ? ('Connected to ' . e(DB_NAME) . " ($tablesCount tables, $usersCount users)") : e($dbError) ?></td></tr>
+        <tr><td>Enhanced Schema (Custom Home &amp; Dept Fields)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v2 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
       </tbody>
     </table>
 
     <?php if ($dbConnected && $tablesCount > 0): ?>
-      <form method="post" style="margin-top:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
-        <input type="hidden" name="action" value="reset_passwords">
-        <button type="submit" class="btn-primary">Verify &amp; Reset Default RBAC Passwords</button>
+      <div style="margin-top:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <form method="post">
+          <input type="hidden" name="action" value="upgrade_schema">
+          <button type="submit" class="btn-secondary">Auto-Upgrade Database Schema (Safe)</button>
+        </form>
+        <form method="post">
+          <input type="hidden" name="action" value="reset_passwords">
+          <button type="submit" class="btn-primary">Verify &amp; Reset Default RBAC Passwords (5 Accounts)</button>
+        </form>
         <a href="admin/login.php" class="btn-secondary">Open Admin Login &rarr;</a>
         <a href="index.php" class="btn-secondary">Open Public Site &rarr;</a>
-      </form>
+      </div>
     <?php endif; ?>
 
     <div style="margin-top:1.25rem;padding:0.75rem;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:0.85rem;color:#92400e;">
-      <strong>Security Notice:</strong> Once your admin login works cleanly, remove <code>setup.php</code> from the server!
+      <strong>Ubuntu Webmin CSS / Editor Troubleshooting:</strong> If your CSS looks broken or the rich visual editor shows a plain box after uploading via Webmin File Manager, run in SSH:<br>
+      <code>find /home/&lt;user&gt;/public_html -type d -exec chmod 755 {} \; &amp;&amp; find /home/&lt;user&gt;/public_html -type f -exec chmod 644 {} \;</code><br>
+      <strong>Security Notice:</strong> Once your checks pass and admin login works cleanly, delete <code>setup.php</code> from the server!
     </div>
   </div>
 </body>

@@ -26,12 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($user && password_verify($pass, $user['password_hash'])) {
         session_regenerate_id(true);
+        $allowedCats = !empty($user['allowed_categories_json']) ? json_decode((string)$user['allowed_categories_json'], true) : null;
+        $allowedPages = !empty($user['allowed_page_ids_json']) ? json_decode((string)$user['allowed_page_ids_json'], true) : null;
         $_SESSION['cms_user'] = [
             'id'                     => (int)$user['id'],
             'full_name'              => $user['full_name'],
             'email'                  => $user['email'],
             'role'                   => $user['role'],
             'assigned_department_id' => $user['assigned_department_id'] ? (int)$user['assigned_department_id'] : null,
+            'allowed_categories'     => is_array($allowedCats) ? $allowedCats : null,
+            'allowed_page_ids'       => is_array($allowedPages) ? array_map('intval', $allowedPages) : null,
         ];
         $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
         logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', $user['email']);
@@ -49,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CMS Admin Login</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="stylesheet" href="../assets/css/style.css?v=2">
 </head>
 <body style="display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem;">
   <form method="post" class="card" style="width:100%;max-width:440px;">
@@ -74,7 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       Super Admin: <code>admin@svcoer.edu.in</code> / <code>Admin@123</code><br>
       PRO Editor: <code>pro@svcoer.edu.in</code> / <code>Editor@123</code><br>
       CSE Dept: <code>hod.cse@svcoer.edu.in</code> / <code>Dept@123</code><br>
-      IQAC: <code>iqac@svcoer.edu.in</code> / <code>Iqac@123</code>
+      IQAC Officer: <code>iqac@svcoer.edu.in</code> / <code>Iqac@123</code><br>
+      CoE (Exam Cell): <code>coe@coe.sveri.ac.in</code> / <code>Exam@123</code>
     </div>
     <p style="margin-top:0.75rem;font-size:0.8rem;display:flex;justify-content:space-between;">
       <a href="../index.php">&larr; Back to Public Website</a>

@@ -2,7 +2,8 @@ export type UserRole =
   | 'super_admin'
   | 'content_editor'
   | 'department_admin'
-  | 'iqac_officer';
+  | 'iqac_officer'
+  | 'exam_controller';
 
 export type UgcCategorySlug = string;
 
@@ -46,15 +47,53 @@ export interface LeadershipProfile {
   sortOrder: number;
 }
 
+export type DepartmentSubPageType =
+  | 'general'
+  | 'gallery'
+  | 'library'
+  | 'notice_board'
+  | 'events'
+  | 'notes_syllabus'
+  | 'achievements_students'
+  | 'achievements_faculty'
+  | 'celebrations';
+
+export interface DepartmentSubPagePhoto {
+  id: number;
+  imageUrl: string;
+  caption: string;
+}
+
+export interface DepartmentSubPageItem {
+  id: number;
+  title: string;
+  date?: string;
+  badge?: string;
+  description?: string;
+  url?: string;
+  sourceType?: 'upload' | 'external';
+  imageUrl?: string;
+}
+
 export interface DepartmentSubPage {
   id: number;
   departmentId: number;
   slug: string;
   title: string;
+  pageType?: DepartmentSubPageType;
   contentHtml: string;
+  photos?: DepartmentSubPagePhoto[];
+  items?: DepartmentSubPageItem[];
   sortOrder: number;
   isPublished: boolean;
   updatedAt: string;
+}
+
+export interface FacultyCustomField {
+  id: string;
+  label: string;
+  value: string;
+  fieldType?: 'text' | 'url';
 }
 
 export interface FacultyMember {
@@ -65,8 +104,12 @@ export interface FacultyMember {
   qualification: string;
   specialization: string;
   email: string;
+  phone?: string;
   experienceYears: number;
   photoUrl: string;
+  externalProfileUrl?: string;
+  externalProfileLabel?: string;
+  customFields?: FacultyCustomField[];
   isHod: boolean;
   sortOrder: number;
 }
@@ -78,6 +121,17 @@ export interface DepartmentLab {
   areaSqFt: number;
   equipmentSummary: string;
   incharge: string;
+  photoUrl?: string;
+}
+
+export interface DepartmentLibraryInfo {
+  title?: string;
+  description: string;
+  totalVolumes?: number;
+  seatingCapacity?: number;
+  incharge?: string;
+  timings?: string;
+  photoUrl?: string;
 }
 
 export interface Department {
@@ -95,6 +149,8 @@ export interface Department {
   vision: string;
   mission: string;
   heroImageUrl: string;
+  library?: DepartmentLibraryInfo;
+  facultyFieldSchema?: string[];
   subPages: DepartmentSubPage[];
   faculty: FacultyMember[];
   labs: DepartmentLab[];
@@ -150,6 +206,7 @@ export interface CmsDocument {
   fileName: string;
   fileSizeBytes: number;
   mimeType: string;
+  sourceType?: 'upload' | 'external';
   uploadedAt: string;
   uploadedBy: string;
   isQuickLink: boolean;
@@ -185,6 +242,8 @@ export interface CmsUser {
   email: string;
   role: UserRole;
   assignedDepartmentId?: number | null;
+  allowedCategories?: string[];
+  allowedPageIds?: number[];
   isActive: boolean;
   lastLoginAt?: string;
 }
@@ -197,6 +256,21 @@ export interface AuditLogEntry {
   entityType: string;
   entityTitle: string;
   timestamp: string;
+}
+
+export type HomeComponentPlacement =
+  | 'after-hero'
+  | 'after-about'
+  | 'after-depts'
+  | 'before-footer';
+
+export interface CustomHomeComponent {
+  id: number;
+  title: string;
+  placement: HomeComponentPlacement;
+  sortOrder: number;
+  isActive: boolean;
+  contentHtml: string;
 }
 
 export interface HomeSectionsConfig {
@@ -255,6 +329,7 @@ export interface SiteSettings {
   };
   mapEmbedQuery: string;
   homeSections?: HomeSectionsConfig;
+  customHomeComponents?: CustomHomeComponent[];
 }
 
 export interface CmsDatabase {

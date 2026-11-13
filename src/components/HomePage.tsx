@@ -22,6 +22,7 @@ import type {
   CmsPage,
   Department,
   HeroSlide,
+  HomeComponentPlacement,
   HomeSectionsConfig,
   LeadershipProfile,
   SiteSettings,
@@ -123,6 +124,31 @@ export function HomePage({
   ];
 
   const recruiters = settings.recruiters || ['TCS', 'Infosys', 'Persistent Systems', 'Bosch India', 'Tata Technologies', 'Bharat Forge'];
+
+  const customComponents = (settings.customHomeComponents || [])
+    .filter((c) => c.isActive)
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const renderCustomHomeSlot = (placement: HomeComponentPlacement) => {
+    const slotItems = customComponents.filter((c) => c.placement === placement);
+    if (slotItems.length === 0) return null;
+    return (
+      <section aria-label={`Custom section ${placement}`} className="max-w-[1380px] mx-auto px-4 space-y-6">
+        {slotItems.map((comp) => (
+          <div
+            key={comp.id}
+            className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8"
+          >
+            <div
+              className="cms-prose text-stone-700 dark:text-slate-200"
+              dangerouslySetInnerHTML={{ __html: comp.contentHtml }}
+            />
+          </div>
+        ))}
+      </section>
+    );
+  };
 
   return (
     <div className="space-y-12 pb-10">
@@ -277,6 +303,8 @@ export function HomePage({
         </section>
       )}
 
+      {renderCustomHomeSlot('after-hero')}
+
       {/* Institutional Highlights & Key Metrics Bar */}
       {hs.showStatsAndRecognitions && (
         <section aria-label="Institutional Highlights" className="max-w-[1380px] mx-auto px-4 space-y-4">
@@ -382,35 +410,53 @@ export function HomePage({
             </div>
 
             <ul className="space-y-2.5">
-              {documents.slice(0, 5).map((doc) => (
-                <li
-                  key={doc.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50/70 dark:bg-slate-800/60 px-3.5 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-stone-900 dark:text-white truncate">
-                      {doc.title}
-                    </p>
-                    <p className="text-xs text-stone-500 dark:text-slate-400 tabular-nums">
-                      {doc.category} · {formatBytes(doc.fileSizeBytes)}
-                    </p>
-                  </div>
-                  <a
-                    href={doc.fileUrl}
-                    download={doc.fileName}
-                    aria-label={`Download ${doc.title}`}
-                    className="p-2 rounded-lg text-white shrink-0 transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: 'var(--primary-color)' }}
+              {documents.slice(0, 5).map((doc) => {
+                const isExternal = doc.sourceType === 'external' || /^https?:\/\//i.test(doc.fileUrl);
+                return (
+                  <li
+                    key={doc.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50/70 dark:bg-slate-800/60 px-3.5 py-2.5"
                   >
-                    <Download className="w-4 h-4" />
-                  </a>
-                </li>
-              ))}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-stone-900 dark:text-white truncate">
+                        {doc.title}
+                      </p>
+                      <p className="text-xs text-stone-500 dark:text-slate-400 tabular-nums">
+                        {doc.category} · {isExternal ? 'External Link' : formatBytes(doc.fileSizeBytes)}
+                      </p>
+                    </div>
+                    {isExternal ? (
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${doc.title}`}
+                        className="p-2 rounded-lg text-white shrink-0 transition-opacity hover:opacity-90"
+                        style={{ backgroundColor: 'var(--primary-color)' }}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    ) : (
+                      <a
+                        href={doc.fileUrl}
+                        download={doc.fileName}
+                        aria-label={`Download ${doc.title}`}
+                        className="p-2 rounded-lg text-white shrink-0 transition-opacity hover:opacity-90"
+                        style={{ backgroundColor: 'var(--primary-color)' }}
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </aside>
       </section>
       )}
+
+      {renderCustomHomeSlot('after-about')}
 
       {/* Approved & Affiliated By + Vision & Mission Split */}
       {hs.showApprovedAndVision && (
@@ -678,6 +724,8 @@ export function HomePage({
       </section>
       )}
 
+      {renderCustomHomeSlot('after-depts')}
+
       {/* Dynamic UGC & Autonomous Portal Directory */}
       {hs.showCategoriesDirectory && (
       <section className="max-w-[1380px] mx-auto px-4">
@@ -837,6 +885,8 @@ export function HomePage({
         </aside>
       </section>
       )}
+
+      {renderCustomHomeSlot('before-footer')}
     </div>
   );
 }

@@ -362,6 +362,24 @@
     imgLabel.style.background = '#fff';
     imgLabel.style.cursor = 'pointer';
 
+    var statusBanner = document.createElement('div');
+    statusBanner.style.display = 'none';
+    statusBanner.style.padding = '6px 10px';
+    statusBanner.style.fontSize = '12px';
+    statusBanner.style.fontWeight = '600';
+    statusBanner.style.background = '#fffbeb';
+    statusBanner.style.color = '#92400e';
+    statusBanner.style.borderBottom = '1px solid #fde68a';
+
+    function showEditorNotice(msg, isError) {
+      statusBanner.textContent = msg;
+      statusBanner.style.background = isError ? '#fef2f2' : '#ecfdf5';
+      statusBanner.style.color = isError ? '#991b1b' : '#065f46';
+      statusBanner.style.borderBottomColor = isError ? '#fecaca' : '#a7f3d0';
+      statusBanner.style.display = 'block';
+      setTimeout(function () { statusBanner.style.display = 'none'; }, 4000);
+    }
+
     var imgInput = document.createElement('input');
     imgInput.type = 'file';
     imgInput.accept = 'image/jpeg,image/png,image/webp';
@@ -372,16 +390,19 @@
       var fd = new FormData();
       fd.append('csrf_token', csrf);
       fd.append('file', file);
-      fetch('upload_handler.php', { method: 'POST', body: fd })
+      var uploadUrl = textarea.getAttribute('data-upload-url') || 'upload_handler.php';
+      fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data && data.ok && data.file_url) {
-            insertHtmlAtFocus('<img src="' + data.file_url + '" alt="' + file.name + '" style="max-width:100%;border-radius:10px;margin:8px 0;">');
+            var previewUrl = '../' + data.file_url.replace(/^\/+/, '');
+            insertHtmlAtFocus('<img src="' + data.file_url + '" data-admin-preview="' + previewUrl + '" alt="' + file.name + '" style="max-width:100%;border-radius:10px;margin:8px 0;">');
+            showEditorNotice('Image uploaded: ' + data.file_url, false);
           } else {
-            window.alert((data && data.error) || 'Image upload failed.');
+            showEditorNotice((data && data.error) || 'Image upload failed.', true);
           }
         })
-        .catch(function () { window.alert('Upload request failed.'); })
+        .catch(function () { showEditorNotice('Upload request failed. Check uploads/ folder permissions.', true); })
         .finally(function () { imgInput.value = ''; });
     });
     imgLabel.appendChild(imgInput);
@@ -483,6 +504,7 @@
 
     textarea.parentNode.insertBefore(wrapper, textarea);
     wrapper.appendChild(toolbar);
+    wrapper.appendChild(statusBanner);
     wrapper.appendChild(workspace);
 
     if (textarea.form) {
@@ -490,7 +512,15 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  function initAllEditors() {
     document.querySelectorAll('textarea.rich-editor').forEach(mountEditor);
-  });
+  }
+
+  window.svcoerMountRichEditors = initAllEditors;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAllEditors);
+  } else {
+    initAllEditors();
+  }
 })();

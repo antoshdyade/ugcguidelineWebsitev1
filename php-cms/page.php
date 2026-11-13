@@ -83,10 +83,16 @@ require_once __DIR__ . '/includes/header.php';
     <h1 style="font-family:'Playfair Display',serif;margin-top:0.25rem;"><?= e($page['title']) ?></h1>
     <div class="cms-prose"><?= $page['content_html'] ?></div>
 
-    <?php if (!empty($page['attached_pdf_url'])): ?>
-      <div class="card" style="margin-top:1.5rem;background:var(--surface-bg);">
+    <?php if (!empty($page['attached_pdf_url'])):
+      $isExtPdf = preg_match('#^https?://#i', (string)$page['attached_pdf_url']) === 1;
+    ?>
+      <div class="card" style="margin-top:1.5rem;background:var(--surface-bg);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
         <strong><?= e($page['attached_pdf_label'] ?: 'Attached Statutory Document') ?></strong>
-        <a href="<?= e($page['attached_pdf_url']) ?>" download class="btn-primary" style="margin-left:1rem;">Download PDF</a>
+        <?php if ($isExtPdf): ?>
+          <a href="<?= e($page['attached_pdf_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-secondary">Open Document Link &nearr;</a>
+        <?php else: ?>
+          <a href="<?= e($page['attached_pdf_url']) ?>" download class="btn-primary">Download PDF</a>
+        <?php endif; ?>
       </div>
     <?php endif; ?>
 

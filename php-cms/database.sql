@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS departments (
   vision TEXT,
   mission TEXT,
   hero_image_url VARCHAR(255) DEFAULT 'assets/images/hero_robotics.jpg',
+  library_json TEXT NULL,
+  faculty_field_schema_json TEXT NULL,
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -59,8 +61,10 @@ CREATE TABLE IF NOT EXISTS users (
   full_name VARCHAR(120) NOT NULL,
   email VARCHAR(160) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
-  role ENUM('super_admin', 'content_editor', 'department_admin', 'iqac_officer') NOT NULL,
+  role ENUM('super_admin', 'content_editor', 'department_admin', 'iqac_officer', 'exam_controller') NOT NULL,
   assigned_department_id INT NULL,
+  allowed_categories_json TEXT NULL,
+  allowed_page_ids_json TEXT NULL,
   is_active TINYINT(1) DEFAULT 1,
   last_login_at DATETIME NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -88,7 +92,7 @@ CREATE TABLE IF NOT EXISTS pages (
   title VARCHAR(255) NOT NULL,
   subtitle VARCHAR(255) DEFAULT '',
   content_html MEDIUMTEXT NOT NULL,
-  attached_pdf_url VARCHAR(255) NULL,
+  attached_pdf_url VARCHAR(500) NULL,
   attached_pdf_label VARCHAR(255) NULL,
   is_published TINYINT(1) DEFAULT 1,
   sort_order INT DEFAULT 1,
@@ -104,7 +108,10 @@ CREATE TABLE IF NOT EXISTS department_subpages (
   department_id INT NOT NULL,
   slug VARCHAR(100) NOT NULL,
   title VARCHAR(180) NOT NULL,
+  page_type VARCHAR(40) DEFAULT 'general',
   content_html MEDIUMTEXT NOT NULL,
+  photos_json MEDIUMTEXT NULL,
+  items_json MEDIUMTEXT NULL,
   sort_order INT DEFAULT 1,
   is_published TINYINT(1) DEFAULT 1,
   updated_at DATE NOT NULL,
@@ -121,8 +128,12 @@ CREATE TABLE IF NOT EXISTS faculty (
   qualification VARCHAR(150) NOT NULL,
   specialization VARCHAR(200) NOT NULL,
   email VARCHAR(160) NOT NULL,
+  phone VARCHAR(40) NULL,
   experience_years TINYINT UNSIGNED DEFAULT 1,
-  photo_url VARCHAR(255) DEFAULT 'assets/images/faculty_default.jpg',
+  photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
+  external_profile_url VARCHAR(500) NULL,
+  external_profile_label VARCHAR(120) NULL,
+  custom_fields_json TEXT NULL,
   is_hod TINYINT(1) DEFAULT 0,
   sort_order INT DEFAULT 1,
   FULLTEXT KEY ft_faculty (name, designation, specialization),
@@ -137,6 +148,7 @@ CREATE TABLE IF NOT EXISTS department_labs (
   area_sqft INT NOT NULL,
   equipment_summary TEXT NOT NULL,
   incharge VARCHAR(140) NOT NULL,
+  photo_url VARCHAR(255) NULL,
   CONSTRAINT fk_lab_dept FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
@@ -187,12 +199,13 @@ CREATE TABLE IF NOT EXISTS campus_events (
   FULLTEXT KEY ft_events (title, summary)
 ) ENGINE=InnoDB;
 
--- 11. Downloadable Document Repository (Quick Links)
+-- 11. Downloadable Document Repository (Quick Links — Upload OR External Link)
 CREATE TABLE IF NOT EXISTS documents (
   id INT AUTO_INCREMENT PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   category VARCHAR(100) NOT NULL,
-  file_url VARCHAR(255) NOT NULL,
+  source_type VARCHAR(20) DEFAULT 'upload',
+  file_url VARCHAR(500) NOT NULL,
   file_name VARCHAR(255) NOT NULL,
   file_size_bytes INT UNSIGNED NOT NULL,
   mime_type VARCHAR(120) NOT NULL,
@@ -241,6 +254,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- 14. Homepage Custom HTML Components
+CREATE TABLE IF NOT EXISTS custom_home_components (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(180) NOT NULL,
+  placement ENUM('after-hero', 'after-about', 'after-depts', 'before-footer') DEFAULT 'after-hero',
+  html_content MEDIUMTEXT NOT NULL,
+  sort_order INT DEFAULT 1,
+  is_active TINYINT(1) DEFAULT 1,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
 -- ============================================================================
 -- Seed Data
 -- ============================================================================
@@ -268,24 +292,26 @@ VALUES (
   '[{"name":"AICTE New Delhi","subtitle":"Statutory Technical Approval","href":"page.php?slug=act-statutes-moa"},{"name":"UGC Autonomous","subtitle":"Autonomous from AY 2024-25","href":"page.php?slug=about-overview"},{"name":"NAAC A+ Grade","subtitle":"CGPA 3.46 / 4.00","href":"page.php?slug=accreditation-ranking"},{"name":"PAHSUS Solapur","subtitle":"Affiliating University","href":"page.php?slug=about-overview"}]'
 );
 
-INSERT INTO departments (id, slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission) VALUES
-(1, 'computer-science', 'CSE', 'Computer Science & Engineering', 'CSE', 1998, 180, 'NBA Accredited', 'Dr. Anjali K. Deshpande', 'NBA accredited flagship computing department with 180 B.Tech intake, AI/GPU cluster & Ph.D. Research Centre.', 'To nurture globally competitive computing professionals.', 'Deliver outcome-based technical education and funded AI research.'),
-(2, 'mechanical', 'MECH', 'Mechanical Engineering', 'Mechanical', 1998, 120, 'NBA Accredited', 'Dr. Rajendra B. Kulkarni', 'Founding department with 120 B.Tech intake, Tata CIII Robotics Lab, CNC Centre & Ph.D. Centre.', 'To excel in sustainable manufacturing and robotics.', 'Cultivate hands-on design thinking and industrial consultancy.'),
-(3, 'civil', 'CIVIL', 'Civil Engineering', 'Civil', 2001, 120, 'NBA Accredited', 'Dr. Suhas V. Patwardhan', 'Offers B.Tech Civil Engineering (120 intake), M.Tech Structural & Ph.D. Centre with material testing consultancy.', 'To engineer resilient, sustainable infrastructure.', 'Train socially responsible civil engineers.'),
-(4, 'entc', 'ENTC', 'Electronics & Telecommunication Engineering', 'E&TC', 1998, 120, 'NBA Accredited', 'Dr. Vandana P. Chavan', 'Offers B.Tech E&TC (120 intake), VLSI chip design, Embedded Centre & Ph.D. Research Centre.', 'To excel in semiconductor design and embedded intelligence.', 'Empower students with hardware-software co-design expertise.'),
-(5, 'electrical', 'ELEC', 'Electrical Engineering', 'Electrical', 2010, 60, 'AICTE Approved', 'Dr. M. R. Joshi', 'B.Tech Electrical Engineering (60 intake) with Power Systems, EV Drives & PLC/SCADA automation labs.', 'To develop competent electrical engineers driving clean energy.', 'Integrate hands-on power systems training with EV & smart grid research.'),
-(6, 'electronics-computer', 'ECS', 'Electronics & Computer Engineering', 'ECS', 2022, 60, 'AICTE Approved', 'Prof. P. S. Sawant', 'B.Tech Electronics & Computer Engineering (60 intake) combining embedded hardware, RTOS, cloud IoT & full-stack software.', 'To develop versatile engineers across silicon-to-cloud stacks.', 'Deliver project-based training in Embedded IoT, Linux & Cloud APIs.');
+INSERT INTO departments (id, slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission, library_json, faculty_field_schema_json) VALUES
+(1, 'computer-science', 'CSE', 'Computer Science & Engineering', 'CSE', 1998, 180, 'NBA Accredited', 'Dr. Anjali K. Deshpande', 'NBA accredited flagship computing department with 180 B.Tech intake, AI/GPU cluster & Ph.D. Research Centre.', 'To nurture globally competitive computing professionals.', 'Deliver outcome-based technical education and funded AI research.', '{"name":"CSE Departmental Knowledge Resource Library","volumesCount":3850,"journalsCount":24,"eResourcesSummary":"IEEE Xplore, ACM Digital Library, NPTEL Offline Archive & GATE Prep Bank","incharge":"Prof. S. P. Kulkarni","timings":"Mon–Sat, 8:30 AM – 6:30 PM","photoUrl":"assets/images/hero_library.jpg","description":"Dedicated computing reference library housing B.Tech/M.Tech project theses, ACM/IEEE proceedings, and quiet study carrels."}', '["Google Scholar","ORCID ID","Scopus Author ID","NPTEL Certification","Patents Granted"]'),
+(2, 'mechanical', 'MECH', 'Mechanical Engineering', 'Mechanical', 1998, 120, 'NBA Accredited', 'Dr. Rajendra B. Kulkarni', 'Founding department with 120 B.Tech intake, Tata CIII Robotics Lab, CNC Centre & Ph.D. Centre.', 'To excel in sustainable manufacturing and robotics.', 'Cultivate hands-on design thinking and industrial consultancy.', NULL, '["Google Scholar","ORCID ID","Patents Granted"]'),
+(3, 'civil', 'CIVIL', 'Civil Engineering', 'Civil', 2001, 120, 'NBA Accredited', 'Dr. Suhas V. Patwardhan', 'Offers B.Tech Civil Engineering (120 intake), M.Tech Structural & Ph.D. Centre with material testing consultancy.', 'To engineer resilient, sustainable infrastructure.', 'Train socially responsible civil engineers.', NULL, '["Google Scholar","Consultancy Projects"]'),
+(4, 'entc', 'ENTC', 'Electronics & Telecommunication Engineering', 'E&TC', 1998, 120, 'NBA Accredited', 'Dr. Vandana P. Chavan', 'Offers B.Tech E&TC (120 intake), VLSI chip design, Embedded Centre & Ph.D. Research Centre.', 'To excel in semiconductor design and embedded intelligence.', 'Empower students with hardware-software co-design expertise.', NULL, '["Google Scholar","ORCID ID"]'),
+(5, 'electrical', 'ELEC', 'Electrical Engineering', 'Electrical', 2010, 60, 'AICTE Approved', 'Dr. M. R. Joshi', 'B.Tech Electrical Engineering (60 intake) with Power Systems, EV Drives & PLC/SCADA automation labs.', 'To develop competent electrical engineers driving clean energy.', 'Integrate hands-on power systems training with EV & smart grid research.', NULL, '["Google Scholar","ORCID ID"]'),
+(6, 'electronics-computer', 'ECS', 'Electronics & Computer Engineering', 'ECS', 2022, 60, 'AICTE Approved', 'Prof. P. S. Sawant', 'B.Tech Electronics & Computer Engineering (60 intake) combining embedded hardware, RTOS, cloud IoT & full-stack software.', 'To develop versatile engineers across silicon-to-cloud stacks.', 'Deliver project-based training in Embedded IoT, Linux & Cloud APIs.', NULL, '["Google Scholar","GitHub"]' );
 
 -- Default RBAC Passwords (real bcrypt hashes; also re-initializable via setup.php):
 -- admin@svcoer.edu.in   / Admin@123
 -- pro@svcoer.edu.in     / Editor@123
 -- hod.cse@svcoer.edu.in / Dept@123
 -- iqac@svcoer.edu.in    / Iqac@123
-INSERT INTO users (full_name, email, password_hash, role, assigned_department_id) VALUES
-('Dr. Vikramaditya Kulkarni', 'admin@svcoer.edu.in', '$2y$12$jJ07I06ebDMeJEN7QsY4uev.xxoHmgN40Xv76YkLti6qYm0OH5tpa', 'super_admin', NULL),
-('Prof. Sneha Patwardhan (PRO)', 'pro@svcoer.edu.in', '$2y$12$MvanoDnpi8VLqiGnv0aaqO4zdMoaqtfNV0n7yUHQm.JjoAHxpov3u', 'content_editor', NULL),
-('Dr. Anjali K. Deshpande (CSE)', 'hod.cse@svcoer.edu.in', '$2y$12$IuYIZs0/0nNl5UBpoIcBoO2F8MAYzpAR1khT64OdYwWocLJAxIMfu', 'department_admin', 1),
-('Dr. M. M. Pawar (IQAC)', 'iqac@svcoer.edu.in', '$2y$12$BsZtjgY0Plf8R1M3Asu3iuV8BfaIwSoS.7elVQNYjaWxjrp1mB7z2', 'iqac_officer', NULL);
+-- coe@coe.sveri.ac.in   / Exam@123
+INSERT INTO users (full_name, email, password_hash, role, assigned_department_id, allowed_categories_json, allowed_page_ids_json) VALUES
+('Dr. Vikramaditya Kulkarni', 'admin@svcoer.edu.in', '$2y$12$jJ07I06ebDMeJEN7QsY4uev.xxoHmgN40Xv76YkLti6qYm0OH5tpa', 'super_admin', NULL, NULL, NULL),
+('Prof. Sneha Patwardhan (PRO)', 'pro@svcoer.edu.in', '$2y$12$MvanoDnpi8VLqiGnv0aaqO4zdMoaqtfNV0n7yUHQm.JjoAHxpov3u', 'content_editor', NULL, NULL, NULL),
+('Dr. Anjali K. Deshpande (CSE)', 'hod.cse@svcoer.edu.in', '$2y$12$IuYIZs0/0nNl5UBpoIcBoO2F8MAYzpAR1khT64OdYwWocLJAxIMfu', 'department_admin', 1, NULL, NULL),
+('Dr. M. M. Pawar (IQAC)', 'iqac@svcoer.edu.in', '$2y$12$BsZtjgY0Plf8R1M3Asu3iuV8BfaIwSoS.7elVQNYjaWxjrp1mB7z2', 'iqac_officer', NULL, '["about-hei","administration","academics"]', NULL),
+('Dr. M. S. Kumbhar (Controller of Examinations)', 'coe@coe.sveri.ac.in', '$2y$12$jJ07I06ebDMeJEN7QsY4uev.xxoHmgN40Xv76YkLti6qYm0OH5tpa', 'exam_controller', NULL, '["examination"]', NULL);
 
 INSERT INTO categories (id, slug, name, short_label, ugc_code, description, show_in_menu, show_on_home, sort_order) VALUES
 (1, 'about-hei', 'About HEI', 'About HEI', 'Section 5(a)', 'Overview, Act & Statutes, IDP, Affiliating University, NAAC/NBA/NIRF, UGC 2(f)/12B, Annual Reports & Accounts.', 1, 1, 1),
@@ -324,32 +350,36 @@ INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_publishe
 (9, 'abc-nad-verification', 'Academic Bank of Credits (ABC) & DigiLocker NAD', 'NEP 2020 Digital Credits', '<h2>ABC ID &amp; NAD Degree Verification</h2><p>All autonomous semester credits and provisional certificates are deposited directly into DigiLocker NAD under NEP 2020.</p>', 1, 5, '2026-10-10'),
 (9, 'convocation-transcripts', 'Convocation, Provisional Degree & Transcripts', 'Degrees & Academic Verification', '<h2>Convocation &amp; Employer Verification</h2><p>Online portal for official sealed transcripts, migration certificates, medium-of-instruction letters, and degree verification.</p>', 1, 6, '2026-10-14');
 
-INSERT INTO department_subpages (department_id, slug, title, content_html, sort_order, updated_at) VALUES
-(1, 'about', 'About Department', '<h2>CSE Department</h2><p>NBA Accredited department (180 intake) offering Honours in AI/ML and Cyber Security.</p>', 1, '2026-10-01'),
-(1, 'hod-desk', 'HoD Desk', '<h2>Message from Dr. Anjali K. Deshpande</h2><p>Focused on first-principles computing and industry-ready engineering.</p>', 2, '2026-09-25'),
-(1, 'syllabus', 'Syllabus & Curriculum', '<h2>160-Credit NEP 2020 Pattern</h2><p>Includes 6-month industry internship and multidisciplinary minors.</p>', 3, '2026-08-20'),
-(2, 'about', 'About Department', '<h2>Mechanical Engineering</h2><p>120 intake · Equipped with Tata Technologies CIII Robotics Lab and CNC Centres.</p>', 1, '2026-09-12'),
-(3, 'about', 'About Department', '<h2>Civil Engineering</h2><p>120 intake · Structural Engineering and material testing consultancy.</p>', 1, '2026-09-09'),
-(4, 'about', 'About Department', '<h2>E&amp;TC Engineering</h2><p>120 intake · Cadence VLSI tools and Texas Instruments Embedded Centre.</p>', 1, '2026-09-14'),
-(5, 'about', 'About Department', '<h2>Electrical Engineering</h2><p>60 intake · Power Systems, Smart Grids &amp; EV Drives Laboratories.</p>', 1, '2026-09-18'),
-(6, 'about', 'About Department', '<h2>Electronics &amp; Computer Engineering</h2><p>60 intake · Embedded Systems, RTOS, Cloud IoT &amp; Software Engineering.</p>', 1, '2026-09-20');
+INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, photos_json, items_json, sort_order, updated_at) VALUES
+(1, 'about', 'About Department', 'general', '<h2>CSE Department</h2><p>NBA Accredited department (180 intake) offering Honours in AI/ML and Cyber Security.</p>', NULL, NULL, 1, '2026-10-01'),
+(1, 'hod-desk', 'HoD Desk', 'general', '<h2>Message from Dr. Anjali K. Deshpande</h2><p>Focused on first-principles computing and industry-ready engineering.</p>', NULL, NULL, 2, '2026-09-25'),
+(1, 'notice-board', 'Department Notice Board', 'notice_board', '<p>Official circulars, unit test schedules, and project review notices for B.Tech &amp; M.Tech CSE.</p>', NULL, '[{"id":"cse-nb-1","title":"BE / B.Tech Semester VII Project Review Phase-II Schedule","date":"2026-10-20","badge":"Project Review","summary":"All Final Year project batches must submit synopsis & IEEE progress draft to guides.","linkUrl":"https://drive.google.com/file/d/1example-cse-notice/view","linkLabel":"Open Circular (Google Drive)"},{"id":"cse-nb-2","title":"Autonomous Internal Assessment-II Timetable (CSE)","date":"2026-10-14","badge":"Examination","summary":"IA-II starts Nov 4 in Academic Block B. Check seating allocation.","linkUrl":""}]', 3, '2026-10-20'),
+(1, 'syllabus', 'Notes & Syllabus Repository', 'notes_syllabus', '<h2>160-Credit NEP 2020 Pattern &amp; Courseware</h2><p>Download autonomous syllabi and curated faculty lecture notes via direct upload or Google Drive links.</p>', NULL, '[{"id":"cse-syl-1","title":"B.Tech CSE Autonomous Syllabus (NEP 2020 160 Credits)","date":"2026-08-20","badge":"Syllabus","summary":"Complete First to Final Year Autonomous structure & course outcomes.","linkUrl":"https://drive.google.com/file/d/1example-cse-syllabus/view","linkLabel":"Download via Google Drive"},{"id":"cse-syl-2","title":"Deep Learning & NLP Lecture Notes Bundle (Sem VII)","date":"2026-09-12","badge":"Lecture Notes","summary":"Module 1–5 slides, PyTorch notebooks & previous question banks.","linkUrl":"https://drive.google.com/drive/folders/1example-dl-notes","linkLabel":"Open Drive Folder"}]', 4, '2026-09-15'),
+(1, 'events', 'Events & Celebrations', 'events', '<p>Hackathons, Technical Symposia, Engineer''s Day &amp; Departmental Celebrations.</p>', '[{"url":"assets/images/hero_campus.jpg","caption":"Annual TechFest & Coding Hackathon Inauguration"}]', '[{"id":"cse-ev-1","title":"Smart India Hackathon Campus Bootcamp","date":"2026-10-08","badge":"Hackathon","summary":"36-hour problem ideation workshop mentored by TCS & Persistent alumni."}]', 5, '2026-10-08'),
+(1, 'achievements', 'Student & Faculty Achievements', 'achievements_students', '<p>National hackathon wins, GATE top rankers, patents granted &amp; indexed publications.</p>', NULL, '[{"id":"cse-ach-1","title":"SIH Hardware Edition National Winners","date":"2026-09-20","badge":"National Rank 1","summary":"Team ByteKnights (CSE) won INR 1,00,000 first prize in Smart Agriculture IoT track."}]', 6, '2026-09-20'),
+(1, 'gallery', 'Department Photo Gallery', 'gallery', '<p>Glimpses of GPU Computing Lab, Hackathon Teams, and Department Celebrations.</p>', '[{"url":"assets/images/hero_lab.jpg","caption":"NVIDIA GPU & Deep Learning Research Lab"},{"url":"assets/images/hero_library.jpg","caption":"CSE Departmental Reference Library"},{"url":"assets/images/convocation.jpg","caption":"CSE Top Rankers at Autonomous Convocation"}]', NULL, 7, '2026-10-05'),
+(2, 'about', 'About Department', 'general', '<h2>Mechanical Engineering</h2><p>120 intake · Equipped with Tata Technologies CIII Robotics Lab and CNC Centres.</p>', NULL, NULL, 1, '2026-09-12'),
+(3, 'about', 'About Department', 'general', '<h2>Civil Engineering</h2><p>120 intake · Structural Engineering and material testing consultancy.</p>', NULL, NULL, 1, '2026-09-09'),
+(4, 'about', 'About Department', 'general', '<h2>E&amp;TC Engineering</h2><p>120 intake · Cadence VLSI tools and Texas Instruments Embedded Centre.</p>', NULL, NULL, 1, '2026-09-14'),
+(5, 'about', 'About Department', 'general', '<h2>Electrical Engineering</h2><p>60 intake · Power Systems, Smart Grids &amp; EV Drives Laboratories.</p>', NULL, NULL, 1, '2026-09-18'),
+(6, 'about', 'About Department', 'general', '<h2>Electronics &amp; Computer Engineering</h2><p>60 intake · Embedded Systems, RTOS, Cloud IoT &amp; Software Engineering.</p>', NULL, NULL, 1, '2026-09-20');
 
-INSERT INTO faculty (department_id, name, designation, qualification, specialization, email, experience_years, is_hod) VALUES
-(1, 'Dr. Anjali K. Deshpande', 'Professor & Head of Department', 'Ph.D. (CSE), M.Tech', 'Distributed Systems & NLP', 'hod.cse@svcoer.edu.in', 21, 1),
-(1, 'Dr. Siddharth R. Mane', 'Associate Professor', 'Ph.D., M.E. (CSE)', 'Computer Vision & Edge AI', 'srmane@svcoer.edu.in', 15, 0),
-(2, 'Dr. Rajendra B. Kulkarni', 'Professor & Head of Department', 'Ph.D. (Design Engg.)', 'Robotics & Tribology', 'hod.mech@svcoer.edu.in', 24, 1),
-(3, 'Dr. Suhas V. Patwardhan', 'Professor & Head of Department', 'Ph.D. (Structural Engg.)', 'Earthquake Resistant Design', 'hod.civil@svcoer.edu.in', 20, 1),
-(4, 'Dr. Vandana P. Chavan', 'Professor & Head of Department', 'Ph.D. (VLSI)', 'Low-Power ASIC Design', 'hod.entc@svcoer.edu.in', 22, 1),
-(5, 'Dr. M. R. Joshi', 'Professor & Head of Department', 'Ph.D. (Electrical Engg.)', 'Smart Grids & Power Electronics', 'hod.elec@svcoer.edu.in', 18, 1),
-(6, 'Prof. P. S. Sawant', 'Associate Professor & Head of Department', 'M.Tech (Embedded & CSE)', 'IoT Edge Computing & Embedded Linux', 'hod.ecs@svcoer.edu.in', 14, 1);
+INSERT INTO faculty (department_id, name, designation, qualification, specialization, email, phone, experience_years, photo_url, external_profile_url, external_profile_label, custom_fields_json, is_hod) VALUES
+(1, 'Dr. Anjali K. Deshpande', 'Professor & Head of Department', 'Ph.D. (CSE), M.Tech', 'Distributed Systems & NLP', 'hod.cse@svcoer.edu.in', '+91-9822011234', 21, 'assets/images/principal.jpg', 'https://scholar.google.com/', 'Google Scholar Profile', '{"ORCID ID":"0000-0002-1825-0097","Scopus Publications":"42 Indexed Papers","Patents Granted":"3 Indian Patents"}', 1),
+(1, 'Dr. Siddharth R. Mane', 'Associate Professor', 'Ph.D., M.E. (CSE)', 'Computer Vision & Edge AI', 'srmane@svcoer.edu.in', '+91-9765412390', 15, 'assets/images/principal.jpg', 'https://scholar.google.com/', 'Google Scholar & GitHub', '{"NPTEL Certification":"Elite Gold — Deep Learning","Funded Grants":"AICTE RPS INR 14.5 Lakhs"}', 0),
+(2, 'Dr. Rajendra B. Kulkarni', 'Professor & Head of Department', 'Ph.D. (Design Engg.)', 'Robotics & Tribology', 'hod.mech@svcoer.edu.in', NULL, 24, 'assets/images/principal.jpg', NULL, NULL, NULL, 1),
+(3, 'Dr. Suhas V. Patwardhan', 'Professor & Head of Department', 'Ph.D. (Structural Engg.)', 'Earthquake Resistant Design', 'hod.civil@svcoer.edu.in', NULL, 20, 'assets/images/principal.jpg', NULL, NULL, NULL, 1),
+(4, 'Dr. Vandana P. Chavan', 'Professor & Head of Department', 'Ph.D. (VLSI)', 'Low-Power ASIC Design', 'hod.entc@svcoer.edu.in', NULL, 22, 'assets/images/principal.jpg', NULL, NULL, NULL, 1),
+(5, 'Dr. M. R. Joshi', 'Professor & Head of Department', 'Ph.D. (Electrical Engg.)', 'Smart Grids & Power Electronics', 'hod.elec@svcoer.edu.in', NULL, 18, 'assets/images/principal.jpg', NULL, NULL, NULL, 1),
+(6, 'Prof. P. S. Sawant', 'Associate Professor & Head of Department', 'M.Tech (Embedded & CSE)', 'IoT Edge Computing & Embedded Linux', 'hod.ecs@svcoer.edu.in', NULL, 14, 'assets/images/principal.jpg', NULL, NULL, NULL, 1);
 
-INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, incharge) VALUES
-(1, 'High-Performance AI & Deep Learning Lab', 1450, 'NVIDIA GPU Workstations, 60 Core i7 Nodes', 'Dr. Siddharth R. Mane'),
-(2, 'Tata CIII Industrial Robotics & CNC Lab', 2400, 'KUKA 6-Axis Cobot, 5-Axis CNC Centre', 'Dr. Rajendra B. Kulkarni'),
-(3, 'Heavy Structures & Concrete Testing Lab', 2100, '1000 kN UTM, Rebound Hammer, UPV Tester', 'Dr. Suhas V. Patwardhan'),
-(4, 'VLSI Design & FPGA Prototyping Lab', 1350, 'Xilinx Vivado Boards, Cadence Virtuoso Suite', 'Dr. Vandana P. Chavan'),
-(5, 'Power Systems & EV Drives Lab', 1650, 'MATLAB Simulink RT, Three-Phase Synchronous Machines', 'Dr. M. R. Joshi'),
-(6, 'Embedded Computing & Cloud IoT Lab', 1300, 'ARM Cortex Kits, Raspberry Pi Edge Clusters', 'Prof. P. S. Sawant');
+INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, incharge, photo_url) VALUES
+(1, 'High-Performance AI & Deep Learning Lab', 1450, 'NVIDIA GPU Workstations, 60 Core i7 Nodes', 'Dr. Siddharth R. Mane', 'assets/images/hero_lab.jpg'),
+(2, 'Tata CIII Industrial Robotics & CNC Lab', 2400, 'KUKA 6-Axis Cobot, 5-Axis CNC Centre', 'Dr. Rajendra B. Kulkarni', 'assets/images/hero_lab.jpg'),
+(3, 'Heavy Structures & Concrete Testing Lab', 2100, '1000 kN UTM, Rebound Hammer, UPV Tester', 'Dr. Suhas V. Patwardhan', NULL),
+(4, 'VLSI Design & FPGA Prototyping Lab', 1350, 'Xilinx Vivado Boards, Cadence Virtuoso Suite', 'Dr. Vandana P. Chavan', NULL),
+(5, 'Power Systems & EV Drives Lab', 1650, 'MATLAB Simulink RT, Three-Phase Synchronous Machines', 'Dr. M. R. Joshi', NULL),
+(6, 'Embedded Computing & Cloud IoT Lab', 1300, 'ARM Cortex Kits, Raspberry Pi Edge Clusters', 'Prof. P. S. Sawant', NULL);
 
 INSERT INTO leadership_profiles (role_title, name, qualification, email, phone, photo_url, bio, sort_order) VALUES
 ('Principal & Director', 'Dr. B. P. Ronge', 'Ph.D. (Mech), M.Tech (IIT)', 'principal@coe.sveri.ac.in', '+91-02186-216063', 'assets/images/principal.jpg', 'Leading SVERI''s College of Engineering, Pandharpur in NAAC A+ quality governance and autonomy.', 1),
@@ -365,10 +395,11 @@ INSERT INTO ticker_items (text, link_url, badge_text, sort_order) VALUES
 ('First Year B.Tech & Direct Second Year CAP Admissions 2026-27 Open (DTE Code: 06220)', 'page.php?slug=prospectus-fee-structure', 'Admissions', 2),
 ('UGC Guidelines on Public Self-Disclosure (NEP 2020) Portal Active', 'quick-links.php', 'UGC Mandatory', 3);
 
-INSERT INTO documents (title, category, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by) VALUES
-('UGC Guidelines on Public Self-Disclosure (NEP 2020)', 'UGC & AICTE Approvals', 'uploads/UGC-Public-Self-Disclosure-Guidelines.pdf', 'UGC-Public-Self-Disclosure-Guidelines.pdf', 512400, 'application/pdf', '2026-10-01', 'IQAC Officer'),
-('FRA Approved Fee Structure 2026-27', 'Fee Structure', 'uploads/FRA-Fee-Structure-2026-27.pdf', 'FRA-Fee-Structure-2026-27.pdf', 342100, 'application/pdf', '2026-09-24', 'IQAC Officer'),
-('Academic Calendar 2026-27', 'Academic Calendar', 'uploads/SVCOER-Academic-Calendar-2026-27.pdf', 'SVCOER-Academic-Calendar-2026-27.pdf', 284000, 'application/pdf', '2026-07-02', 'IQAC Officer');
+INSERT INTO documents (title, category, source_type, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by) VALUES
+('UGC Guidelines on Public Self-Disclosure (NEP 2020)', 'UGC & AICTE Approvals', 'upload', 'uploads/UGC-Public-Self-Disclosure-Guidelines.pdf', 'UGC-Public-Self-Disclosure-Guidelines.pdf', 512400, 'application/pdf', '2026-10-01', 'IQAC Officer'),
+('FRA Approved Fee Structure 2026-27', 'Fee Structure', 'upload', 'uploads/FRA-Fee-Structure-2026-27.pdf', 'FRA-Fee-Structure-2026-27.pdf', 342100, 'application/pdf', '2026-09-24', 'IQAC Officer'),
+('Academic Calendar 2026-27', 'Academic Calendar', 'upload', 'uploads/SVCOER-Academic-Calendar-2026-27.pdf', 'SVCOER-Academic-Calendar-2026-27.pdf', 284000, 'application/pdf', '2026-07-02', 'IQAC Officer'),
+('Autonomous NEP 2020 Examination & Academic Rules (Google Drive)', 'Circulars & Forms', 'external', 'https://drive.google.com/file/d/1svcoer-autonomous-rules/view', 'Google Drive Link', 0, 'text/html', '2026-10-18', 'Dr. M. S. Kumbhar (CoE)');
 
 INSERT INTO campus_events (title, event_date, category, summary, content_html, is_featured) VALUES
 ('FRA Approved Fee Structure 2026-27 Published', '2026-10-12', 'Notice', 'Fees Regulating Authority approved B.Tech and M.Tech tuition & development fees.', '<p>Fees Regulating Authority approved fee structure published for AY 2026-27.</p>', 1),
@@ -392,3 +423,6 @@ INSERT INTO telephone_directory (section, officer_name, designation, extension, 
 ('Principal Office', 'Dr. B. P. Ronge', 'Principal & Director', '101', '+91-02186-216063', 'principal@coe.sveri.ac.in'),
 ('Registrar & RTI Cell', 'Shri S. G. Kulkarni', 'Registrar & PIO', '102', '+91-02186-216062', 'coe@coe.sveri.ac.in'),
 ('Anti-Ragging Helpline', 'Dr. P. K. Deshmukh', 'Chief Vigilance Officer', '199', '+91-9545553888', 'antiragging@svcoer.edu.in');
+
+INSERT INTO custom_home_components (title, placement, html_content, sort_order, is_active) VALUES
+('Autonomous Admissions & NEP 2020 Accreditation Ribbon', 'after-hero', '<div class="cms-prose"><div class="cms-block cms-banner-navy"><p class="cms-kicker">Autonomous · NAAC A+ (3.46) · DTE Code 06220</p><h2>Admissions Open 2026–27 &amp; Autonomous Examination Cell</h2><p>Direct Second Year &amp; First Year B.Tech Admissions, ABC/DigiLocker NAD Credit Transfers, and FRA-Approved Fee Disclosures available publicly without login.</p><div class="cms-btn-row"><a href="page.php?slug=prospectus-fee-structure" class="cms-btn cms-btn-amber">Fee Structure &amp; Admissions</a><a href="page.php?cat=examination" class="cms-btn cms-btn-light">Examination Portal</a></div></div></div>', 1, 1);

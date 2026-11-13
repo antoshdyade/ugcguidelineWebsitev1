@@ -1,0 +1,17 @@
+# SVCOER UGC CMS — Apache / Ubuntu Webmin Configuration
+DirectoryIndex index.php index.html
+AddDefaultCharset UTF-8
+Options -Indexes
+
+<IfModule mod_mime.c>
+  AddType text/css .css
+  AddType application/javascript .js
+  AddType application/json .json
+  AddType image/webp .webp
+  AddType image/svg+xml .svg
+  AddType application/pdf .pdf
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>

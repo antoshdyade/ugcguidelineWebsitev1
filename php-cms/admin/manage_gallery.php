@@ -50,19 +50,9 @@ $photosByAlbum = [];
 foreach ($photosStmt->fetchAll() as $ph) {
     $photosByAlbum[$ph['album_id']][] = $ph;
 }
+$adminPageTitle = 'Picture Gallery & Event Photo Albums';
+require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Manage Picture Gallery</title>
-  <link rel="stylesheet" href="../assets/css/style.css">
-</head>
-<body class="container" style="padding:2rem 1rem;">
-  <p><a href="dashboard.php">&larr; Dashboard</a></p>
-  <h1>Picture Gallery &amp; Event Photo Albums</h1>
-  <?php if ($msg): ?><p style="color:#15803d;font-weight:600;"><?= e($msg) ?></p><?php endif; ?>
-  <?php if ($err): ?><p style="color:#b91c1c;font-weight:600;"><?= e($err) ?></p><?php endif; ?>
 
   <div class="grid-2" style="margin-bottom:1.5rem;">
     <form method="post" enctype="multipart/form-data" class="card">
@@ -103,5 +93,4 @@ foreach ($photosStmt->fetchAll() as $ph) {
       </div>
     <?php endforeach; ?>
   </div>
-</body>
-</html>
+<?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

@@ -160,37 +160,44 @@ export function PageViewer({
             dangerouslySetInnerHTML={{ __html: page.contentHtml }}
           />
 
-          {/* Attached Statutory PDF */}
-          {page.attachedPdfUrl && (
-            <div className="mt-8 p-4 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-stone-500 dark:text-slate-400">Attached Statutory Document</p>
-                <p className="text-sm font-semibold text-stone-900 dark:text-white">
-                  {page.attachedPdfLabel || 'Download Official Document (PDF)'}
-                </p>
+          {/* Attached Statutory PDF or External Link */}
+          {page.attachedPdfUrl && (() => {
+            const isExternal = /^https?:\/\//i.test(page.attachedPdfUrl);
+            return (
+              <div className="mt-8 p-4 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-stone-500 dark:text-slate-400">
+                    {isExternal ? 'Attached External Document Link (Google Drive / Portal)' : 'Attached Statutory Document'}
+                  </p>
+                  <p className="text-sm font-semibold text-stone-900 dark:text-white">
+                    {page.attachedPdfLabel || (isExternal ? 'Open Linked Document' : 'Download Official Document (PDF)')}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={page.attachedPdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>{isExternal ? 'Open Document Link' : 'View PDF'}</span>
+                  </a>
+                  {!isExternal && (
+                    <a
+                      href={page.attachedPdfUrl}
+                      download
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-600 text-stone-800 dark:text-slate-200"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download</span>
+                    </a>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <a
-                  href={page.attachedPdfUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold text-white"
-                  style={{ backgroundColor: 'var(--primary-color)' }}
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>View PDF</span>
-                </a>
-                <a
-                  href={page.attachedPdfUrl}
-                  download
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-600 text-stone-800 dark:text-slate-200"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download</span>
-                </a>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Statutory Officers Leadership Grid (for Section 5(b)) */}
           {page.slug === 'statutory-officers' && (

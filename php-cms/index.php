@@ -16,6 +16,24 @@ foreach ($pdo->query('SELECT category_id, slug, title FROM pages WHERE is_publis
     $allCatPages[$pg['category_id']][] = $pg;
 }
 
+$customBlocksBySlot = ['after-hero' => [], 'after-about' => [], 'after-depts' => [], 'before-footer' => []];
+try {
+    foreach ($pdo->query('SELECT * FROM custom_home_components WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll() as $cb) {
+        $slot = $cb['placement'] ?? 'after-hero';
+        if (isset($customBlocksBySlot[$slot])) {
+            $customBlocksBySlot[$slot][] = $cb;
+        }
+    }
+} catch (Throwable $ignored) {}
+
+$renderHomeSlot = static function (string $slot) use ($customBlocksBySlot): void {
+    foreach ($customBlocksBySlot[$slot] ?? [] as $blk) {
+        echo '<section class="card" style="margin-top:1.5rem;" data-custom-component="' . (int)$blk['id'] . '">';
+        echo $blk['html_content'];
+        echo '</section>';
+    }
+};
+
 $pageTitle = 'Home — UGC NEP 2020 Self-Disclosure Portal';
 require_once __DIR__ . '/includes/header.php';
 
@@ -47,6 +65,8 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   </section>
 <?php endif; ?>
 
+<?php $renderHomeSlot('after-hero'); ?>
+
 <?php if (!empty($hs['showStatsAndRecognitions']) && !empty($stats)): ?>
   <section class="grid-4" style="margin-top:1.5rem;">
     <?php foreach ($stats as $st): ?>
@@ -75,18 +95,24 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
       <h2 style="margin:0;font-family:'Playfair Display',serif;">DOWNLOADS</h2>
       <a href="quick-links.php" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;">View All</a>
     </div>
-    <?php foreach ($docs as $doc): ?>
+    <?php foreach ($docs as $doc): $isExt = preg_match('#^https?://#i', (string)$doc['file_url']) === 1; ?>
       <div style="padding:0.5rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:12px;">
         <div>
           <div style="font-weight:600;font-size:0.88rem;"><?= e($doc['title']) ?></div>
-          <small style="color:var(--text-muted);"><?= e($doc['category']) ?> · <?= e(formatBytes((int)$doc['file_size_bytes'])) ?></small>
+          <small style="color:var(--text-muted);"><?= e($doc['category']) ?> · <?= $isExt ? 'External Link' : e(formatBytes((int)$doc['file_size_bytes'])) ?></small>
         </div>
-        <a href="<?= e($doc['file_url']) ?>" download class="btn-primary" style="font-size:0.78rem;">Download</a>
+        <?php if ($isExt): ?>
+          <a href="<?= e($doc['file_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size:0.78rem;">Open Link &nearr;</a>
+        <?php else: ?>
+          <a href="<?= e($doc['file_url']) ?>" download class="btn-primary" style="font-size:0.78rem;">Download</a>
+        <?php endif; ?>
       </div>
     <?php endforeach; ?>
   </aside>
 </section>
 <?php endif; ?>
+
+<?php $renderHomeSlot('after-about'); ?>
 
 <?php if (!empty($hs['showApprovedAndVision'])): ?>
 <section class="grid-2" style="margin-top:2rem;">
@@ -171,6 +197,8 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
 </section>
 <?php endif; ?>
 
+<?php $renderHomeSlot('after-depts'); ?>
+
 <?php if (!empty($hs['showCategoriesDirectory']) && $cats): ?>
 <section style="margin-top:2rem;">
   <h2 style="font-family:'Playfair Display',serif;"><?= e($hs['categoriesTitle'] ?? 'Statutory Self-Disclosure & Autonomous Portals') ?></h2>
@@ -213,4 +241,5 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   </div>
 </section>
 <?php endif; ?>
+<?php $renderHomeSlot('before-footer'); ?>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

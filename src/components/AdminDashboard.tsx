@@ -22,7 +22,15 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react';
-import { canUserAccessResource, formatBytes, THEME_PALETTES, validateUploadMeta } from '../lib/cmsLogic';
+import {
+  canUserAccessCategory,
+  canUserAccessPage,
+  canUserAccessResource,
+  formatBytes,
+  THEME_PALETTES,
+  validateExternalDocumentUrl,
+  validateUploadMeta,
+} from '../lib/cmsLogic';
 import { ImageUploader } from './ImageUploader';
 import { RichTextEditor } from './RichTextEditor';
 import type {
@@ -32,12 +40,18 @@ import type {
   CmsDocument,
   CmsPage,
   CmsUser,
+  CustomHomeComponent,
   Department,
   DepartmentSubPage,
+  DepartmentSubPageItem,
+  DepartmentSubPagePhoto,
+  DepartmentSubPageType,
   DocumentCategory,
+  FacultyCustomField,
   FacultyMember,
   GalleryAlbum,
   HeroSlide,
+  HomeComponentPlacement,
   LeadershipProfile,
   SiteSettings,
   TelephoneEntry,
@@ -200,9 +214,19 @@ export function AdminDashboard({
   const [pageHtml, setPageHtml] = useState('<h2>Section Heading</h2><p>Enter institutional disclosure content here.</p>');
   const [pagePdfUrl, setPagePdfUrl] = useState('');
   const [pagePdfLabel, setPagePdfLabel] = useState('');
+  const [pagePdfMode, setPagePdfMode] = useState<'upload' | 'external'>('upload');
   const [pagePublished, setPagePublished] = useState(true);
-  const [homepageMode, setHomepageMode] = useState<'sliders' | 'sections'>('sliders');
+  const [homepageMode, setHomepageMode] = useState<'sliders' | 'sections' | 'components'>('sliders');
   const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics'>('identity');
+
+  // Homepage Custom HTML Components state
+  const [editingHomeCompId, setEditingHomeCompId] = useState<number | null>(null);
+  const [homeCompTitle, setHomeCompTitle] = useState('');
+  const [homeCompPlacement, setHomeCompPlacement] = useState<HomeComponentPlacement>('after-hero');
+  const [homeCompHtml, setHomeCompHtml] = useState(
+    '<div class="cms-card"><h3>Autonomous Announcement / Widget</h3><p>Add formatted announcements, schedules, or HTML tables here.</p></div>',
+  );
+  const [homeCompActive, setHomeCompActive] = useState(true);
 
   // Department Manager state
   const [selectedDeptId, setSelectedDeptId] = useState<number>(1);
@@ -219,14 +243,27 @@ export function AdminDashboard({
   const [newDeptHero, setNewDeptHero] = useState('/src/assets/images/hero_robotics_lab_1794512596365.jpg');
 
   const [deptDraft, setDeptDraft] = useState<Partial<Department>>({});
-  const [deptPanelMode, setDeptPanelMode] = useState<'micropages' | 'faculty' | 'labs' | 'profile'>('micropages');
+  const [deptPanelMode, setDeptPanelMode] = useState<'micropages' | 'faculty' | 'labs' | 'library_fields' | 'profile'>('micropages');
+  const [newSchemaField, setNewSchemaField] = useState('');
 
   // Department Sub-page (Micro-page) state
   const [editingSubId, setEditingSubId] = useState<number | null>(null);
   const [subTitle, setSubTitle] = useState('');
   const [subSlug, setSubSlug] = useState('');
+  const [subPageType, setSubPageType] = useState<DepartmentSubPageType>('general');
   const [subHtml, setSubHtml] = useState('<h2>Department Update</h2><p>Enter department micro-page details here.</p>');
   const [subPublished, setSubPublished] = useState(true);
+  const [subPhotos, setSubPhotos] = useState<DepartmentSubPagePhoto[]>([]);
+  const [newSubPhotoUrl, setNewSubPhotoUrl] = useState('');
+  const [newSubPhotoCaption, setNewSubPhotoCaption] = useState('');
+  const [subItems, setSubItems] = useState<DepartmentSubPageItem[]>([]);
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [newItemDate, setNewItemDate] = useState('2026-11-12');
+  const [newItemBadge, setNewItemBadge] = useState('Notice');
+  const [newItemDesc, setNewItemDesc] = useState('');
+  const [newItemImage, setNewItemImage] = useState('');
+  const [newItemSourceType, setNewItemSourceType] = useState<'upload' | 'external'>('external');
+  const [newItemUrl, setNewItemUrl] = useState('');
 
   // Department Faculty state
   const [editingFacId, setEditingFacId] = useState<number | null>(null);
@@ -235,14 +272,23 @@ export function AdminDashboard({
   const [facQual, setFacQual] = useState('M.Tech');
   const [facSpec, setFacSpec] = useState('');
   const [facEmail, setFacEmail] = useState('');
+  const [facPhone, setFacPhone] = useState('');
   const [facExp, setFacExp] = useState(5);
   const [facPhoto, setFacPhoto] = useState('/src/assets/images/leadership_principal_1794512597061.jpg');
+  const [facExtUrl, setFacExtUrl] = useState('');
+  const [facExtLabel, setFacExtLabel] = useState('Google Scholar / Profile');
+  const [facCustomFields, setFacCustomFields] = useState<FacultyCustomField[]>([]);
+  const [newFacFieldLabel, setNewFacFieldLabel] = useState('');
+  const [newFacFieldValue, setNewFacFieldValue] = useState('');
+  const [newFacFieldType, setNewFacFieldType] = useState<'text' | 'url'>('text');
 
   // Department Labs state
+  const [editingLabId, setEditingLabId] = useState<number | null>(null);
   const [labName, setLabName] = useState('');
   const [labArea, setLabArea] = useState(1400);
   const [labEquip, setLabEquip] = useState('');
   const [labIncharge, setLabIncharge] = useState('');
+  const [labPhotoUrl, setLabPhotoUrl] = useState('');
 
   // Homepage / Events state
   const [editingSlideId, setEditingSlideId] = useState<number | null>(null);
@@ -283,10 +329,12 @@ export function AdminDashboard({
   const [photoUrl, setPhotoUrl] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
 
-  // Document Upload state
+  // Document Upload & External URL state
   const [docTitle, setDocTitle] = useState('');
   const [docCategory, setDocCategory] = useState<DocumentCategory>('Circulars & Forms');
+  const [docSourceType, setDocSourceType] = useState<'upload' | 'external'>('upload');
   const [docFile, setDocFile] = useState<File | null>(null);
+  const [docExternalUrl, setDocExternalUrl] = useState('');
   const [docQuickLink, setDocQuickLink] = useState(true);
 
   // Telephone Directory state
@@ -297,12 +345,18 @@ export function AdminDashboard({
   const [dirPhone, setDirPhone] = useState('');
   const [dirEmail, setDirEmail] = useState('');
 
-  // Users state
+  // Users & Per-Page RBAC state
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('content_editor');
   const [newUserDept, setNewUserDept] = useState<number>(1);
+  const [newUserAllowedCats, setNewUserAllowedCats] = useState<string[]>([]);
+  const [editingPermsUserId, setEditingPermsUserId] = useState<number | null>(null);
+  const [permRole, setPermRole] = useState<UserRole>('content_editor');
+  const [permDeptId, setPermDeptId] = useState<number>(1);
+  const [permAllowedCats, setPermAllowedCats] = useState<string[]>([]);
+  const [permAllowedPageIds, setPermAllowedPageIds] = useState<number[]>([]);
 
   // Settings draft
   const [settingsDraft, setSettingsDraft] = useState<SiteSettings | null>(null);
@@ -405,6 +459,12 @@ export function AdminDashboard({
             if (data.user.assignedDepartmentId) {
               setSelectedDeptId(data.user.assignedDepartmentId);
               setActiveTab('departments');
+            } else if (data.user.role === 'exam_controller') {
+              setActiveTab('pages');
+            }
+            if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
+              setPageCat(data.user.allowedCategories[0]);
+              setPageFilterCat(data.user.allowedCategories[0]);
             }
             await fetchAdminState(storedToken);
           } else {
@@ -439,8 +499,16 @@ export function AdminDashboard({
       if (data.user.assignedDepartmentId) {
         setSelectedDeptId(data.user.assignedDepartmentId);
         setActiveTab('departments');
+      } else if (data.user.role === 'exam_controller') {
+        setActiveTab('pages');
       } else {
         setActiveTab('overview');
+      }
+      if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
+        setPageCat(data.user.allowedCategories[0]);
+        setPageFilterCat(data.user.allowedCategories[0]);
+      } else {
+        setPageFilterCat('all');
       }
       await fetchAdminState(token);
     } catch {
@@ -609,7 +677,8 @@ export function AdminDashboard({
                 { label: 'Content Editor / PRO', e: 'pro@svcoer.edu.in', p: 'Editor@123' },
                 { label: 'CSE Dept Admin', e: 'hod.cse@svcoer.edu.in', p: 'Dept@123' },
                 { label: 'IQAC Officer', e: 'iqac@svcoer.edu.in', p: 'Iqac@123' },
-              ].map((acc) => (
+                { label: 'Controller of Examinations (CoE)', e: 'coe@coe.sveri.ac.in', p: 'Exam@123' },
+              ].map((acc, idx) => (
                 <button
                   key={acc.e}
                   type="button"
@@ -617,7 +686,9 @@ export function AdminDashboard({
                     setEmail(acc.e);
                     setPassword(acc.p);
                   }}
-                  className="text-left px-2.5 py-1.5 rounded border border-stone-200 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800"
+                  className={`text-left px-2.5 py-1.5 rounded border border-stone-200 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800 ${
+                    idx === 4 ? 'col-span-2' : ''
+                  }`}
                 >
                   <span className="font-semibold block text-stone-800 dark:text-slate-200">{acc.label}</span>
                   <span className="text-[11px] text-stone-500 dark:text-slate-400 truncate block">{acc.e}</span>
@@ -669,8 +740,17 @@ export function AdminDashboard({
     setEditingSubId(null);
     setSubTitle('');
     setSubSlug('');
+    setSubPageType('general');
+    setSubPhotos([]);
+    setSubItems([]);
     setEditingFacId(null);
     setFacName('');
+    setFacPhone('');
+    setFacExtUrl('');
+    setFacCustomFields([]);
+    setEditingLabId(null);
+    setLabName('');
+    setLabPhotoUrl('');
   };
 
   return (
@@ -1327,9 +1407,26 @@ export function AdminDashboard({
           </div>
         )}
 
-        {/* 2. PAGES BUILDER TAB (Visual WYSIWYG + HTML Toggle + PDF Attachment Upload + Category Filter) */}
-        {activeTab === 'pages' && canPages && state && (
+        {/* 2. PAGES BUILDER TAB (Visual WYSIWYG + HTML Toggle + PDF Upload/External Link + Per-Page RBAC) */}
+        {activeTab === 'pages' && canPages && state && (() => {
+          const permittedCategories = state.categories.filter((c) => canUserAccessCategory(user, c.slug));
+          const permittedPages = state.pages.filter((pg) => canUserAccessPage(user, pg));
+          const hasExplicitScope =
+            user.role === 'exam_controller' ||
+            (user.allowedCategories && user.allowedCategories.length > 0) ||
+            (user.allowedPageIds && user.allowedPageIds.length > 0);
+          return (
           <div className="space-y-4">
+            {hasExplicitScope && (
+              <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <strong>Scoped RBAC Access Active ({user.role.replace('_', ' ')}):</strong>{' '}
+                  Showing {permittedPages.length} authorized {permittedPages.length === 1 ? 'page' : 'pages'} across{' '}
+                  {permittedCategories.map((c) => c.shortLabel || c.name).join(', ') || 'assigned pages'}.
+                </span>
+              </div>
+            )}
+
             {/* Category Quick Filter Strip */}
             <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-stone-200 dark:border-slate-800">
               <button
@@ -1340,10 +1437,10 @@ export function AdminDashboard({
                 }`}
                 style={pageFilterCat === 'all' ? { backgroundColor: 'var(--primary-color)' } : undefined}
               >
-                All Categories ({state.pages.length})
+                Permitted ({permittedPages.length})
               </button>
-              {state.categories.map((c) => {
-                const cnt = state.pages.filter((p) => p.categorySlug === c.slug).length;
+              {permittedCategories.map((c) => {
+                const cnt = permittedPages.filter((p) => p.categorySlug === c.slug).length;
                 return (
                   <button
                     key={c.id}
@@ -1370,6 +1467,13 @@ export function AdminDashboard({
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
+                  if (pagePdfUrl && pagePdfMode === 'external') {
+                    const urlCheck = validateExternalDocumentUrl(pagePdfUrl);
+                    if (!urlCheck.valid) {
+                      notify('err', urlCheck.reason || 'Enter a valid http/https external document link.');
+                      return;
+                    }
+                  }
                   if (editingPageId) {
                     await adminFetch(`/api/admin/pages/${editingPageId}`, 'PUT', {
                       categorySlug: pageCat,
@@ -1402,6 +1506,7 @@ export function AdminDashboard({
                   setPageSortOrder(1);
                   setPagePdfUrl('');
                   setPagePdfLabel('');
+                  setPagePdfMode('upload');
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -1439,7 +1544,7 @@ export function AdminDashboard({
                     onChange={(e) => setPageCat(e.target.value as UgcCategorySlug)}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   >
-                    {state.categories.map((c) => (
+                    {(permittedCategories.length > 0 ? permittedCategories : state.categories).map((c) => (
                       <option key={c.slug} value={c.slug}>
                         {c.ugcCode} · {c.name}
                       </option>
@@ -1506,45 +1611,75 @@ export function AdminDashboard({
                 minHeight={230}
               />
 
-              {/* Attached Statutory PDF Upload */}
-              <div className="p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-2">
+              {/* Attached Statutory Document: Upload PDF OR External Link (Google Drive / URL) */}
+              <div className="p-3.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-semibold">Optional Attached Downloadable PDF</span>
-                  <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold text-white cursor-pointer" style={{ backgroundColor: 'var(--secondary-color)' }}>
-                    <Upload className="w-3 h-3" />
-                    <span>Upload PDF</span>
-                    <input
-                      type="file"
-                      accept="application/pdf"
-                      className="sr-only"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0];
-                        if (!f) return;
-                        try {
-                          const url = await uploadBinaryFile(f);
-                          setPagePdfUrl(url);
-                          if (!pagePdfLabel) setPagePdfLabel(`Download ${f.name}`);
-                          notify('ok', 'PDF attached to page.');
-                        } catch (err) {
-                          notify('err', (err as Error).message);
-                        }
-                      }}
-                    />
-                  </label>
+                  <span className="text-xs font-semibold">Optional Attached Document (Upload PDF or External Drive Link)</span>
+                  <div className="inline-flex rounded-lg border border-stone-300 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => setPagePdfMode('upload')}
+                      className={`px-2.5 py-1 text-[11px] font-semibold ${
+                        pagePdfMode === 'upload' ? 'text-white' : 'text-stone-700 dark:text-slate-300'
+                      }`}
+                      style={pagePdfMode === 'upload' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                    >
+                      Upload PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPagePdfMode('external')}
+                      className={`px-2.5 py-1 text-[11px] font-semibold ${
+                        pagePdfMode === 'external' ? 'text-white' : 'text-stone-700 dark:text-slate-300'
+                      }`}
+                      style={pagePdfMode === 'external' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                    >
+                      External URL / Google Drive
+                    </button>
+                  </div>
                 </div>
+                {pagePdfMode === 'upload' && (
+                  <div className="flex items-center gap-2">
+                    <label
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-white cursor-pointer"
+                      style={{ backgroundColor: 'var(--secondary-color)' }}
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload PDF File</span>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="sr-only"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          try {
+                            const url = await uploadBinaryFile(f);
+                            setPagePdfUrl(url);
+                            if (!pagePdfLabel) setPagePdfLabel(`Download ${f.name}`);
+                            notify('ok', 'PDF attached to page.');
+                          } catch (err) {
+                            notify('err', (err as Error).message);
+                          }
+                        }}
+                      />
+                    </label>
+                    <span className="text-[11px] text-stone-500">Or switch to External URL for Google Drive links</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="text"
                     value={pagePdfLabel}
                     onChange={(e) => setPagePdfLabel(e.target.value)}
-                    placeholder="Button Label (e.g. Download Notification PDF)"
+                    placeholder="Button Label (e.g. Open Examination Timetable)"
                     className="px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                   <input
                     type="text"
                     value={pagePdfUrl}
                     onChange={(e) => setPagePdfUrl(e.target.value)}
-                    placeholder="/uploads/document.pdf"
+                    placeholder={pagePdfMode === 'external' ? 'https://drive.google.com/file/d/...' : '/uploads/document.pdf'}
                     className="px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
                 </div>
@@ -1573,11 +1708,11 @@ export function AdminDashboard({
             <div className="xl:col-span-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 font-bold text-sm">
                 {pageFilterCat === 'all'
-                  ? `All Micro-Pages (${state.pages.length})`
+                  ? `Permitted Micro-Pages (${permittedPages.length})`
                   : `${state.categories.find((c) => c.slug === pageFilterCat)?.name || pageFilterCat} Pages`}
               </div>
               <div className="max-h-[640px] overflow-y-auto divide-y divide-stone-100 dark:divide-slate-800">
-                {state.pages
+                {permittedPages
                   .filter((pg) => pageFilterCat === 'all' || pg.categorySlug === pageFilterCat)
                   .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map((pg) => (
@@ -1601,6 +1736,7 @@ export function AdminDashboard({
                           setPageHtml(pg.contentHtml);
                           setPagePdfUrl(pg.attachedPdfUrl || '');
                           setPagePdfLabel(pg.attachedPdfLabel || '');
+                          setPagePdfMode(pg.attachedPdfUrl && /^https?:\/\//i.test(pg.attachedPdfUrl) ? 'external' : 'upload');
                           setPagePublished(pg.isPublished);
                         }}
                         className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
@@ -1629,7 +1765,8 @@ export function AdminDashboard({
             </div>
           </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* 3. FULL DEPARTMENT & MICRO-PAGE MANAGER */}
         {activeTab === 'departments' && canDepts && state && (
@@ -1797,9 +1934,10 @@ export function AdminDashboard({
                 <div className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-slate-900 p-2 rounded-xl border border-stone-200 dark:border-slate-800">
                   <div className="flex flex-wrap gap-1.5">
                     {[
-                      { id: 'micropages' as const, label: `Micro-Pages (${currentDept.subPages.length})` },
-                      { id: 'faculty' as const, label: `Faculty Profiles (${currentDept.faculty.length})` },
+                      { id: 'micropages' as const, label: `Micro-Pages & Galleries (${currentDept.subPages.length})` },
+                      { id: 'faculty' as const, label: `Faculty & Custom Fields (${currentDept.faculty.length})` },
                       { id: 'labs' as const, label: `Laboratories (${currentDept.labs.length})` },
+                      { id: 'library_fields' as const, label: 'Dept Library & Field Schema' },
                       { id: 'profile' as const, label: 'Department Profile & Banner' },
                     ].map((tItem) => (
                       <button
@@ -1807,7 +1945,9 @@ export function AdminDashboard({
                         type="button"
                         onClick={() => {
                           setDeptPanelMode(tItem.id);
-                          if (tItem.id === 'profile') setDeptDraft({ ...currentDept });
+                          if (tItem.id === 'profile' || tItem.id === 'library_fields') {
+                            setDeptDraft({ ...currentDept });
+                          }
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
                           deptPanelMode === tItem.id
@@ -1838,7 +1978,7 @@ export function AdminDashboard({
                   )}
                 </div>
 
-                {/* Department Micro-Pages Manager (Create, Edit with WYSIWYG+HTML, Delete) */}
+                {/* Department Micro-Pages Manager (Gallery, Notice Board, Events, Notes/Syllabus, Celebrations, Achievements, Library) */}
                 {deptPanelMode === 'micropages' && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                     <form
@@ -1851,7 +1991,10 @@ export function AdminDashboard({
                               'PUT',
                               {
                                 title: subTitle,
+                                pageType: subPageType,
                                 contentHtml: subHtml,
+                                photos: subPhotos,
+                                items: subItems,
                                 isPublished: subPublished,
                               },
                             );
@@ -1860,7 +2003,10 @@ export function AdminDashboard({
                             await adminFetch(`/api/admin/departments/${currentDept.id}/subpages`, 'POST', {
                               title: subTitle,
                               slug: subSlug || subTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                              pageType: subPageType,
                               contentHtml: subHtml,
+                              photos: subPhotos,
+                              items: subItems,
                               isPublished: subPublished,
                             });
                             notify('ok', `Added micro-page "${subTitle}".`);
@@ -1868,6 +2014,9 @@ export function AdminDashboard({
                           setEditingSubId(null);
                           setSubTitle('');
                           setSubSlug('');
+                          setSubPageType('general');
+                          setSubPhotos([]);
+                          setSubItems([]);
                         } catch (err) {
                           notify('err', (err as Error).message);
                         }
@@ -1878,7 +2027,7 @@ export function AdminDashboard({
                         <h2 className="text-base font-bold">
                           {editingSubId
                             ? `Edit Micro-Page: ${subTitle}`
-                            : `Add Micro-Page to ${currentDept.shortName}`}
+                            : `Add Micro-Page / Portal to ${currentDept.shortName}`}
                         </h2>
                         {editingSubId && (
                           <button
@@ -1887,6 +2036,9 @@ export function AdminDashboard({
                               setEditingSubId(null);
                               setSubTitle('');
                               setSubSlug('');
+                              setSubPageType('general');
+                              setSubPhotos([]);
+                              setSubItems([]);
                             }}
                             className="text-xs underline"
                           >
@@ -1894,6 +2046,49 @@ export function AdminDashboard({
                           </button>
                         )}
                       </div>
+
+                      {/* 1-Click Micro-Page Type Presets */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-stone-600 dark:text-slate-300">
+                          Micro-Page Template / Section Type
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(
+                            [
+                              ['general', 'General Page'],
+                              ['gallery', 'Photo Gallery'],
+                              ['notice_board', 'Notice Board'],
+                              ['events', 'Events'],
+                              ['notes_syllabus', 'Notes & Syllabus'],
+                              ['celebrations', 'Celebrations'],
+                              ['library', 'Dept Library'],
+                              ['achievements_students', 'Student Achievements'],
+                              ['achievements_faculty', 'Faculty Achievements'],
+                            ] as const
+                          ).map(([tVal, tLbl]) => (
+                            <button
+                              key={tVal}
+                              type="button"
+                              onClick={() => {
+                                setSubPageType(tVal);
+                                if (!editingSubId && !subTitle) {
+                                  setSubTitle(tLbl);
+                                  setSubSlug(tLbl.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded border text-[11px] font-semibold transition-colors ${
+                                subPageType === tVal
+                                  ? 'text-white border-transparent'
+                                  : 'border-stone-300 dark:border-slate-700 text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                              }`}
+                              style={subPageType === tVal ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                            >
+                              {tLbl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input
                           type="text"
@@ -1905,7 +2100,7 @@ export function AdminDashboard({
                               setSubSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
                             }
                           }}
-                          placeholder="Micro-Page Title (e.g. Placement Records)"
+                          placeholder="Micro-Page Title (e.g. Department Gallery)"
                           className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                         />
                         <input
@@ -1914,17 +2109,242 @@ export function AdminDashboard({
                           disabled={Boolean(editingSubId)}
                           value={subSlug}
                           onChange={(e) => setSubSlug(e.target.value)}
-                          placeholder="URL Slug (e.g. placements)"
+                          placeholder="URL Slug (e.g. gallery)"
                           className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-60"
                         />
                       </div>
+
                       <RichTextEditor
                         label="Micro-Page Content (Visual Editor + HTML Source)"
                         value={subHtml}
                         onChange={setSubHtml}
                         uploadBinary={uploadBinaryFile}
-                        minHeight={220}
+                        minHeight={200}
                       />
+
+                      {/* Multi-Photo Gallery Builder for Sub-Page */}
+                      <div className="p-3.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-bold">
+                            Micro-Page Photo Gallery / Celebrations Album ({subPhotos.length})
+                          </h3>
+                          <span className="text-[11px] text-stone-500">Upload photos to display in public lightbox grid</span>
+                        </div>
+                        <ImageUploader
+                          label="Upload or Paste Image for Micro-Page Gallery"
+                          value={newSubPhotoUrl}
+                          onChange={setNewSubPhotoUrl}
+                          uploadBinary={uploadBinaryFile}
+                        />
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="text"
+                            value={newSubPhotoCaption}
+                            onChange={(e) => setNewSubPhotoCaption(e.target.value)}
+                            placeholder="Photo Caption (e.g. Inauguration Ceremony)"
+                            className="flex-1 px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newSubPhotoUrl.trim()) {
+                                notify('err', 'Upload or paste a photo URL first.');
+                                return;
+                              }
+                              setSubPhotos((prev) => [
+                                ...prev,
+                                {
+                                  id: Date.now(),
+                                  imageUrl: newSubPhotoUrl.trim(),
+                                  caption: newSubPhotoCaption.trim() || subTitle || 'Department Photo',
+                                },
+                              ]);
+                              setNewSubPhotoUrl('');
+                              setNewSubPhotoCaption('');
+                            }}
+                            className="px-3 py-1.5 rounded text-xs font-semibold text-white shrink-0"
+                            style={{ backgroundColor: 'var(--secondary-color)' }}
+                          >
+                            + Add Photo to Page
+                          </button>
+                        </div>
+                        {subPhotos.length > 0 && (
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
+                            {subPhotos.map((ph) => (
+                              <div key={ph.id} className="relative rounded-lg overflow-hidden border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                                <img src={ph.imageUrl} alt={ph.caption} className="w-full h-16 object-cover" />
+                                <p className="text-[10px] px-1.5 py-0.5 truncate text-stone-600 dark:text-slate-300">{ph.caption}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => setSubPhotos((prev) => prev.filter((p) => p.id !== ph.id))}
+                                  aria-label={`Remove photo ${ph.caption}`}
+                                  className="absolute top-1 right-1 p-0.5 rounded bg-rose-600 text-white"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Structured Feed Items Builder (Notices, Notes, Syllabus, Events, Achievements) */}
+                      <div className="p-3.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-bold">
+                            Structured Notices / Notes / Syllabus / Achievement Cards ({subItems.length})
+                          </h3>
+                          <span className="text-[11px] text-stone-500">Supports PDF Upload OR Google Drive / External URL</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <input
+                            type="text"
+                            value={newItemTitle}
+                            onChange={(e) => setNewItemTitle(e.target.value)}
+                            placeholder="Item Title (e.g. SEM-V Question Bank)"
+                            className="sm:col-span-2 px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                          <input
+                            type="date"
+                            value={newItemDate}
+                            onChange={(e) => setNewItemDate(e.target.value)}
+                            className="px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <input
+                            type="text"
+                            value={newItemBadge}
+                            onChange={(e) => setNewItemBadge(e.target.value)}
+                            placeholder="Badge (e.g. Syllabus, Award)"
+                            className="px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                          <input
+                            type="text"
+                            value={newItemDesc}
+                            onChange={(e) => setNewItemDesc(e.target.value)}
+                            placeholder="Short description or student/faculty details..."
+                            className="sm:col-span-2 px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <ImageUploader
+                          label="Optional Item Photo (for Achievements / Events)"
+                          value={newItemImage}
+                          onChange={setNewItemImage}
+                          uploadBinary={uploadBinaryFile}
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="inline-flex rounded border border-stone-300 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 text-[11px] font-semibold">
+                            <button
+                              type="button"
+                              onClick={() => setNewItemSourceType('upload')}
+                              className={`px-2 py-1 ${newItemSourceType === 'upload' ? 'text-white' : ''}`}
+                              style={newItemSourceType === 'upload' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                            >
+                              Upload PDF
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setNewItemSourceType('external')}
+                              className={`px-2 py-1 ${newItemSourceType === 'external' ? 'text-white' : ''}`}
+                              style={newItemSourceType === 'external' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                            >
+                              Google Drive / Link
+                            </button>
+                          </div>
+                          {newItemSourceType === 'upload' && (
+                            <label
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-white cursor-pointer"
+                              style={{ backgroundColor: 'var(--secondary-color)' }}
+                            >
+                              <Upload className="w-3 h-3" />
+                              <span>Choose File</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.docx,.xlsx,.jpg,.png"
+                                className="sr-only"
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  if (!f) return;
+                                  try {
+                                    const u = await uploadBinaryFile(f);
+                                    setNewItemUrl(u);
+                                    notify('ok', 'Item attachment uploaded.');
+                                  } catch (err) {
+                                    notify('err', (err as Error).message);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                          <input
+                            type="text"
+                            value={newItemUrl}
+                            onChange={(e) => setNewItemUrl(e.target.value)}
+                            placeholder="https://drive.google.com/... or /uploads/..."
+                            className="flex-1 min-w-[180px] px-2.5 py-1 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newItemTitle.trim()) {
+                                notify('err', 'Enter an item title before adding.');
+                                return;
+                              }
+                              if (newItemUrl && newItemSourceType === 'external') {
+                                const check = validateExternalDocumentUrl(newItemUrl);
+                                if (!check.valid) {
+                                  notify('err', check.reason || 'Invalid external URL.');
+                                  return;
+                                }
+                              }
+                              setSubItems((prev) => [
+                                ...prev,
+                                {
+                                  id: Date.now(),
+                                  title: newItemTitle.trim(),
+                                  date: newItemDate,
+                                  badge: newItemBadge.trim() || undefined,
+                                  description: newItemDesc.trim() || undefined,
+                                  imageUrl: newItemImage.trim() || undefined,
+                                  sourceType: newItemUrl ? newItemSourceType : undefined,
+                                  url: newItemUrl.trim() || undefined,
+                                },
+                              ]);
+                              setNewItemTitle('');
+                              setNewItemDesc('');
+                              setNewItemImage('');
+                              setNewItemUrl('');
+                            }}
+                            className="px-3 py-1 rounded text-xs font-semibold text-white shrink-0"
+                            style={{ backgroundColor: 'var(--primary-color)' }}
+                          >
+                            + Add Card
+                          </button>
+                        </div>
+                        {subItems.length > 0 && (
+                          <ul className="divide-y divide-stone-200 dark:divide-slate-700 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                            {subItems.map((it) => (
+                              <li key={it.id} className="p-2 flex items-center justify-between gap-2 text-xs">
+                                <div className="min-w-0">
+                                  <p className="font-semibold truncate">{it.title}</p>
+                                  <p className="text-[11px] text-stone-500 truncate">
+                                    {it.date} {it.badge ? `· ${it.badge}` : ''} {it.url ? `· ${it.sourceType === 'external' ? 'External Link' : 'File'}` : ''}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSubItems((prev) => prev.filter((x) => x.id !== it.id))}
+                                  className="p-1 text-rose-600"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
                       <div className="flex items-center justify-between">
                         <label className="inline-flex items-center gap-2 text-xs font-medium">
                           <input
@@ -1953,7 +2373,7 @@ export function AdminDashboard({
                             <div className="min-w-0">
                               <p className="font-semibold truncate">{sp.title}</p>
                               <p className="text-xs text-stone-500">
-                                /{currentDept.slug}/{sp.slug} · {sp.isPublished ? 'Live' : 'Draft'}
+                                {sp.pageType || 'general'} · /{sp.slug} · {sp.photos?.length || 0} photos · {sp.items?.length || 0} items · {sp.isPublished ? 'Live' : 'Draft'}
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -1963,7 +2383,10 @@ export function AdminDashboard({
                                   setEditingSubId(sp.id);
                                   setSubTitle(sp.title);
                                   setSubSlug(sp.slug);
+                                  setSubPageType(sp.pageType || 'general');
                                   setSubHtml(sp.contentHtml);
+                                  setSubPhotos(sp.photos || []);
+                                  setSubItems(sp.items || []);
                                   setSubPublished(sp.isPublished);
                                 }}
                                 className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
@@ -1993,44 +2416,51 @@ export function AdminDashboard({
                   </div>
                 )}
 
-                {/* Department Faculty Manager (with Photo Upload & Edit) */}
+                {/* Department Faculty Manager (Photo Upload + Area of Expertise + Phone + External Profile + Custom Fields) */}
                 {deptPanelMode === 'faculty' && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     <form
                       onSubmit={async (e) => {
                         e.preventDefault();
                         try {
+                          if (facExtUrl.trim()) {
+                            const check = validateExternalDocumentUrl(facExtUrl.trim());
+                            if (!check.valid) {
+                              notify('err', check.reason || 'External Profile URL must start with https:// or http://');
+                              return;
+                            }
+                          }
+                          const payload = {
+                            name: facName,
+                            designation: facDesignation,
+                            qualification: facQual,
+                            specialization: facSpec,
+                            email: facEmail,
+                            phone: facPhone || undefined,
+                            experienceYears: facExp,
+                            photoUrl: facPhoto,
+                            externalProfileUrl: facExtUrl.trim() || undefined,
+                            externalProfileLabel: facExtLabel.trim() || undefined,
+                            customFields: facCustomFields,
+                          };
                           if (editingFacId) {
                             await adminFetch(
                               `/api/admin/departments/${currentDept.id}/faculty/${editingFacId}`,
                               'PUT',
-                              {
-                                name: facName,
-                                designation: facDesignation,
-                                qualification: facQual,
-                                specialization: facSpec,
-                                email: facEmail,
-                                experienceYears: facExp,
-                                photoUrl: facPhoto,
-                              },
+                              payload,
                             );
                             notify('ok', `Updated faculty "${facName}".`);
                           } else {
-                            await adminFetch(`/api/admin/departments/${currentDept.id}/faculty`, 'POST', {
-                              name: facName,
-                              designation: facDesignation,
-                              qualification: facQual,
-                              specialization: facSpec,
-                              email: facEmail,
-                              experienceYears: facExp,
-                              photoUrl: facPhoto,
-                            });
+                            await adminFetch(`/api/admin/departments/${currentDept.id}/faculty`, 'POST', payload);
                             notify('ok', `Added faculty "${facName}".`);
                           }
                           setEditingFacId(null);
                           setFacName('');
                           setFacSpec('');
                           setFacEmail('');
+                          setFacPhone('');
+                          setFacExtUrl('');
+                          setFacCustomFields([]);
                         } catch (err) {
                           notify('err', (err as Error).message);
                         }
@@ -2042,7 +2472,17 @@ export function AdminDashboard({
                           {editingFacId ? 'Edit Faculty Member' : `Add Faculty to ${currentDept.shortName}`}
                         </h2>
                         {editingFacId && (
-                          <button type="button" onClick={() => setEditingFacId(null)} className="text-xs underline">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingFacId(null);
+                              setFacName('');
+                              setFacPhone('');
+                              setFacExtUrl('');
+                              setFacCustomFields([]);
+                            }}
+                            className="text-xs underline"
+                          >
                             Cancel Edit
                           </button>
                         )}
@@ -2083,22 +2523,136 @@ export function AdminDashboard({
                         type="text"
                         value={facSpec}
                         onChange={(e) => setFacSpec(e.target.value)}
-                        placeholder="Specialization"
+                        placeholder="Area of Expertise / Specialization"
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
-                      <input
-                        type="email"
-                        value={facEmail}
-                        onChange={(e) => setFacEmail(e.target.value)}
-                        placeholder="Institutional Email"
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <input
+                          type="email"
+                          value={facEmail}
+                          onChange={(e) => setFacEmail(e.target.value)}
+                          placeholder="Institutional Email"
+                          className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                          type="text"
+                          value={facPhone}
+                          onChange={(e) => setFacPhone(e.target.value)}
+                          placeholder="Contact Phone / Ext (Optional)"
+                          className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <input
+                          type="text"
+                          value={facExtLabel}
+                          onChange={(e) => setFacExtLabel(e.target.value)}
+                          placeholder="External Link Label (e.g. Google Scholar)"
+                          className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                          type="url"
+                          value={facExtUrl}
+                          onChange={(e) => setFacExtUrl(e.target.value)}
+                          placeholder="https://scholar.google.com/..."
+                          className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
                       <ImageUploader
                         label="Faculty Portrait Photo"
                         value={facPhoto}
                         onChange={setFacPhoto}
                         uploadBinary={uploadBinaryFile}
                       />
+
+                      {/* Dynamic Customizable Faculty Fields */}
+                      <div className="p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold">Customizable Profile Fields ({facCustomFields.length})</span>
+                          <span className="text-[11px] text-stone-500">Click preset or add custom field</span>
+                        </div>
+                        {(currentDept.facultyFieldSchema || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {(currentDept.facultyFieldSchema || []).map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setNewFacFieldLabel(preset)}
+                                className="px-2 py-0.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] hover:bg-stone-100"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-1.5">
+                          <input
+                            type="text"
+                            value={newFacFieldLabel}
+                            onChange={(e) => setNewFacFieldLabel(e.target.value)}
+                            placeholder="Field Label (e.g. Patents Filed)"
+                            className="sm:col-span-4 px-2 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                          <input
+                            type="text"
+                            value={newFacFieldValue}
+                            onChange={(e) => setNewFacFieldValue(e.target.value)}
+                            placeholder="Value or URL"
+                            className="sm:col-span-5 px-2 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                          <select
+                            value={newFacFieldType}
+                            onChange={(e) => setNewFacFieldType(e.target.value as 'text' | 'url')}
+                            className="sm:col-span-3 px-2 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          >
+                            <option value="text">Text</option>
+                            <option value="url">Link URL</option>
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newFacFieldLabel.trim() || !newFacFieldValue.trim()) {
+                              notify('err', 'Enter both field label and value.');
+                              return;
+                            }
+                            setFacCustomFields((prev) => [
+                              ...prev,
+                              {
+                                id: `ff-${Date.now()}`,
+                                label: newFacFieldLabel.trim(),
+                                value: newFacFieldValue.trim(),
+                                fieldType: newFacFieldType,
+                              },
+                            ]);
+                            setNewFacFieldLabel('');
+                            setNewFacFieldValue('');
+                          }}
+                          className="px-2.5 py-1 rounded text-[11px] font-semibold text-white"
+                          style={{ backgroundColor: 'var(--secondary-color)' }}
+                        >
+                          + Add Custom Field
+                        </button>
+                        {facCustomFields.length > 0 && (
+                          <div className="space-y-1">
+                            {facCustomFields.map((cf) => (
+                              <div key={cf.id} className="flex items-center justify-between gap-2 px-2.5 py-1 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs">
+                                <span className="truncate">
+                                  <strong>{cf.label}:</strong> {cf.value}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setFacCustomFields((prev) => prev.filter((x) => x.id !== cf.id))}
+                                  className="text-rose-600 p-0.5"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       <button
                         type="submit"
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white"
@@ -2119,7 +2673,7 @@ export function AdminDashboard({
                               <div className="min-w-0">
                                 <p className="font-semibold truncate">{f.name}</p>
                                 <p className="text-xs text-stone-500 truncate">
-                                  {f.designation} · {f.qualification}
+                                  {f.designation} · {f.qualification} · {(f.customFields || []).length} custom fields
                                 </p>
                               </div>
                             </div>
@@ -2133,8 +2687,12 @@ export function AdminDashboard({
                                   setFacQual(f.qualification);
                                   setFacSpec(f.specialization);
                                   setFacEmail(f.email);
+                                  setFacPhone(f.phone || '');
                                   setFacExp(f.experienceYears);
                                   setFacPhoto(f.photoUrl);
+                                  setFacExtUrl(f.externalProfileUrl || '');
+                                  setFacExtLabel(f.externalProfileLabel || 'Google Scholar / Profile');
+                                  setFacCustomFields(f.customFields || []);
                                 }}
                                 className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs"
                               >
@@ -2158,30 +2716,62 @@ export function AdminDashboard({
                   </div>
                 )}
 
-                {/* Department Labs Manager */}
+                {/* Department Labs Manager (with Photo Upload & Edit) */}
                 {deptPanelMode === 'labs' && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <form
                       onSubmit={async (e) => {
                         e.preventDefault();
                         try {
-                          await adminFetch(`/api/admin/departments/${currentDept.id}/labs`, 'POST', {
+                          const labPayload = {
                             name: labName,
                             areaSqFt: labArea,
                             equipmentSummary: labEquip,
                             incharge: labIncharge || currentDept.hodName,
-                          });
+                            photoUrl: labPhotoUrl || undefined,
+                          };
+                          if (editingLabId) {
+                            await adminFetch(
+                              `/api/admin/departments/${currentDept.id}/labs/${editingLabId}`,
+                              'PUT',
+                              labPayload,
+                            );
+                            notify('ok', `Updated laboratory "${labName}".`);
+                          } else {
+                            await adminFetch(`/api/admin/departments/${currentDept.id}/labs`, 'POST', labPayload);
+                            notify('ok', 'Added department laboratory.');
+                          }
+                          setEditingLabId(null);
                           setLabName('');
                           setLabEquip('');
                           setLabIncharge('');
-                          notify('ok', 'Added department laboratory.');
+                          setLabPhotoUrl('');
                         } catch (err) {
                           notify('err', (err as Error).message);
                         }
                       }}
                       className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
                     >
-                      <h2 className="text-base font-bold">Add Department Laboratory</h2>
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-base font-bold">
+                          {editingLabId ? 'Edit Department Laboratory' : 'Add Department Laboratory'}
+                        </h2>
+                        {editingLabId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingLabId(null);
+                              setLabName('');
+                              setLabEquip('');
+                              setLabIncharge('');
+                              setLabPhotoUrl('');
+                            }}
+                            className="text-xs underline"
+                          >
+                            Cancel Edit
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         required
@@ -2213,12 +2803,18 @@ export function AdminDashboard({
                         placeholder="Key equipment & software..."
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
+                      <ImageUploader
+                        label="Laboratory Photo (Optional)"
+                        value={labPhotoUrl}
+                        onChange={setLabPhotoUrl}
+                        uploadBinary={uploadBinaryFile}
+                      />
                       <button
                         type="submit"
                         className="px-4 py-2 rounded-lg text-xs font-semibold text-white"
                         style={{ backgroundColor: 'var(--primary-color)' }}
                       >
-                        Add Laboratory
+                        {editingLabId ? 'Update Laboratory' : 'Add Laboratory'}
                       </button>
                     </form>
 
@@ -2227,30 +2823,207 @@ export function AdminDashboard({
                       <ul className="divide-y divide-stone-100 dark:divide-slate-800">
                         {currentDept.labs.map((lab) => (
                           <li key={lab.id} className="py-3 flex items-start justify-between gap-3 text-sm">
-                            <div>
-                              <p className="font-semibold">{lab.name}</p>
-                              <p className="text-xs text-stone-500">
-                                {lab.areaSqFt} sq.ft · In-charge: {lab.incharge}
-                              </p>
-                              <p className="text-xs text-stone-600 dark:text-slate-300 mt-1">{lab.equipmentSummary}</p>
+                            <div className="flex items-start gap-3 min-w-0">
+                              {lab.photoUrl && (
+                                <img src={lab.photoUrl} alt={lab.name} className="w-12 h-10 rounded object-cover shrink-0 border border-stone-200" />
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-semibold">{lab.name}</p>
+                                <p className="text-xs text-stone-500">
+                                  {lab.areaSqFt} sq.ft · In-charge: {lab.incharge}
+                                </p>
+                                <p className="text-xs text-stone-600 dark:text-slate-300 mt-1">{lab.equipmentSummary}</p>
+                              </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                adminFetch(`/api/admin/departments/${currentDept.id}/labs/${lab.id}`, 'DELETE').then(() =>
-                                  notify('ok', 'Laboratory deleted.'),
-                                )
-                              }
-                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingLabId(lab.id);
+                                  setLabName(lab.name);
+                                  setLabArea(lab.areaSqFt);
+                                  setLabEquip(lab.equipmentSummary);
+                                  setLabIncharge(lab.incharge);
+                                  setLabPhotoUrl(lab.photoUrl || '');
+                                }}
+                                className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  adminFetch(`/api/admin/departments/${currentDept.id}/labs/${lab.id}`, 'DELETE').then(() =>
+                                    notify('ok', 'Laboratory deleted.'),
+                                  )
+                                }
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </li>
                         ))}
                       </ul>
                     </div>
                   </div>
                 )}
+
+                {/* Department Library Manager & Faculty Field Schema */}
+                {deptPanelMode === 'library_fields' && (() => {
+                  const lib = deptDraft.library ?? currentDept.library ?? {
+                    title: `${currentDept.shortName} Departmental Library`,
+                    description: 'Departmental reference library with textbooks, project reports, and IEEE access.',
+                    photoUrl: '',
+                    totalVolumes: 1200,
+                    seatingCapacity: 24,
+                    incharge: currentDept.hodName,
+                    timings: '9:30 AM – 5:15 PM (Mon – Sat)',
+                  };
+                  const schema = deptDraft.facultyFieldSchema ?? currentDept.facultyFieldSchema ?? [
+                    'Area of Expertise',
+                    'Research Publications',
+                    'External Profile URL',
+                  ];
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          try {
+                            await adminFetch(`/api/admin/departments/${currentDept.id}`, 'PUT', {
+                              library: lib,
+                              facultyFieldSchema: schema,
+                            });
+                            notify('ok', 'Saved Department Library & Faculty Field Schema.');
+                          } catch (err) {
+                            notify('err', (err as Error).message);
+                          }
+                        }}
+                        className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3.5"
+                      >
+                        <h2 className="text-base font-bold">Department Library Showcase &amp; Photo Upload</h2>
+                        <input
+                          type="text"
+                          value={lib.title}
+                          onChange={(e) => setDeptDraft({ ...deptDraft, library: { ...lib, title: e.target.value } })}
+                          placeholder="Library Title"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                          <input
+                            type="number"
+                            value={lib.totalVolumes ?? 1200}
+                            onChange={(e) =>
+                              setDeptDraft({ ...deptDraft, library: { ...lib, totalVolumes: Number(e.target.value) } })
+                            }
+                            placeholder="Volumes"
+                            className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                          <input
+                            type="number"
+                            value={lib.seatingCapacity ?? 24}
+                            onChange={(e) =>
+                              setDeptDraft({ ...deptDraft, library: { ...lib, seatingCapacity: Number(e.target.value) } })
+                            }
+                            placeholder="Seats"
+                            className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                          <input
+                            type="text"
+                            value={lib.timings || ''}
+                            onChange={(e) => setDeptDraft({ ...deptDraft, library: { ...lib, timings: e.target.value } })}
+                            placeholder="Timings"
+                            className="col-span-2 px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                        </div>
+                        <input
+                          type="text"
+                          value={lib.incharge || ''}
+                          onChange={(e) => setDeptDraft({ ...deptDraft, library: { ...lib, incharge: e.target.value } })}
+                          placeholder="Library In-Charge"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <textarea
+                          rows={2}
+                          value={lib.description}
+                          onChange={(e) =>
+                            setDeptDraft({ ...deptDraft, library: { ...lib, description: e.target.value } })
+                          }
+                          placeholder="Department library collections, journals & facilities..."
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <ImageUploader
+                          label="Department Library Photo"
+                          value={lib.photoUrl || ''}
+                          onChange={(url) => setDeptDraft({ ...deptDraft, library: { ...lib, photoUrl: url } })}
+                          uploadBinary={uploadBinaryFile}
+                        />
+                        <button
+                          type="submit"
+                          className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                          style={{ backgroundColor: 'var(--primary-color)' }}
+                        >
+                          Save Department Library &amp; Schema
+                        </button>
+                      </form>
+
+                      <div className="lg:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+                        <h3 className="text-sm font-bold">Standard Faculty Profile Custom Fields</h3>
+                        <p className="text-xs text-stone-500">
+                          Manage department-wide preset fields (e.g., ORCID, Patents, Consultancy) available in one click when adding/editing faculty.
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newSchemaField}
+                            onChange={(e) => setNewSchemaField(e.target.value)}
+                            placeholder="New Field Name (e.g. Scopus ID)"
+                            className="flex-1 px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!newSchemaField.trim()) return;
+                              const updated = [...schema, newSchemaField.trim()];
+                              setDeptDraft({ ...deptDraft, facultyFieldSchema: updated });
+                              setNewSchemaField('');
+                              await adminFetch(`/api/admin/departments/${currentDept.id}`, 'PUT', {
+                                facultyFieldSchema: updated,
+                              });
+                              notify('ok', 'Added faculty custom field preset.');
+                            }}
+                            className="px-3 py-1.5 rounded text-xs font-semibold text-white"
+                            style={{ backgroundColor: 'var(--secondary-color)' }}
+                          >
+                            + Add
+                          </button>
+                        </div>
+                        <ul className="divide-y divide-stone-100 dark:divide-slate-800">
+                          {schema.map((fieldLbl, fIdx) => (
+                            <li key={fIdx} className="py-2 flex items-center justify-between text-xs">
+                              <span className="font-semibold">{fieldLbl}</span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const updated = schema.filter((_, i) => i !== fIdx);
+                                  setDeptDraft({ ...deptDraft, facultyFieldSchema: updated });
+                                  await adminFetch(`/api/admin/departments/${currentDept.id}`, 'PUT', {
+                                    facultyFieldSchema: updated,
+                                  });
+                                  notify('ok', `Removed field "${fieldLbl}".`);
+                                }}
+                                className="text-rose-600 p-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Edit Department Overview, Vision, Mission, Hero Image */}
                 {deptPanelMode === 'profile' && (
@@ -2387,10 +3160,217 @@ export function AdminDashboard({
                 >
                   Homepage Sections, Stats &amp; Badges Builder
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setHomepageMode('components')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold ${
+                    homepageMode === 'components' ? 'text-white' : 'text-stone-700 dark:text-slate-300 hover:bg-stone-100'
+                  }`}
+                  style={homepageMode === 'components' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                >
+                  Custom HTML Components ({(state.settings?.customHomeComponents || []).length})
+                </button>
               </div>
             )}
 
-          {homepageMode === 'sections' && canSettings && settingsDraft ? (
+          {homepageMode === 'components' && canSettings ? (
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  try {
+                    if (editingHomeCompId) {
+                      await adminFetch(`/api/admin/home-components/${editingHomeCompId}`, 'PUT', {
+                        title: homeCompTitle,
+                        placement: homeCompPlacement,
+                        contentHtml: homeCompHtml,
+                        isActive: homeCompActive,
+                      });
+                      notify('ok', `Updated Homepage HTML Component "${homeCompTitle}".`);
+                    } else {
+                      await adminFetch('/api/admin/home-components', 'POST', {
+                        title: homeCompTitle,
+                        placement: homeCompPlacement,
+                        contentHtml: homeCompHtml,
+                        isActive: homeCompActive,
+                      });
+                      notify('ok', `Published Homepage HTML Component "${homeCompTitle}".`);
+                    }
+                    setEditingHomeCompId(null);
+                    setHomeCompTitle('');
+                  } catch (err) {
+                    notify('err', (err as Error).message);
+                  }
+                }}
+                className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-bold">
+                      {editingHomeCompId ? `Edit Component: ${homeCompTitle}` : 'Add Custom Homepage HTML Component'}
+                    </h2>
+                    <p className="text-xs text-stone-500">
+                      Insert custom visual cards, tables, admission banners, or widgets directly onto the Homepage without touching code.
+                    </p>
+                  </div>
+                  {editingHomeCompId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingHomeCompId(null);
+                        setHomeCompTitle('');
+                      }}
+                      className="text-xs underline"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Component Title</label>
+                    <input
+                      type="text"
+                      required
+                      value={homeCompTitle}
+                      onChange={(e) => setHomeCompTitle(e.target.value)}
+                      placeholder="e.g. CAP Admission Notice Banner"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Homepage Placement Slot</label>
+                    <select
+                      value={homeCompPlacement}
+                      onChange={(e) => setHomeCompPlacement(e.target.value as HomeComponentPlacement)}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    >
+                      <option value="after-hero">Slot 1: Directly After Hero Slider</option>
+                      <option value="after-about">Slot 2: After About &amp; Vision Section</option>
+                      <option value="after-depts">Slot 3: After Departments &amp; Exam Portal</option>
+                      <option value="before-footer">Slot 4: Before Footer</option>
+                    </select>
+                  </div>
+                </div>
+                <RichTextEditor
+                  label="Custom Component Design (Visual Block Builder + Full HTML Editor)"
+                  value={homeCompHtml}
+                  onChange={setHomeCompHtml}
+                  uploadBinary={uploadBinaryFile}
+                  minHeight={220}
+                />
+                <div className="flex items-center justify-between">
+                  <label className="inline-flex items-center gap-2 text-xs font-medium">
+                    <input
+                      type="checkbox"
+                      checked={homeCompActive}
+                      onChange={(e) => setHomeCompActive(e.target.checked)}
+                    />
+                    <span>Active &amp; Visible on Public Homepage</span>
+                  </label>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{editingHomeCompId ? 'Save Component' : 'Publish Homepage Component'}</span>
+                  </button>
+                </div>
+              </form>
+
+              <div className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+                <h3 className="text-sm font-bold">
+                  Custom Homepage Blocks ({(state.settings?.customHomeComponents || []).length})
+                </h3>
+                {(state.settings?.customHomeComponents || []).length === 0 ? (
+                  <p className="text-xs text-stone-500 py-4">
+                    No custom HTML components added yet. Use the Visual Editor on the left to publish one.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-stone-100 dark:divide-slate-800">
+                    {(state.settings?.customHomeComponents || []).map((comp: CustomHomeComponent, idx: number) => {
+                      const list: CustomHomeComponent[] = state.settings?.customHomeComponents || [];
+                      const moveComp = async (dir: -1 | 1) => {
+                        const target = idx + dir;
+                        if (target < 0 || target >= list.length) return;
+                        const ids = list.map((x) => x.id);
+                        [ids[idx], ids[target]] = [ids[target], ids[idx]];
+                        await adminFetch('/api/admin/home-components/reorder', 'PUT', { orderedIds: ids });
+                        notify('ok', `Reordered "${comp.title}".`);
+                      };
+                      return (
+                        <li key={comp.id} className="py-3 flex items-center justify-between gap-2 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm truncate">{comp.title}</p>
+                            <p className="text-stone-500">
+                              Slot: {comp.placement} · Order #{comp.sortOrder} · {comp.isActive ? 'Active' : 'Hidden'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => moveComp(-1)}
+                              disabled={idx === 0}
+                              className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveComp(1)}
+                              disabled={idx === list.length - 1}
+                              className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                adminFetch(`/api/admin/home-components/${comp.id}`, 'PUT', {
+                                  isActive: !comp.isActive,
+                                }).then(() => notify('ok', comp.isActive ? 'Component hidden.' : 'Component enabled.'))
+                              }
+                              className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                            >
+                              {comp.isActive ? 'Hide' : 'Show'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingHomeCompId(comp.id);
+                                setHomeCompTitle(comp.title);
+                                setHomeCompPlacement(comp.placement);
+                                setHomeCompHtml(comp.contentHtml);
+                                setHomeCompActive(comp.isActive);
+                              }}
+                              className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Delete ${comp.title}`}
+                              onClick={() =>
+                                adminFetch(`/api/admin/home-components/${comp.id}`, 'DELETE').then(() =>
+                                  notify('ok', `Deleted component "${comp.title}".`),
+                                )
+                              }
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : homepageMode === 'sections' && canSettings && settingsDraft ? (
             <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 dark:border-slate-800 pb-3">
                 <div>
@@ -3288,13 +4268,32 @@ export function AdminDashboard({
           </div>
         )}
 
-        {/* 7. DOCUMENTS & MEDIA UPLOAD MANAGER */}
+        {/* 7. DOCUMENTS & MEDIA UPLOAD OR EXTERNAL LINK MANAGER */}
         {activeTab === 'documents' && canDocs && state && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
+                  if (docSourceType === 'external') {
+                    const urlCheck = validateExternalDocumentUrl(docExternalUrl);
+                    if (!urlCheck.valid) {
+                      notify('err', urlCheck.reason || 'Provide a valid Google Drive or https:// document URL.');
+                      return;
+                    }
+                    await adminFetch('/api/admin/documents', 'POST', {
+                      title: docTitle,
+                      category: docCategory,
+                      sourceType: 'external',
+                      externalUrl: docExternalUrl.trim(),
+                      isQuickLink: docQuickLink,
+                    });
+                    setDocTitle('');
+                    setDocExternalUrl('');
+                    notify('ok', 'External document link published to Repository.');
+                    return;
+                  }
+
                   const fileName = docFile ? docFile.name : `${docTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`;
                   const mimeType = docFile ? docFile.type || 'application/pdf' : 'application/pdf';
                   const fileSizeBytes = docFile ? docFile.size : 245760;
@@ -3317,6 +4316,7 @@ export function AdminDashboard({
                   await adminFetch('/api/admin/documents', 'POST', {
                     title: docTitle,
                     category: docCategory,
+                    sourceType: 'upload',
                     fileName,
                     mimeType,
                     fileSizeBytes,
@@ -3332,9 +4332,33 @@ export function AdminDashboard({
               }}
               className="lg:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4"
             >
-              <h2 className="text-base font-bold">Upload Statutory Document / Circular</h2>
+              <h2 className="text-base font-bold">Publish Statutory Document / Circular</h2>
+              <div className="inline-flex rounded-lg border border-stone-300 dark:border-slate-700 overflow-hidden bg-stone-50 dark:bg-slate-800 w-full">
+                <button
+                  type="button"
+                  onClick={() => setDocSourceType('upload')}
+                  className={`flex-1 py-1.5 text-xs font-semibold ${
+                    docSourceType === 'upload' ? 'text-white' : 'text-stone-700 dark:text-slate-300'
+                  }`}
+                  style={docSourceType === 'upload' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                >
+                  Upload Local File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocSourceType('external')}
+                  className={`flex-1 py-1.5 text-xs font-semibold ${
+                    docSourceType === 'external' ? 'text-white' : 'text-stone-700 dark:text-slate-300'
+                  }`}
+                  style={docSourceType === 'external' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                >
+                  External Link (Google Drive / URL)
+                </button>
+              </div>
               <p className="text-xs text-stone-500 dark:text-slate-400">
-                Strict MIME verification active: PDF, JPG, PNG, DOCX, XLSX only. Executables (.php, .exe, .sh) are rejected.
+                {docSourceType === 'upload'
+                  ? 'Strict MIME verification active: PDF, JPG, PNG, DOCX, XLSX only. Executables (.php, .exe, .sh) are rejected.'
+                  : 'Link directly to a Google Drive, OneDrive, University portal, or Institutional CDN PDF (https://).'}
               </p>
               <div>
                 <label className="block text-xs font-semibold mb-1">Document Title</label>
@@ -3363,15 +4387,29 @@ export function AdminDashboard({
                   <option value="Circulars & Forms">Circulars &amp; Forms</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Select PDF / Document File</label>
-                <input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx"
-                  onChange={(e) => setDocFile(e.target.files?.[0] || null)}
-                  className="w-full text-xs text-stone-600 dark:text-slate-300"
-                />
-              </div>
+              {docSourceType === 'upload' ? (
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Select PDF / Document File</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx"
+                    onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-stone-600 dark:text-slate-300"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold mb-1">External Download URL (Google Drive / Portal)</label>
+                  <input
+                    type="url"
+                    required
+                    value={docExternalUrl}
+                    onChange={(e) => setDocExternalUrl(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/..."
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+              )}
               <label className="inline-flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"
@@ -3386,7 +4424,7 @@ export function AdminDashboard({
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
                 <Upload className="w-4 h-4" />
-                <span>Upload &amp; Publish</span>
+                <span>{docSourceType === 'external' ? 'Publish External Link' : 'Upload & Publish'}</span>
               </button>
             </form>
 
@@ -3401,8 +4439,9 @@ export function AdminDashboard({
                       <FileText className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                       <div className="min-w-0">
                         <p className="font-semibold truncate">{doc.title}</p>
-                        <p className="text-xs text-stone-500 font-mono-tabular">
-                          {doc.category} · {formatBytes(doc.fileSizeBytes)} · {doc.uploadedAt}
+                        <p className="text-xs text-stone-500 font-mono-tabular truncate">
+                          {doc.category} ·{' '}
+                          {doc.sourceType === 'external' ? 'External URL' : formatBytes(doc.fileSizeBytes)} · {doc.uploadedAt}
                         </p>
                       </div>
                     </div>
@@ -3841,7 +4880,7 @@ export function AdminDashboard({
           </div>
         )}
 
-        {/* 10. USERS & AUDIT LOGS (SUPER ADMIN) */}
+        {/* 10. USERS, GRANULAR PER-PAGE RBAC & AUDIT LOGS (SUPER ADMIN) */}
         {activeTab === 'users' && canUsers && state && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -3855,10 +4894,12 @@ export function AdminDashboard({
                       password: newUserPass,
                       role: newUserRole,
                       assignedDepartmentId: newUserRole === 'department_admin' ? newUserDept : null,
+                      allowedCategories: newUserAllowedCats,
                     });
                     setNewUserName('');
                     setNewUserEmail('');
                     setNewUserPass('');
+                    setNewUserAllowedCats([]);
                     notify('ok', 'Created RBAC user account.');
                   } catch (err) {
                     notify('err', (err as Error).message);
@@ -3893,13 +4934,20 @@ export function AdminDashboard({
                 />
                 <select
                   value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+                  onChange={(e) => {
+                    const roleVal = e.target.value as UserRole;
+                    setNewUserRole(roleVal);
+                    if (roleVal === 'exam_controller' && newUserAllowedCats.length === 0) {
+                      setNewUserAllowedCats(['examination']);
+                    }
+                  }}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 >
                   <option value="super_admin">Super Admin</option>
                   <option value="content_editor">Content Editor / PRO</option>
                   <option value="department_admin">Department Admin</option>
                   <option value="iqac_officer">IQAC / Compliance Officer</option>
+                  <option value="exam_controller">Controller of Examinations (CoE)</option>
                 </select>
                 {newUserRole === 'department_admin' && (
                   <select
@@ -3914,6 +4962,27 @@ export function AdminDashboard({
                     ))}
                   </select>
                 )}
+                {newUserRole !== 'super_admin' && (
+                  <div className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-1.5">
+                    <p className="text-xs font-semibold">Allowed Portal Categories (Optional Scoping):</p>
+                    <div className="grid grid-cols-2 gap-1 text-[11px]">
+                      {state.categories.map((c) => (
+                        <label key={c.slug} className="inline-flex items-center gap-1.5 truncate">
+                          <input
+                            type="checkbox"
+                            checked={newUserAllowedCats.includes(c.slug)}
+                            onChange={(e) =>
+                              setNewUserAllowedCats((prev) =>
+                                e.target.checked ? [...prev, c.slug] : prev.filter((s) => s !== c.slug),
+                              )
+                            }
+                          />
+                          <span className="truncate">{c.shortLabel || c.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button
                   type="submit"
                   className="w-full py-2 rounded-lg text-sm font-semibold text-white"
@@ -3925,28 +4994,164 @@ export function AdminDashboard({
 
               <div className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 font-bold text-sm">
-                  CMS Users ({state.users.length})
+                  CMS Users &amp; Page-Level Permissions ({state.users.length})
                 </div>
                 <div className="divide-y divide-stone-100 dark:divide-slate-800">
-                  {state.users.map((u) => (
-                    <div key={u.id} className="p-3.5 flex items-center justify-between text-sm">
-                      <div>
-                        <p className="font-semibold">{u.fullName}</p>
-                        <p className="text-xs text-stone-500">
-                          {u.email} · {u.role} {u.assignedDepartmentId ? `(Dept #${u.assignedDepartmentId})` : ''}
-                        </p>
+                  {state.users.map((u) => {
+                    const isEditing = editingPermsUserId === u.id;
+                    return (
+                      <div key={u.id} className="p-3.5 space-y-3 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold">{u.fullName}</p>
+                            <p className="text-xs text-stone-500">
+                              {u.email} · {u.role} {u.assignedDepartmentId ? `(Dept #${u.assignedDepartmentId})` : ''}
+                              {u.allowedCategories && u.allowedCategories.length > 0
+                                ? ` · Cats: ${u.allowedCategories.join(', ')}`
+                                : ''}
+                              {u.allowedPageIds && u.allowedPageIds.length > 0
+                                ? ` · Pages: ${u.allowedPageIds.length} selected`
+                                : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isEditing) {
+                                  setEditingPermsUserId(null);
+                                  return;
+                                }
+                                setEditingPermsUserId(u.id);
+                                setPermRole(u.role);
+                                setPermDeptId(u.assignedDepartmentId || state.departments[0]?.id || 1);
+                                setPermAllowedCats(u.allowedCategories || []);
+                                setPermAllowedPageIds(u.allowedPageIds || []);
+                              }}
+                              className="px-2.5 py-1 rounded text-xs font-semibold border border-stone-300 dark:border-slate-700 hover:bg-stone-100 dark:hover:bg-slate-800"
+                            >
+                              {isEditing ? 'Close' : 'Permissions'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => adminFetch(`/api/admin/users/${u.id}/toggle`, 'PUT').then(() => notify('ok', 'Updated user status')).catch((e) => notify('err', e.message))}
+                              className={`px-2.5 py-1 rounded text-xs font-semibold border ${
+                                u.isActive ? 'border-emerald-300 text-emerald-700' : 'border-rose-300 text-rose-700'
+                              }`}
+                            >
+                              {u.isActive ? 'Active' : 'Disabled'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {isEditing && (
+                          <div className="p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-3 text-xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-bold">Granular Category &amp; Per-Page RBAC Access</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPermRole('exam_controller');
+                                  setPermAllowedCats(['examination']);
+                                  setPermAllowedPageIds([]);
+                                }}
+                                className="px-2 py-1 rounded border border-amber-400 bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 font-semibold text-[11px]"
+                              >
+                                Preset: Examination Section Only
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <select
+                                value={permRole}
+                                onChange={(e) => setPermRole(e.target.value as UserRole)}
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                              >
+                                <option value="super_admin">Super Admin</option>
+                                <option value="content_editor">Content Editor / PRO</option>
+                                <option value="department_admin">Department Admin</option>
+                                <option value="iqac_officer">IQAC Officer</option>
+                                <option value="exam_controller">Controller of Examinations (CoE)</option>
+                              </select>
+                              {permRole === 'department_admin' && (
+                                <select
+                                  value={permDeptId}
+                                  onChange={(e) => setPermDeptId(Number(e.target.value))}
+                                  className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                                >
+                                  {state.departments.map((d) => (
+                                    <option key={d.id} value={d.id}>
+                                      Dept: {d.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-semibold mb-1">Allowed Categories (uncheck all for default role behavior):</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                {state.categories.map((c) => (
+                                  <label key={c.slug} className="inline-flex items-center gap-1.5 truncate">
+                                    <input
+                                      type="checkbox"
+                                      checked={permAllowedCats.includes(c.slug)}
+                                      onChange={(e) =>
+                                        setPermAllowedCats((prev) =>
+                                          e.target.checked ? [...prev, c.slug] : prev.filter((s) => s !== c.slug),
+                                        )
+                                      }
+                                    />
+                                    <span className="truncate">{c.shortLabel || c.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="font-semibold mb-1">Explicit Per-Page Access (overrides category if any checked):</p>
+                              <div className="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1 p-2 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                                {state.pages.map((pg) => (
+                                  <label key={pg.id} className="inline-flex items-center gap-1.5 truncate text-[11px]">
+                                    <input
+                                      type="checkbox"
+                                      checked={permAllowedPageIds.includes(pg.id)}
+                                      onChange={(e) =>
+                                        setPermAllowedPageIds((prev) =>
+                                          e.target.checked ? [...prev, pg.id] : prev.filter((id) => id !== pg.id),
+                                        )
+                                      }
+                                    />
+                                    <span className="truncate">
+                                      [{pg.categorySlug}] {pg.title}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await adminFetch(`/api/admin/users/${u.id}/permissions`, 'PUT', {
+                                    role: permRole,
+                                    assignedDepartmentId: permRole === 'department_admin' ? permDeptId : null,
+                                    allowedCategories: permAllowedCats,
+                                    allowedPageIds: permAllowedPageIds,
+                                  });
+                                  setEditingPermsUserId(null);
+                                  notify('ok', `Saved granular RBAC permissions for ${u.fullName}.`);
+                                } catch (err) {
+                                  notify('err', (err as Error).message);
+                                }
+                              }}
+                              className="px-3.5 py-1.5 rounded text-xs font-semibold text-white"
+                              style={{ backgroundColor: 'var(--primary-color)' }}
+                            >
+                              Save User Permissions
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => adminFetch(`/api/admin/users/${u.id}/toggle`, 'PUT').then(() => notify('ok', 'Updated user status')).catch((e) => notify('err', e.message))}
-                        className={`px-2.5 py-1 rounded text-xs font-semibold border ${
-                          u.isActive ? 'border-emerald-300 text-emerald-700' : 'border-rose-300 text-rose-700'
-                        }`}
-                      >
-                        {u.isActive ? 'Active' : 'Disabled'}
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
