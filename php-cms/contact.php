@@ -5,8 +5,8 @@ $pdo = getDB();
 
 $dirQuery = trim($_GET['q'] ?? '');
 $stmt = $dirQuery
-    ? $pdo->prepare('SELECT * FROM telephone_directory WHERE section LIKE ? OR officer_name LIKE ? OR email LIKE ?')
-    : $pdo->query('SELECT * FROM telephone_directory');
+    ? $pdo->prepare('SELECT * FROM telephone_directory WHERE section LIKE ? OR officer_name LIKE ? OR email LIKE ? ORDER BY sort_order ASC, id ASC')
+    : $pdo->query('SELECT * FROM telephone_directory ORDER BY sort_order ASC, id ASC');
 if ($dirQuery) {
     $like = '%' . $dirQuery . '%';
     $stmt->execute([$like, $like, $like]);

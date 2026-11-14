@@ -9,7 +9,11 @@ $msg = '';
 $err = '';
 
 $cats = $pdo->query('SELECT id, slug, name FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
-$allPages = $pdo->query('SELECT p.id, p.title, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id ORDER BY c.sort_order ASC, p.sort_order ASC')->fetchAll();
+$allPages = $pdo->query('SELECT p.id, p.title, p.slug, c.id AS cat_id, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id ORDER BY c.sort_order ASC, p.sort_order ASC')->fetchAll();
+$pagesGrouped = [];
+foreach ($allPages as $pg) {
+    $pagesGrouped[$pg['cat_name']][] = $pg;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
@@ -71,6 +75,40 @@ $logs  = $pdo->query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 25
 
 $adminPageTitle = 'Users, Per-Page RBAC & Security Audit Logs';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
+$renderPerPageSelector = static function (array $selectedIds, string $uid) use ($pagesGrouped): void {
+    $selectedMap = array_flip(array_map('intval', $selectedIds));
+    ?>
+    <div id="rbac-pages-wrap-<?= e($uid) ?>" style="border:1px solid var(--border-color);border-radius:8px;padding:0.7rem;background:var(--surface-bg);margin-bottom:0.85rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.55rem;">
+        <strong style="font-size:0.84rem;">Individual Page-Wise Access Control (Strict Override):</strong>
+        <input type="search" placeholder="Filter pages..." oninput="filterRbacPages('<?= e($uid) ?>', this.value)" style="padding:0.3rem 0.5rem;font-size:0.8rem;border:1px solid var(--border-color);border-radius:6px;min-width:190px;">
+      </div>
+      <div style="max-height:230px;overflow-y:auto;display:grid;gap:0.55rem;">
+        <?php foreach ($pagesGrouped as $catTitle => $catPages):
+          $grpKey = $uid . '-' . substr(md5($catTitle), 0, 8);
+        ?>
+          <div style="border:1px solid var(--border-color);border-radius:6px;background:#fff;padding:0.45rem 0.6rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;border-bottom:1px solid var(--border-color);padding-bottom:0.25rem;">
+              <strong style="font-size:0.8rem;color:var(--primary-color);"><?= e($catTitle) ?> (<?= count($catPages) ?>)</strong>
+              <span style="display:flex;gap:0.35rem;">
+                <button type="button" class="btn-secondary" style="padding:1px 6px;font-size:0.72rem;" onclick="toggleRbacGroup('<?= e($grpKey) ?>', true)">Select All</button>
+                <button type="button" class="btn-secondary" style="padding:1px 6px;font-size:0.72rem;" onclick="toggleRbacGroup('<?= e($grpKey) ?>', false)">Clear</button>
+              </span>
+            </div>
+            <div class="rbac-group-<?= e($grpKey) ?>" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:0.3rem;font-size:0.8rem;">
+              <?php foreach ($catPages as $pg): ?>
+                <label class="rbac-page-item" data-search="<?= e(strtolower($catTitle . ' ' . $pg['title'] . ' ' . $pg['slug'])) ?>" style="display:flex;align-items:flex-start;gap:0.35rem;">
+                  <input type="checkbox" name="allowed_page_ids[]" value="<?= (int)$pg['id'] ?>" <?= isset($selectedMap[(int)$pg['id']]) ? 'checked' : '' ?>>
+                  <span><?= e($pg['title']) ?></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <?php
+};
 ?>
   <?php if ($editingUser):
     $uCats = !empty($editingUser['allowed_categories_json']) ? json_decode((string)$editingUser['allowed_categories_json'], true) : [];
@@ -102,7 +140,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       </div>
 
       <div style="margin-bottom:0.85rem;">
-        <strong style="display:block;font-size:0.85rem;margin-bottom:0.35rem;">Allowed Categories (leave empty for role default):</strong>
+        <strong style="display:block;font-size:0.85rem;margin-bottom:0.35rem;">Allowed Categories (leave empty if using per-page access below or role default):</strong>
         <div style="display:flex;gap:0.85rem;flex-wrap:wrap;font-size:0.85rem;">
           <?php foreach ($cats as $c): ?>
             <label><input type="checkbox" name="allowed_categories[]" value="<?= e($c['slug']) ?>" <?= in_array($c['slug'], $uCats, true) ? 'checked' : '' ?>> <?= e($c['name']) ?></label>
@@ -110,14 +148,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         </div>
       </div>
 
-      <div style="margin-bottom:1rem;">
-        <strong style="display:block;font-size:0.85rem;margin-bottom:0.35rem;">Allowed Specific Pages (Per-Page Override — leave empty to allow all pages in permitted categories):</strong>
-        <div style="max-height:190px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;padding:0.65rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0.35rem;font-size:0.82rem;">
-          <?php foreach ($allPages as $pg): ?>
-            <label><input type="checkbox" name="allowed_page_ids[]" value="<?= (int)$pg['id'] ?>" <?= in_array((int)$pg['id'], array_map('intval', $uPages), true) ? 'checked' : '' ?>> [<?= e($pg['cat_name']) ?>] <?= e($pg['title']) ?></label>
-          <?php endforeach; ?>
-        </div>
-      </div>
+      <?php $renderPerPageSelector($uPages, 'edit'); ?>
 
       <button type="submit" class="btn-primary">Save Per-Page RBAC Permissions</button>
       <a href="manage_users.php" class="btn-secondary" style="margin-left:0.5rem;">Cancel</a>
@@ -150,6 +181,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <?php endforeach; ?>
         </div>
       </div>
+      <?php $renderPerPageSelector([], 'create'); ?>
       <button type="submit" class="btn-primary">Create User</button>
     </form>
 
@@ -203,4 +235,20 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       </tbody>
     </table>
   </div>
+<script>
+function toggleRbacGroup(grpKey, checked) {
+  var wrap = document.querySelector('.rbac-group-' + grpKey);
+  if (!wrap) return;
+  wrap.querySelectorAll('input[type="checkbox"]').forEach(function(cb) { cb.checked = checked; });
+}
+function filterRbacPages(uid, q) {
+  var needle = (q || '').trim().toLowerCase();
+  var root = document.getElementById('rbac-pages-wrap-' + uid);
+  if (!root) return;
+  root.querySelectorAll('.rbac-page-item').forEach(function(el) {
+    var hay = el.getAttribute('data-search') || '';
+    el.style.display = (!needle || hay.indexOf(needle) !== -1) ? 'flex' : 'none';
+  });
+}
+</script>
 <?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

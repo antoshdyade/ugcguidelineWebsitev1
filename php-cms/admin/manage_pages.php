@@ -26,14 +26,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $targetCatId = (int)($_POST['category_id'] ?? 0);
         $targetCat = $catsById[$targetCatId] ?? null;
 
-        if (!$targetCat || !canAccessCategory($user, $targetCat['slug'])) {
-            $err = 'Access Denied: Your RBAC role does not allow editing pages in this category.';
-        } elseif ($action === 'update' && !empty($_POST['page_id'])) {
+        if ($action === 'update' && !empty($_POST['page_id'])) {
             $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
             $chk->execute([(int)$_POST['page_id']]);
             $existing = $chk->fetch();
             if (!$existing || !canAccessPage($user, $existing, $existing['cat_slug'])) {
                 $err = 'Access Denied: You do not have permission to edit this specific page.';
+            } elseif (!$targetCat || ($targetCatId !== (int)$existing['category_id'] && !canAccessCategory($user, $targetCat['slug']))) {
+                $err = 'Access Denied: Your RBAC role does not allow moving this page to that category.';
+            }
+        } else {
+            if (!$targetCat || !canAccessCategory($user, $targetCat['slug'])) {
+                $err = 'Access Denied: Your RBAC role does not allow creating pages in this category.';
             }
         }
 
@@ -109,6 +113,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             logAudit($pdo, $user, 'DELETE_PAGE', 'Page', $existing['title']);
             $msg = 'Page deleted.';
         }
+    } elseif ($action === 'move' && !empty($_POST['page_id'])) {
+        $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
+        $chk->execute([(int)$_POST['page_id']]);
+        $existing = $chk->fetch();
+        if (!$existing || !canAccessPage($user, $existing, $existing['cat_slug'])) {
+            $err = 'Access Denied: Cannot reorder a page outside your RBAC scope.';
+        } else {
+            $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+            if (swapSortOrder($pdo, 'pages', (int)$existing['id'], $dir, 'category_id', (int)$existing['category_id'], 'id DESC')) {
+                logAudit($pdo, $user, 'REORDER_PAGES', 'Page', $existing['title']);
+                $msg = 'Page order updated.';
+            }
+        }
     }
 }
 
@@ -161,6 +178,13 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     </div>
   <?php endif; ?>
 
+  <?php
+  $formCats = $cats;
+  if ($editingPage && empty($formCats) && isset($catsById[(int)$editingPage['category_id']])) {
+      $formCats = [$catsById[(int)$editingPage['category_id']]];
+  }
+  ?>
+  <?php if (!empty($formCats)): ?>
   <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
     <input type="hidden" name="action" value="<?= $editingPage ? 'update' : 'create' ?>">
@@ -169,16 +193,16 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <?php endif; ?>
     <div class="grid-2" style="margin-bottom:0.75rem;">
       <select name="category_id" required style="padding:0.5rem;">
-        <?php foreach ($cats as $c): ?>
+        <?php foreach ($formCats as $c): ?>
           <?php $selectedCat = $editingPage ? (int)$editingPage['category_id'] : $filterCatId; ?>
           <option value="<?= (int)$c['id'] ?>" <?= $selectedCat === (int)$c['id'] ? 'selected' : '' ?>>
-            <?= e($c['ugc_code']) ?> · <?= e($c['name']) ?>
+            <?= e($c['name']) ?>
           </option>
         <?php endforeach; ?>
       </select>
       <div style="display:flex;gap:0.5rem;">
         <input type="text" name="slug" required value="<?= e($editingPage['slug'] ?? '') ?>" placeholder="url-slug" style="flex:1;padding:0.5rem;">
-        <input type="number" name="sort_order" min="1" value="<?= (int)($editingPage['sort_order'] ?? 1) ?>" title="Order" style="width:72px;padding:0.5rem;">
+        <input type="number" name="sort_order" min="1" value="<?= (int)($editingPage['sort_order'] ?? 1) ?>" title="Sr. No. / Order" style="width:72px;padding:0.5rem;">
       </div>
     </div>
     <input type="text" name="title" required value="<?= e($editingPage['title'] ?? '') ?>" placeholder="Page Title" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
@@ -205,13 +229,28 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <a href="manage_pages.php" class="btn-secondary" style="margin-left:0.5rem;">Cancel Edit</a>
     <?php endif; ?>
   </form>
+  <?php else: ?>
+    <div class="card" style="margin-bottom:1.5rem;color:var(--text-muted);font-size:0.9rem;">
+      Select <strong>Edit</strong> on one of your assigned pages below to modify its content.
+    </div>
+  <?php endif; ?>
 
   <div class="card">
     <table class="data-table">
-      <thead><tr><th>Title</th><th>Category</th><th>Slug</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Order</th><th>Title</th><th>Category</th><th>Slug</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         <?php foreach ($pages as $pg): ?>
           <tr>
+            <td style="white-space:nowrap;">
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                <input type="hidden" name="action" value="move">
+                <input type="hidden" name="page_id" value="<?= (int)$pg['id'] ?>">
+                <button type="submit" name="dir" value="up" class="btn-secondary" style="padding:0.2rem 0.45rem;" title="Move Up">&uarr;</button>
+                <button type="submit" name="dir" value="down" class="btn-secondary" style="padding:0.2rem 0.45rem;" title="Move Down">&darr;</button>
+              </form>
+              <span style="margin-left:4px;font-size:0.8rem;">#<?= (int)($pg['sort_order'] ?? 1) ?></span>
+            </td>
             <td><?= e($pg['title']) ?></td>
             <td><?= e($pg['cat_name']) ?></td>
             <td><?= e($pg['slug']) ?></td>

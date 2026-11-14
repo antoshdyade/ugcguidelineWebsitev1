@@ -52,6 +52,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $err = 'Please select a file to upload or choose External Link mode.';
         }
+    } elseif ($action === 'move' && !empty($_POST['doc_id'])) {
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+        if (swapSortOrder($pdo, 'documents', (int)$_POST['doc_id'], $dir, null, null, 'uploaded_at DESC, id DESC')) {
+            $msg = 'Document order updated.';
+        }
     } elseif ($action === 'delete') {
         $pdo->prepare('DELETE FROM documents WHERE id = ?')->execute([(int)$_POST['doc_id']]);
         logAudit($pdo, $user, 'DELETE_DOCUMENT', 'Document', 'ID #' . (int)$_POST['doc_id']);
@@ -59,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$docs = $pdo->query('SELECT * FROM documents ORDER BY uploaded_at DESC, id DESC')->fetchAll();
+$docs = $pdo->query('SELECT * FROM documents ORDER BY sort_order ASC, uploaded_at DESC, id DESC')->fetchAll();
 $adminPageTitle = 'Media & Statutory Document Repository';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
@@ -103,10 +108,14 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 
   <div class="card">
     <table class="data-table">
-      <thead><tr><th>Title</th><th>Category</th><th>Source / Size</th><th>URL</th><th>Action</th></tr></thead>
+      <thead><tr><th>Order</th><th>Title</th><th>Category</th><th>Source / Size</th><th>URL</th><th>Action</th></tr></thead>
       <tbody>
         <?php foreach ($docs as $d): $isExt = (($d['source_type'] ?? '') === 'external') || isExternalHttpUrl($d['file_url']); ?>
           <tr>
+            <td style="white-space:nowrap;">
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move"><input type="hidden" name="doc_id" value="<?= (int)$d['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
+              <span style="margin-left:4px;font-size:0.8rem;">#<?= (int)($d['sort_order'] ?? 1) ?></span>
+            </td>
             <td><strong><?= e($d['title']) ?></strong></td>
             <td><?= e($d['category']) ?></td>
             <td><?= $isExt ? 'External URL' : e(formatBytes((int)$d['file_size_bytes'])) ?></td>

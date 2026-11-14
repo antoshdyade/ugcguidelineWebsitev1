@@ -10,6 +10,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { sortByOrder } from '../lib/cmsLogic';
 import type { Department, DepartmentSubPagePhoto } from '../types/cms';
 
 interface DepartmentMicrositeProps {
@@ -161,10 +162,10 @@ export function DepartmentMicrosite({
                 Department Faculty &amp; Staff Directory
               </h2>
               <p className="text-xs text-stone-500 dark:text-slate-400 mb-6">
-                UGC Section 5(c) · Qualifications, Experience, Area of Expertise &amp; External Research Profiles
+                Department Qualifications, Experience, Area of Expertise &amp; External Research Profiles
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {dept.faculty.map((fac) => (
+                {sortByOrder(dept.faculty).map((fac, idx) => (
                   <div
                     key={fac.id}
                     className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 flex items-start gap-4 bg-stone-50/40 dark:bg-slate-800/30"
@@ -177,9 +178,14 @@ export function DepartmentMicrosite({
                     />
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div>
-                        <p className="text-xs font-semibold" style={{ color: 'var(--secondary-color)' }}>
-                          {fac.designation}
-                        </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold" style={{ color: 'var(--secondary-color)' }}>
+                            {fac.designation}
+                          </p>
+                          <span className="text-[11px] font-mono-tabular font-semibold px-2 py-0.5 rounded bg-stone-200/70 dark:bg-slate-700 text-stone-700 dark:text-slate-200 shrink-0">
+                            Sr. No. {fac.sortOrder ?? idx + 1}
+                          </span>
+                        </div>
                         <h3 className="text-base font-bold text-stone-900 dark:text-white">
                           {fac.name}
                         </h3>
@@ -297,7 +303,7 @@ export function DepartmentMicrosite({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100 dark:divide-slate-800">
-                    {dept.labs.map((lab) => (
+                    {sortByOrder(dept.labs).map((lab) => (
                       <tr key={lab.id}>
                         <td className="py-3 px-3 font-medium text-stone-900 dark:text-white">{lab.name}</td>
                         <td className="py-3 px-3 tabular-nums">{lab.areaSqFt}</td>

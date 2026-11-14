@@ -6,7 +6,9 @@ import {
   canUserAccessResource,
   filterDocuments,
   formatBytes,
+  formatCommitteeGroupLabel,
   searchCmsContent,
+  sortByOrder,
   validateExternalDocumentUrl,
   validateUploadMeta,
 } from './cmsLogic';
@@ -105,6 +107,32 @@ test('canUserAccessCategory and canUserAccessPage enforce granular per-category 
   assert.equal(canUserAccessCategory(singlePageEditor, 'about-hei'), false);
   assert.equal(canUserAccessPage(singlePageEditor, { id: 42, categorySlug: 'about-hei' }), true);
   assert.equal(canUserAccessPage(singlePageEditor, { id: 99, categorySlug: 'about-hei' }), false);
+
+  const mixedOverrideUser = {
+    role: 'content_editor' as const,
+    assignedDepartmentId: null,
+    allowedCategories: ['about-hei'],
+    allowedPageIds: [101],
+    isActive: true,
+  };
+  assert.equal(canUserAccessPage(mixedOverrideUser, { id: 101, categorySlug: 'about-hei' }), true);
+  assert.equal(canUserAccessPage(mixedOverrideUser, { id: 102, categorySlug: 'about-hei' }), false);
+});
+
+test('formatCommitteeGroupLabel and sortByOrder handle custom leadership groups and manual serials', () => {
+  assert.equal(formatCommitteeGroupLabel('statutory'), 'Statutory Officer');
+  assert.equal(formatCommitteeGroupLabel('Board of Studies'), 'Board of Studies');
+  assert.equal(formatCommitteeGroupLabel(''), 'Leadership & Governance');
+
+  const sorted = sortByOrder([
+    { id: 10, sortOrder: 3 },
+    { id: 20, sortOrder: 1 },
+    { id: 30, sortOrder: 2 },
+  ]);
+  assert.deepEqual(
+    sorted.map((x) => x.id),
+    [20, 30, 10],
+  );
 });
 
 test('searchCmsContent finds published pages, faculty, and documents while excluding unpublished pages', () => {

@@ -22,7 +22,7 @@ $facStmt = $pdo->prepare('SELECT * FROM faculty WHERE department_id = ? ORDER BY
 $facStmt->execute([$dept['id']]);
 $faculty = $facStmt->fetchAll();
 
-$labStmt = $pdo->prepare('SELECT * FROM department_labs WHERE department_id = ? ORDER BY id ASC');
+$labStmt = $pdo->prepare('SELECT * FROM department_labs WHERE department_id = ? ORDER BY sort_order ASC, id ASC');
 $labStmt->execute([$dept['id']]);
 $labs = $labStmt->fetchAll();
 
@@ -92,15 +92,19 @@ require_once __DIR__ . '/includes/header.php';
     <?php if ($subSlug === 'faculty'): ?>
       <h2 style="margin-top:0;">Department Faculty Directory</h2>
       <div class="grid-2">
-        <?php foreach ($faculty as $f):
+        <?php foreach ($faculty as $fIdx => $f):
           $customFields = !empty($f['custom_fields_json']) ? json_decode((string)$f['custom_fields_json'], true) : [];
           if (!is_array($customFields)) $customFields = [];
+          $srNo = !empty($f['sort_order']) ? (int)$f['sort_order'] : ($fIdx + 1);
         ?>
           <article class="card">
             <div style="display:flex;gap:0.9rem;align-items:flex-start;">
               <img src="<?= e($f['photo_url'] ?: 'assets/images/principal.jpg') ?>" alt="<?= e($f['name']) ?>" style="width:68px;height:68px;border-radius:10px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">
               <div style="min-width:0;flex:1;">
-                <small style="color:var(--secondary-color);font-weight:700;"><?= e($f['designation']) ?></small>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
+                  <small style="color:var(--secondary-color);font-weight:700;"><?= e($f['designation']) ?></small>
+                  <span style="font-size:0.7rem;font-weight:700;padding:2px 7px;border-radius:4px;background:var(--surface-bg);border:1px solid var(--border-color);color:var(--text-muted);">Sr. No. <?= $srNo ?></span>
+                </div>
                 <h3 style="margin:0.2rem 0;font-size:1.05rem;"><?= e($f['name']) ?></h3>
                 <p style="font-size:0.84rem;margin:0;color:var(--text-main);"><?= e($f['qualification']) ?> · <strong><?= e((string)$f['experience_years']) ?> yrs</strong> exp.</p>
                 <p style="font-size:0.82rem;margin:0.25rem 0 0;color:var(--text-muted);"><strong>Area of Expertise:</strong> <?= e($f['specialization']) ?></p>

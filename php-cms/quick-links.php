@@ -17,7 +17,7 @@ if ($q !== '') {
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
-$sql .= ' ORDER BY uploaded_at DESC';
+$sql .= ' ORDER BY sort_order ASC, uploaded_at DESC, id DESC';
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);

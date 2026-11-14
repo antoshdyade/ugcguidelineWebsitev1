@@ -1,13 +1,14 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
 
-$sliders    = $pdo->query('SELECT * FROM sliders WHERE is_active = 1 ORDER BY sort_order ASC')->fetchAll();
-$ticker     = $pdo->query('SELECT * FROM ticker_items WHERE is_active = 1 ORDER BY sort_order ASC')->fetchAll();
+$sliders    = $pdo->query('SELECT * FROM sliders WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+$ticker     = $pdo->query('SELECT * FROM ticker_items WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
 $depts      = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
-$events     = $pdo->query('SELECT * FROM campus_events ORDER BY event_date DESC LIMIT 5')->fetchAll();
-$docs       = $pdo->query('SELECT * FROM documents WHERE is_quick_link = 1 ORDER BY uploaded_at DESC LIMIT 6')->fetchAll();
+$events     = $pdo->query('SELECT * FROM campus_events ORDER BY sort_order ASC, event_date DESC, id DESC LIMIT 5')->fetchAll();
+$docs       = $pdo->query('SELECT * FROM documents WHERE is_quick_link = 1 ORDER BY sort_order ASC, uploaded_at DESC, id DESC LIMIT 6')->fetchAll();
 $cats       = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_on_home, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
 $leadership = $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order ASC, id ASC LIMIT 4')->fetchAll();
 $examPages  = $pdo->query("SELECT p.slug, p.title, p.subtitle FROM pages p JOIN categories c ON p.category_id = c.id WHERE c.slug = 'examination' AND p.is_published = 1 ORDER BY p.sort_order ASC")->fetchAll();
@@ -151,7 +152,7 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
     <?php foreach ($leadership as $ld): ?>
       <article class="card">
         <img src="<?= e($ld['photo_url']) ?>" alt="<?= e($ld['name']) ?>" style="width:60px;height:60px;border-radius:50%;object-fit:cover;">
-        <small style="display:block;color:var(--secondary-color);font-weight:700;margin-top:0.5rem;"><?= e($ld['role_title']) ?></small>
+        <small style="display:block;color:var(--secondary-color);font-weight:700;margin-top:0.5rem;"><?= e(formatCommitteeGroupLabel($ld['committee_group'] ?? '')) ?> · <?= e($ld['role_title']) ?></small>
         <h3 style="margin:0.2rem 0;"><?= e($ld['name']) ?></h3>
         <small style="color:var(--text-muted);display:block;"><?= e($ld['qualification']) ?></small>
         <p style="font-size:0.82rem;color:var(--text-muted);"><?= e($ld['bio']) ?></p>
@@ -205,7 +206,7 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   <div class="grid-4">
     <?php foreach ($cats as $c): $subPages = $allCatPages[$c['id']] ?? []; ?>
       <div class="card">
-        <small style="color:var(--secondary-color);font-weight:600;"><?= e($c['ugc_code']) ?> · <?= count($subPages) ?> pages</small>
+        <small style="color:var(--secondary-color);font-weight:600;"><?= count($subPages) ?> pages</small>
         <h3 style="margin:0.35rem 0;"><?= e($c['name']) ?></h3>
         <p style="font-size:0.82rem;color:var(--text-muted);"><?= e($c['description']) ?></p>
         <?php foreach (array_slice($subPages, 0, 3) as $sp): ?>

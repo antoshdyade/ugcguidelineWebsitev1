@@ -24,6 +24,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             logAudit($pdo, $user, 'CREATE_SLIDE', 'Slider', $_POST['title']);
             $msg = 'Hero slide added.';
         }
+    } elseif ($action === 'move_slide' && !empty($_POST['id'])) {
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+        if (swapSortOrder($pdo, 'sliders', (int)$_POST['id'], $dir, null, null, 'id DESC')) {
+            $msg = 'Slide order updated.';
+        }
     } elseif ($action === 'delete_slide') {
         $pdo->prepare('DELETE FROM sliders WHERE id = ?')->execute([(int)$_POST['id']]);
         $msg = 'Slide removed.';
@@ -32,6 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([trim($_POST['text']), trim($_POST['link_url']), trim($_POST['badge_text'])]);
         logAudit($pdo, $user, 'CREATE_TICKER', 'Ticker', $_POST['text']);
         $msg = 'Ticker item added.';
+    } elseif ($action === 'move_ticker' && !empty($_POST['id'])) {
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+        if (swapSortOrder($pdo, 'ticker_items', (int)$_POST['id'], $dir, null, null, 'id DESC')) {
+            $msg = 'Ticker order updated.';
+        }
     } elseif ($action === 'delete_ticker') {
         $pdo->prepare('DELETE FROM ticker_items WHERE id = ?')->execute([(int)$_POST['id']]);
         $msg = 'Ticker item removed.';
@@ -48,6 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             logAudit($pdo, $user, 'CREATE_EVENT', 'Event', $_POST['title']);
             $msg = 'Event/Notice published.';
         }
+    } elseif ($action === 'move_event' && !empty($_POST['id'])) {
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+        if (swapSortOrder($pdo, 'campus_events', (int)$_POST['id'], $dir, null, null, 'event_date DESC, id DESC')) {
+            $msg = 'Event display order updated.';
+        }
     } elseif ($action === 'delete_event') {
         $pdo->prepare('DELETE FROM campus_events WHERE id = ?')->execute([(int)$_POST['id']]);
         $msg = 'Event/Notice deleted.';
@@ -56,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $sliders = $pdo->query('SELECT * FROM sliders ORDER BY sort_order ASC, id DESC')->fetchAll();
 $ticker  = $pdo->query('SELECT * FROM ticker_items ORDER BY sort_order ASC, id DESC')->fetchAll();
-$events  = $pdo->query('SELECT * FROM campus_events ORDER BY event_date DESC')->fetchAll();
+$events  = $pdo->query('SELECT * FROM campus_events ORDER BY sort_order ASC, event_date DESC, id DESC')->fetchAll();
 $adminPageTitle = 'Homepage Sliders, News Ticker & Events';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
@@ -106,24 +121,33 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <div class="card">
       <h3 style="margin-top:0;">Active Hero Slides</h3>
       <?php foreach ($sliders as $sl): ?>
-        <div style="padding:0.5rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;">
+        <div style="padding:0.5rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
           <span><strong><?= e($sl['title']) ?></strong></span>
-          <form method="post"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_slide"><input type="hidden" name="id" value="<?= (int)$sl['id'] ?>"><button class="btn-secondary" style="padding:2px 8px;">Remove</button></form>
+          <div style="white-space:nowrap;">
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_slide"><input type="hidden" name="id" value="<?= (int)$sl['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_slide"><input type="hidden" name="id" value="<?= (int)$sl['id'] ?>"><button class="btn-secondary" style="padding:2px 8px;">Remove</button></form>
+          </div>
         </div>
       <?php endforeach; ?>
     </div>
     <div class="card">
       <h3 style="margin-top:0;">Active Events &amp; Ticker Items</h3>
       <?php foreach ($ticker as $tk): ?>
-        <div style="padding:0.4rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;">
+        <div style="padding:0.4rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
           <span>[Ticker] <?= e($tk['text']) ?></span>
-          <form method="post"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_ticker"><input type="hidden" name="id" value="<?= (int)$tk['id'] ?>"><button class="btn-secondary" style="padding:2px 8px;">Remove</button></form>
+          <div style="white-space:nowrap;">
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_ticker"><input type="hidden" name="id" value="<?= (int)$tk['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_ticker"><input type="hidden" name="id" value="<?= (int)$tk['id'] ?>"><button class="btn-secondary" style="padding:2px 8px;">Remove</button></form>
+          </div>
         </div>
       <?php endforeach; ?>
       <?php foreach ($events as $ev): ?>
-        <div style="padding:0.4rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;">
+        <div style="padding:0.4rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
           <span>[<?= e($ev['category']) ?>] <?= e($ev['title']) ?></span>
-          <form method="post"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_event"><input type="hidden" name="id" value="<?= (int)$ev['id'] ?>"><button class="btn-secondary" style="padding:2px 8px;">Remove</button></form>
+          <div style="white-space:nowrap;">
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_event"><input type="hidden" name="id" value="<?= (int)$ev['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_event"><input type="hidden" name="id" value="<?= (int)$ev['id'] ?>"><button class="btn-secondary" style="padding:2px 8px;">Remove</button></form>
+          </div>
         </div>
       <?php endforeach; ?>
     </div>

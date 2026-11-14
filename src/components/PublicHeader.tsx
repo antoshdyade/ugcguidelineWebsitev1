@@ -131,7 +131,7 @@ export function PublicHeader({
             </span>
             <span className="hidden md:inline text-white/40">|</span>
             <span className="hidden md:inline text-white/85 whitespace-nowrap">
-              UGC NEP 2020 Self-Disclosure Portal
+              {settings.shortCode || 'SVERI'} · Autonomous Engineering Campus
             </span>
           </div>
 
@@ -514,7 +514,7 @@ export function PublicHeader({
                           }}
                           className="w-full text-left px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 hover:bg-stone-50 dark:hover:bg-slate-800 rounded border-b border-stone-100 dark:border-slate-800 mb-1 flex items-center justify-between"
                         >
-                          <span>{cat.name} · {cat.ugcCode}</span>
+                          <span>{cat.name}</span>
                           <span>Portal &rarr;</span>
                         </button>
                         <ul className="space-y-0.5 max-h-80 overflow-y-auto">
@@ -597,7 +597,7 @@ export function PublicHeader({
                               className="w-full text-left px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 hover:bg-stone-50 dark:hover:bg-slate-800 rounded flex items-center justify-between"
                             >
                               <span>{cat.name}</span>
-                              <span>{cat.ugcCode} &rarr;</span>
+                              <span>Portal &rarr;</span>
                             </button>
                             {catPages.map((pg) => (
                               <button
@@ -693,7 +693,7 @@ export function PublicHeader({
               {visibleMenuCategories.map((cat) => (
                 <details key={cat.id} className="bg-white text-slate-900 rounded px-3 py-2">
                   <summary className="text-sm font-semibold cursor-pointer">
-                    {cat.name} ({cat.ugcCode})
+                    {cat.name}
                   </summary>
                   <div className="mt-2 space-y-1 pl-2">
                     <button

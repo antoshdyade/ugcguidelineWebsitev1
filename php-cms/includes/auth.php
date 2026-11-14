@@ -63,11 +63,12 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
     if ($role === 'super_admin') {
         return true;
     }
+    $hasExplicitScope = !empty($user['allowed_categories']) || !empty($user['allowed_page_ids']);
     return match ($resource) {
         'users', 'settings', 'audit_logs' => false,
         'sliders_events', 'gallery', 'directory' => $role === 'content_editor',
         'categories'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'pages'                           => in_array($role, ['content_editor', 'iqac_officer', 'exam_controller'], true),
+        'pages'                           => in_array($role, ['content_editor', 'iqac_officer', 'exam_controller'], true) || $hasExplicitScope,
         'documents'                       => in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true),
         'leadership'                      => in_array($role, ['iqac_officer', 'content_editor'], true),
         'departments'                     => $role === 'department_admin'
@@ -85,6 +86,10 @@ function canAccessCategory(array $user, string $categorySlug): bool
     $allowedCats = $user['allowed_categories'] ?? null;
     if (is_array($allowedCats) && count($allowedCats) > 0) {
         return in_array($categorySlug, $allowedCats, true);
+    }
+    $allowedPages = $user['allowed_page_ids'] ?? null;
+    if (is_array($allowedPages) && count($allowedPages) > 0) {
+        return false;
     }
     if ($role === 'exam_controller') {
         return $categorySlug === 'examination';
@@ -107,6 +112,96 @@ function canAccessPage(array $user, array $page, ?string $categorySlug = null): 
         return canAccessCategory($user, $catSlug);
     }
     return canAccessResource($user, 'pages');
+}
+
+function leadershipGroupPresets(): array
+{
+    return [
+        'Statutory Officer',
+        'Governing Body',
+        'Internal Complaint Committee (ICC)',
+        'Academic Leadership',
+        'Board of Studies',
+        'Finance Committee',
+        'Academic Council',
+    ];
+}
+
+function formatCommitteeGroupLabel(?string $group): string
+{
+    $raw = trim((string)$group);
+    if ($raw === '') {
+        return 'Leadership & Governance';
+    }
+    return match ($raw) {
+        'statutory'           => 'Statutory Officer',
+        'governance'          => 'Governing Body',
+        'icc'                 => 'Internal Complaint Committee (ICC)',
+        'academic_leadership' => 'Academic Leadership',
+        default               => $raw,
+    };
+}
+
+function swapSortOrder(PDO $pdo, string $table, int $id, string $dir, ?string $scopeCol = null, ?int $scopeVal = null, string $tieOrder = 'id ASC'): bool
+{
+    $allowedTables = [
+        'categories',
+        'pages',
+        'department_subpages',
+        'faculty',
+        'department_labs',
+        'leadership_profiles',
+        'sliders',
+        'ticker_items',
+        'campus_events',
+        'documents',
+        'gallery_albums',
+        'telephone_directory',
+    ];
+    $allowedScopes = [null, 'category_id', 'department_id'];
+    $allowedTies   = ['id ASC', 'id DESC', 'event_date DESC, id DESC', 'uploaded_at DESC, id DESC'];
+
+    if (!in_array($table, $allowedTables, true) || !in_array($scopeCol, $allowedScopes, true) || !in_array($tieOrder, $allowedTies, true)) {
+        return false;
+    }
+
+    if ($scopeCol !== null && $scopeVal !== null) {
+        $stmt = $pdo->prepare("SELECT id, sort_order FROM `$table` WHERE `$scopeCol` = ? ORDER BY sort_order ASC, $tieOrder");
+        $stmt->execute([$scopeVal]);
+    } else {
+        $stmt = $pdo->query("SELECT id, sort_order FROM `$table` ORDER BY sort_order ASC, $tieOrder");
+    }
+    $rows = $stmt->fetchAll();
+    if (count($rows) < 2) {
+        return false;
+    }
+
+    $targetIdx = -1;
+    foreach ($rows as $idx => $r) {
+        if ((int)$r['id'] === $id) {
+            $targetIdx = $idx;
+            break;
+        }
+    }
+    if ($targetIdx === -1) {
+        return false;
+    }
+
+    $swapIdx = ($dir === 'down') ? $targetIdx + 1 : $targetIdx - 1;
+    if (!isset($rows[$swapIdx])) {
+        return false;
+    }
+
+    // Reorder sequentially 1..N so duplicate sort_order defaults always swap cleanly
+    $tmp = $rows[$targetIdx];
+    $rows[$targetIdx] = $rows[$swapIdx];
+    $rows[$swapIdx] = $tmp;
+
+    $upd = $pdo->prepare("UPDATE `$table` SET sort_order = ? WHERE id = ?");
+    foreach ($rows as $seq => $r) {
+        $upd->execute([$seq + 1, (int)$r['id']]);
+    }
+    return true;
 }
 
 function validateExternalUrl(string $url): bool

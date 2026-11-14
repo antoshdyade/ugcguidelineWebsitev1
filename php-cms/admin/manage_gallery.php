@@ -38,13 +38,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($err === '') {
             $err = 'Please select an image file to upload.';
         }
+    } elseif ($action === 'move_album' && !empty($_POST['id'])) {
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+        if (swapSortOrder($pdo, 'gallery_albums', (int)$_POST['id'], $dir, null, null, 'event_date DESC, id DESC')) {
+            $msg = 'Gallery album order updated.';
+        }
     } elseif ($action === 'delete_album') {
         $pdo->prepare('DELETE FROM gallery_albums WHERE id = ?')->execute([(int)$_POST['id']]);
         $msg = 'Album deleted.';
     }
 }
 
-$albums = $pdo->query('SELECT * FROM gallery_albums ORDER BY event_date DESC')->fetchAll();
+$albums = $pdo->query('SELECT * FROM gallery_albums ORDER BY sort_order ASC, event_date DESC, id DESC')->fetchAll();
 $photosStmt = $pdo->query('SELECT * FROM gallery_photos ORDER BY id DESC');
 $photosByAlbum = [];
 foreach ($photosStmt->fetchAll() as $ph) {
@@ -89,7 +94,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <img src="../<?= e($al['cover_url']) ?>" alt="<?= e($al['title']) ?>" style="width:100%;height:150px;object-fit:cover;border-radius:6px;">
         <h3 style="margin:0.5rem 0 0.2rem;"><?= e($al['title']) ?></h3>
         <small style="color:var(--text-muted);"><?= e($al['category']) ?> · <?= count($phs) ?> photos</small>
-        <form method="post" style="margin-top:0.5rem;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_album"><input type="hidden" name="id" value="<?= (int)$al['id'] ?>"><button class="btn-secondary">Delete Album</button></form>
+        <div style="display:flex;gap:0.4rem;align-items:center;margin-top:0.5rem;">
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_album"><input type="hidden" name="id" value="<?= (int)$al['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_album"><input type="hidden" name="id" value="<?= (int)$al['id'] ?>"><button class="btn-secondary">Delete Album</button></form>
+        </div>
       </div>
     <?php endforeach; ?>
   </div>

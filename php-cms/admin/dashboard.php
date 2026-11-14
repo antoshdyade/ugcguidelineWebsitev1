@@ -91,6 +91,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <h3 style="margin-top:0;">Users, Per-Page RBAC &amp; Audit</h3>
       <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0;">Assign Exam Controller, category/page permissions &amp; inspect audit logs.</p>
     </a>
+    <a href="manage_backups.php" class="card" style="text-decoration:none;color:inherit;">
+      <h3 style="margin-top:0;">Backup, Export &amp; Restore</h3>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0;">Full &amp; incremental snapshots, SCP/Google Drive push, Webmin cron schedule &amp; recovery.</p>
+    </a>
   <?php endif; ?>
   <?php if (canAccessResource($user, 'settings')): ?>
     <a href="site_settings.php" class="card" style="text-decoration:none;color:inherit;">

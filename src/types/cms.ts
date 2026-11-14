@@ -43,7 +43,7 @@ export interface LeadershipProfile {
   phone: string;
   photoUrl: string;
   bio: string;
-  committeeGroup: 'statutory' | 'governance' | 'icc' | 'academic_leadership';
+  committeeGroup: string;
   sortOrder: number;
 }
 
@@ -122,6 +122,7 @@ export interface DepartmentLab {
   equipmentSummary: string;
   incharge: string;
   photoUrl?: string;
+  sortOrder?: number;
 }
 
 export interface DepartmentLibraryInfo {
@@ -187,6 +188,7 @@ export interface CampusEvent {
   imageUrl?: string;
   documentUrl?: string;
   isFeatured: boolean;
+  sortOrder?: number;
 }
 
 export type DocumentCategory =
@@ -210,6 +212,7 @@ export interface CmsDocument {
   uploadedAt: string;
   uploadedBy: string;
   isQuickLink: boolean;
+  sortOrder?: number;
 }
 
 export interface GalleryAlbum {
@@ -218,6 +221,7 @@ export interface GalleryAlbum {
   category: string;
   eventDate: string;
   coverUrl: string;
+  sortOrder?: number;
   photos: {
     id: number;
     imageUrl: string;
@@ -234,6 +238,7 @@ export interface TelephoneEntry {
   extension: string;
   directPhone: string;
   email: string;
+  sortOrder?: number;
 }
 
 export interface CmsUser {
@@ -332,6 +337,59 @@ export interface SiteSettings {
   customHomeComponents?: CustomHomeComponent[];
 }
 
+export type BackupMode = 'full' | 'incremental';
+export type BackupDestination = 'local' | 'scp' | 'webhook';
+export type BackupFrequency = 'hourly' | 'daily' | 'weekly';
+
+export interface ScpConfig {
+  host: string;
+  port: number;
+  username: string;
+  remoteDir: string;
+  keyPath?: string;
+}
+
+export interface BackupScheduleConfig {
+  enabled: boolean;
+  frequency: BackupFrequency;
+  mode: BackupMode;
+  destination: BackupDestination;
+  autoExportJson: boolean;
+  retentionCount: number;
+  scpConfig?: ScpConfig;
+  webhookUrl?: string;
+  lastRunAt?: string;
+  nextRunAt?: string;
+  lastStatus?: string;
+}
+
+export interface BackupRecord {
+  id: string;
+  createdAt: string;
+  createdBy: string;
+  mode: BackupMode;
+  destination: BackupDestination;
+  filename: string;
+  sizeBytes: number;
+  sha256: string;
+  baseBackupId?: string | null;
+  notes?: string;
+  entityCounts: Record<string, number>;
+  changedKeys?: string[];
+  remoteStatus?: string;
+}
+
+export interface BackupPackage {
+  format: 'svcoer-cms-backup';
+  version: number;
+  mode: BackupMode;
+  createdAt: string;
+  baseBackupId?: string | null;
+  sha256?: string;
+  data: Partial<Omit<CmsDatabase, 'backups' | 'backupSchedule'>>;
+  uploadManifest?: { filename: string; sizeBytes: number; mtimeMs: number }[];
+}
+
 export interface CmsDatabase {
   categories: CmsCategory[];
   pages: CmsPage[];
@@ -346,6 +404,8 @@ export interface CmsDatabase {
   users: (CmsUser & { passwordHash: string })[];
   auditLogs: AuditLogEntry[];
   settings: SiteSettings;
+  backups?: BackupRecord[];
+  backupSchedule?: BackupScheduleConfig;
 }
 
 export interface SearchResultItem {

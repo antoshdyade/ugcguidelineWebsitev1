@@ -125,16 +125,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'save_subpage') {
             $slug = trim(preg_replace('/[^a-z0-9-]+/', '-', strtolower(trim($_POST['slug']))), '-');
             $ptype = array_key_exists($_POST['page_type'] ?? '', $pageTypes) ? $_POST['page_type'] : 'general';
+            $sortOrder = max(1, (int)($_POST['sort_order'] ?? 1));
             if (!empty($_POST['subpage_id'])) {
-                $stmt = $pdo->prepare('UPDATE department_subpages SET slug = ?, title = ?, page_type = ?, content_html = ?, is_published = ?, updated_at = CURDATE() WHERE id = ? AND department_id = ?');
-                $stmt->execute([$slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', isset($_POST['is_published']) ? 1 : 0, (int)$_POST['subpage_id'], $deptId]);
+                $stmt = $pdo->prepare('UPDATE department_subpages SET slug = ?, title = ?, page_type = ?, content_html = ?, sort_order = ?, is_published = ?, updated_at = CURDATE() WHERE id = ? AND department_id = ?');
+                $stmt->execute([$slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', $sortOrder, isset($_POST['is_published']) ? 1 : 0, (int)$_POST['subpage_id'], $deptId]);
                 logAudit($pdo, $user, 'UPDATE_DEPT_SUBPAGE', 'Department', $_POST['title']);
                 $msg = 'Department micro-page updated.';
             } else {
-                $stmt = $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, is_published, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURDATE())');
-                $stmt->execute([$deptId, $slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', isset($_POST['is_published']) ? 1 : 0]);
+                $stmt = $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, sort_order, is_published, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())');
+                $stmt->execute([$deptId, $slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', $sortOrder, isset($_POST['is_published']) ? 1 : 0]);
                 logAudit($pdo, $user, 'CREATE_DEPT_SUBPAGE', 'Department', $_POST['title']);
                 $msg = 'Department micro-page created.';
+            }
+        } elseif ($action === 'move_subpage' && !empty($_POST['subpage_id'])) {
+            $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+            if (swapSortOrder($pdo, 'department_subpages', (int)$_POST['subpage_id'], $dir, 'department_id', $deptId, 'id ASC')) {
+                $msg = 'Micro-page order updated.';
             }
         } elseif ($action === 'add_subpage_photo' && !empty($_POST['subpage_id'])) {
             $spId = (int)$_POST['subpage_id'];
@@ -250,9 +256,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $customJson = !empty($customMap) ? json_encode($customMap, JSON_UNESCAPED_UNICODE) : null;
 
+            $facOrder = max(1, (int)($_POST['sort_order'] ?? 1));
             if ($err === '') {
                 if ($action === 'update_faculty' && !empty($_POST['faculty_id'])) {
-                    $stmt = $pdo->prepare('UPDATE faculty SET name = ?, designation = ?, qualification = ?, specialization = ?, email = ?, phone = ?, experience_years = ?, photo_url = ?, external_profile_url = ?, external_profile_label = ?, custom_fields_json = ?, is_hod = ? WHERE id = ? AND department_id = ?');
+                    $stmt = $pdo->prepare('UPDATE faculty SET name = ?, designation = ?, qualification = ?, specialization = ?, email = ?, phone = ?, experience_years = ?, photo_url = ?, external_profile_url = ?, external_profile_label = ?, custom_fields_json = ?, is_hod = ?, sort_order = ? WHERE id = ? AND department_id = ?');
                     $stmt->execute([
                         trim($_POST['name']),
                         trim($_POST['designation']),
@@ -266,13 +273,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         trim($_POST['external_profile_label'] ?? '') ?: null,
                         $customJson,
                         isset($_POST['is_hod']) ? 1 : 0,
+                        $facOrder,
                         (int)$_POST['faculty_id'],
                         $deptId,
                     ]);
                     logAudit($pdo, $user, 'UPDATE_FACULTY', 'Faculty', $_POST['name']);
                     $msg = 'Faculty profile updated.';
                 } else {
-                    $stmt = $pdo->prepare('INSERT INTO faculty (department_id, name, designation, qualification, specialization, email, phone, experience_years, photo_url, external_profile_url, external_profile_label, custom_fields_json, is_hod) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                    $stmt = $pdo->prepare('INSERT INTO faculty (department_id, name, designation, qualification, specialization, email, phone, experience_years, photo_url, external_profile_url, external_profile_label, custom_fields_json, is_hod, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                     $stmt->execute([
                         $deptId,
                         trim($_POST['name']),
@@ -287,16 +295,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         trim($_POST['external_profile_label'] ?? '') ?: null,
                         $customJson,
                         isset($_POST['is_hod']) ? 1 : 0,
+                        $facOrder,
                     ]);
                     logAudit($pdo, $user, 'ADD_FACULTY', 'Faculty', $_POST['name']);
                     $msg = 'Faculty member added.';
                 }
+            }
+        } elseif ($action === 'move_faculty' && !empty($_POST['faculty_id'])) {
+            $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+            if (swapSortOrder($pdo, 'faculty', (int)$_POST['faculty_id'], $dir, 'department_id', $deptId, 'id ASC')) {
+                logAudit($pdo, $user, 'REORDER_FACULTY', 'Faculty', 'Dept #' . $deptId);
+                $msg = 'Faculty display order updated.';
             }
         } elseif ($action === 'delete_faculty') {
             $pdo->prepare('DELETE FROM faculty WHERE id = ? AND department_id = ?')->execute([(int)$_POST['faculty_id'], $deptId]);
             $msg = 'Faculty member removed.';
         } elseif ($action === 'add_lab' || $action === 'update_lab') {
             $labPhoto = trim($_POST['existing_lab_photo'] ?? '');
+            $labOrder = max(1, (int)($_POST['sort_order'] ?? 1));
             if (!empty($_FILES['lab_photo']['name'])) {
                 $up = handleSecureUpload($_FILES['lab_photo'], __DIR__ . '/../uploads');
                 if ($up['ok']) $labPhoto = $up['file_url'];
@@ -304,14 +320,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($err === '') {
                 if ($action === 'update_lab' && !empty($_POST['lab_id'])) {
-                    $pdo->prepare('UPDATE department_labs SET name = ?, area_sqft = ?, equipment_summary = ?, incharge = ?, photo_url = ? WHERE id = ? AND department_id = ?')
-                        ->execute([trim($_POST['name']), (int)$_POST['area_sqft'], trim($_POST['equipment_summary']), trim($_POST['incharge']), $labPhoto ?: null, (int)$_POST['lab_id'], $deptId]);
+                    $pdo->prepare('UPDATE department_labs SET name = ?, area_sqft = ?, equipment_summary = ?, incharge = ?, photo_url = ?, sort_order = ? WHERE id = ? AND department_id = ?')
+                        ->execute([trim($_POST['name']), (int)$_POST['area_sqft'], trim($_POST['equipment_summary']), trim($_POST['incharge']), $labPhoto ?: null, $labOrder, (int)$_POST['lab_id'], $deptId]);
                     $msg = 'Laboratory updated.';
                 } else {
-                    $pdo->prepare('INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, incharge, photo_url) VALUES (?, ?, ?, ?, ?, ?)')
-                        ->execute([$deptId, trim($_POST['name']), (int)$_POST['area_sqft'], trim($_POST['equipment_summary']), trim($_POST['incharge']), $labPhoto ?: null]);
+                    $pdo->prepare('INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, incharge, photo_url, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                        ->execute([$deptId, trim($_POST['name']), (int)$_POST['area_sqft'], trim($_POST['equipment_summary']), trim($_POST['incharge']), $labPhoto ?: null, $labOrder]);
                     $msg = 'Laboratory added.';
                 }
+            }
+        } elseif ($action === 'move_lab' && !empty($_POST['lab_id'])) {
+            $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+            if (swapSortOrder($pdo, 'department_labs', (int)$_POST['lab_id'], $dir, 'department_id', $deptId, 'id ASC')) {
+                $msg = 'Laboratory order updated.';
             }
         } elseif ($action === 'delete_lab') {
             $pdo->prepare('DELETE FROM department_labs WHERE id = ? AND department_id = ?')->execute([(int)$_POST['lab_id'], $deptId]);
@@ -358,7 +379,7 @@ $facStmt = $pdo->prepare('SELECT * FROM faculty WHERE department_id = ? ORDER BY
 $facStmt->execute([$activeDeptId]);
 $facultyList = $facStmt->fetchAll();
 
-$labStmt = $pdo->prepare('SELECT * FROM department_labs WHERE department_id = ? ORDER BY id ASC');
+$labStmt = $pdo->prepare('SELECT * FROM department_labs WHERE department_id = ? ORDER BY sort_order ASC, id ASC');
 $labStmt->execute([$activeDeptId]);
 $labs = $labStmt->fetchAll();
 
@@ -484,7 +505,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <?php if ($editSub): ?><input type="hidden" name="subpage_id" value="<?= (int)$editSub['id'] ?>"><?php endif; ?>
         <div class="grid-3" style="margin-bottom:0.5rem;">
           <input type="text" name="title" required value="<?= e($editSub['title'] ?? '') ?>" placeholder="Micro-Page Title (e.g. Department Gallery)" style="padding:0.5rem;">
-          <input type="text" name="slug" required value="<?= e($editSub['slug'] ?? '') ?>" placeholder="url-slug (e.g. gallery)" style="padding:0.5rem;">
+          <div style="display:flex;gap:0.4rem;">
+            <input type="text" name="slug" required value="<?= e($editSub['slug'] ?? '') ?>" placeholder="url-slug (e.g. gallery)" style="flex:1;padding:0.5rem;">
+            <input type="number" name="sort_order" min="1" value="<?= (int)($editSub['sort_order'] ?? (count($subs) + 1)) ?>" title="Sr. No." style="width:68px;padding:0.5rem;">
+          </div>
           <select name="page_type" style="padding:0.5rem;">
             <?php foreach ($pageTypes as $pk => $pl): ?>
               <option value="<?= e($pk) ?>" <?= (($editSub['page_type'] ?? 'general') === $pk) ? 'selected' : '' ?>><?= e($pl) ?></option>
@@ -570,10 +594,21 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <?php endif; ?>
 
       <table class="data-table">
-        <thead><tr><th>Micro-Page Title</th><th>Type</th><th>Slug</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Order</th><th>Micro-Page Title</th><th>Type</th><th>Slug</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
           <?php foreach ($subs as $s): ?>
             <tr>
+              <td style="white-space:nowrap;">
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="move_subpage">
+                  <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+                  <input type="hidden" name="subpage_id" value="<?= (int)$s['id'] ?>">
+                  <button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;" title="Move Up">&uarr;</button>
+                  <button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;" title="Move Down">&darr;</button>
+                </form>
+                <span style="margin-left:4px;font-size:0.8rem;">#<?= (int)($s['sort_order'] ?? 1) ?></span>
+              </td>
               <td><?= e($s['title']) ?></td>
               <td><?= e($pageTypes[$s['page_type'] ?? 'general'] ?? ($s['page_type'] ?? 'general')) ?></td>
               <td><?= e($s['slug']) ?></td>
@@ -610,7 +645,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <?php if ($editFac): ?><input type="hidden" name="faculty_id" value="<?= (int)$editFac['id'] ?>"><?php endif; ?>
           <input type="hidden" name="existing_photo" value="<?= e($editFac['photo_url'] ?? 'assets/images/principal.jpg') ?>">
 
-          <input type="text" name="name" required value="<?= e($editFac['name'] ?? '') ?>" placeholder="Faculty Full Name" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
+          <div style="display:flex;gap:0.45rem;margin-bottom:0.45rem;">
+            <input type="number" min="1" name="sort_order" value="<?= (int)($editFac['sort_order'] ?? (count($facultyList) + 1)) ?>" placeholder="Sr. No." title="Manual Serial Number (Sr. No.)" style="width:92px;padding:0.45rem;">
+            <input type="text" name="name" required value="<?= e($editFac['name'] ?? '') ?>" placeholder="Faculty Full Name" style="flex:1;padding:0.45rem;">
+          </div>
           <input type="text" name="designation" required value="<?= e($editFac['designation'] ?? '') ?>" placeholder="Designation" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
           <input type="text" name="qualification" required value="<?= e($editFac['qualification'] ?? '') ?>" placeholder="Qualification (e.g. Ph.D., M.Tech)" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
           <input type="text" name="specialization" required value="<?= e($editFac['specialization'] ?? '') ?>" placeholder="Area of Expertise / Specialization" style="width:100%;padding:0.45rem;margin-bottom:0.45rem;">
@@ -643,12 +681,25 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <button type="submit" class="btn-primary"><?= $editFac ? 'Update Faculty' : 'Add Faculty' ?></button>
           <?php if ($editFac): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Cancel</a><?php endif; ?>
         </form>
-        <ul style="margin-top:1rem;padding-left:1.1rem;">
-          <?php foreach ($facultyList as $f): ?>
-            <li style="margin-bottom:0.45rem;font-size:0.86rem;">
-              <strong><?= e($f['name']) ?></strong> — <?= e($f['designation']) ?>
-              <a href="?dept_id=<?= $activeDeptId ?>&edit_fac=<?= (int)$f['id'] ?>" class="btn-primary" style="padding:2px 7px;font-size:0.74rem;margin-left:4px;">Edit</a>
-              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_faculty"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="faculty_id" value="<?= (int)$f['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 7px;font-size:0.74rem;">Remove</button></form>
+        <ul style="margin-top:1rem;padding-left:0;list-style:none;">
+          <?php foreach ($facultyList as $fIdx => $f): ?>
+            <li style="margin-bottom:0.5rem;font-size:0.86rem;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border-color);">
+              <div>
+                <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:var(--surface-bg);border:1px solid var(--border-color);font-weight:700;font-size:0.74rem;margin-right:4px;">Sr. No. <?= (int)($f['sort_order'] ?? ($fIdx + 1)) ?></span>
+                <strong><?= e($f['name']) ?></strong> — <?= e($f['designation']) ?>
+              </div>
+              <div style="white-space:nowrap;">
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="move_faculty">
+                  <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+                  <input type="hidden" name="faculty_id" value="<?= (int)$f['id'] ?>">
+                  <button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;font-size:0.74rem;" title="Move Up">&uarr;</button>
+                  <button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;font-size:0.74rem;" title="Move Down">&darr;</button>
+                </form>
+                <a href="?dept_id=<?= $activeDeptId ?>&edit_fac=<?= (int)$f['id'] ?>" class="btn-primary" style="padding:2px 7px;font-size:0.74rem;margin-left:4px;">Edit</a>
+                <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_faculty"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="faculty_id" value="<?= (int)$f['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 7px;font-size:0.74rem;">Remove</button></form>
+              </div>
             </li>
           <?php endforeach; ?>
         </ul>
@@ -663,7 +714,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <?php if ($editLab): ?><input type="hidden" name="lab_id" value="<?= (int)$editLab['id'] ?>"><?php endif; ?>
           <input type="hidden" name="existing_lab_photo" value="<?= e($editLab['photo_url'] ?? '') ?>">
 
-          <input type="text" name="name" required value="<?= e($editLab['name'] ?? '') ?>" placeholder="Laboratory Name" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
+          <div style="display:flex;gap:0.45rem;margin-bottom:0.5rem;">
+            <input type="number" min="1" name="sort_order" value="<?= (int)($editLab['sort_order'] ?? (count($labs) + 1)) ?>" placeholder="Sr. No." title="Display Order" style="width:92px;padding:0.5rem;">
+            <input type="text" name="name" required value="<?= e($editLab['name'] ?? '') ?>" placeholder="Laboratory Name" style="flex:1;padding:0.5rem;">
+          </div>
           <input type="number" name="area_sqft" required value="<?= (int)($editLab['area_sqft'] ?? 1200) ?>" placeholder="Area (Sq.Ft.)" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
           <input type="text" name="incharge" required value="<?= e($editLab['incharge'] ?? '') ?>" placeholder="Lab In-Charge" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
           <textarea name="equipment_summary" rows="3" required placeholder="Equipment & software details..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"><?= e($editLab['equipment_summary'] ?? '') ?></textarea>
@@ -671,12 +725,25 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <button type="submit" class="btn-primary"><?= $editLab ? 'Update Laboratory' : 'Add Laboratory' ?></button>
           <?php if ($editLab): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Cancel</a><?php endif; ?>
         </form>
-        <ul style="margin-top:1rem;padding-left:1.1rem;">
-          <?php foreach ($labs as $l): ?>
-            <li style="margin-bottom:0.45rem;font-size:0.86rem;">
-              <strong><?= e($l['name']) ?></strong> (<?= (int)$l['area_sqft'] ?> sq.ft.)
-              <a href="?dept_id=<?= $activeDeptId ?>&edit_lab=<?= (int)$l['id'] ?>" class="btn-primary" style="padding:2px 7px;font-size:0.74rem;margin-left:4px;">Edit</a>
-              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_lab"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="lab_id" value="<?= (int)$l['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 7px;font-size:0.74rem;">Remove</button></form>
+        <ul style="margin-top:1rem;padding-left:0;list-style:none;">
+          <?php foreach ($labs as $lIdx => $l): ?>
+            <li style="margin-bottom:0.5rem;font-size:0.86rem;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border-color);">
+              <div>
+                <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:var(--surface-bg);border:1px solid var(--border-color);font-weight:700;font-size:0.74rem;margin-right:4px;">#<?= (int)($l['sort_order'] ?? ($lIdx + 1)) ?></span>
+                <strong><?= e($l['name']) ?></strong> (<?= (int)$l['area_sqft'] ?> sq.ft.)
+              </div>
+              <div style="white-space:nowrap;">
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="move_lab">
+                  <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
+                  <input type="hidden" name="lab_id" value="<?= (int)$l['id'] ?>">
+                  <button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;font-size:0.74rem;" title="Move Up">&uarr;</button>
+                  <button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;font-size:0.74rem;" title="Move Down">&darr;</button>
+                </form>
+                <a href="?dept_id=<?= $activeDeptId ?>&edit_lab=<?= (int)$l['id'] ?>" class="btn-primary" style="padding:2px 7px;font-size:0.74rem;margin-left:4px;">Edit</a>
+                <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_lab"><input type="hidden" name="department_id" value="<?= $activeDeptId ?>"><input type="hidden" name="lab_id" value="<?= (int)$l['id'] ?>"><button type="submit" class="btn-secondary" style="padding:2px 7px;font-size:0.74rem;">Remove</button></form>
+              </div>
             </li>
           <?php endforeach; ?>
         </ul>

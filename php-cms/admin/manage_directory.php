@@ -14,12 +14,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ->execute([trim($_POST['section']), trim($_POST['officer_name']), trim($_POST['designation']), trim($_POST['extension']), trim($_POST['direct_phone']), trim($_POST['email'])]);
         logAudit($pdo, $user, 'ADD_DIRECTORY', 'Directory', $_POST['section']);
         $msg = 'Contact entry added.';
+    } elseif (($_POST['action'] ?? '') === 'move' && !empty($_POST['id'])) {
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+        if (swapSortOrder($pdo, 'telephone_directory', (int)$_POST['id'], $dir, null, null, 'id ASC')) {
+            $msg = 'Directory order updated.';
+        }
     } elseif (($_POST['action'] ?? '') === 'delete') {
         $pdo->prepare('DELETE FROM telephone_directory WHERE id = ?')->execute([(int)$_POST['id']]);
         $msg = 'Contact entry removed.';
     }
 }
-$rows = $pdo->query('SELECT * FROM telephone_directory ORDER BY id ASC')->fetchAll();
+$rows = $pdo->query('SELECT * FROM telephone_directory ORDER BY sort_order ASC, id ASC')->fetchAll();
 $adminPageTitle = 'Telephone Directory Manager';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
@@ -40,10 +45,14 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 
   <div class="card">
     <table class="data-table">
-      <thead><tr><th>Section</th><th>Officer</th><th>Phone / Ext</th><th>Email</th><th>Action</th></tr></thead>
+      <thead><tr><th>Order</th><th>Section</th><th>Officer</th><th>Phone / Ext</th><th>Email</th><th>Action</th></tr></thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
           <tr>
+            <td style="white-space:nowrap;">
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
+              <span style="margin-left:4px;font-size:0.8rem;">#<?= (int)($r['sort_order'] ?? 1) ?></span>
+            </td>
             <td><?= e($r['section']) ?></td>
             <td><?= e($r['officer_name']) ?> (<?= e($r['designation']) ?>)</td>
             <td><?= e($r['direct_phone']) ?> · Ext <?= e($r['extension']) ?></td>

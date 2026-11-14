@@ -60,6 +60,7 @@ $siteCssVer = 'v=2';
         <?php endif; ?>
         <?php if (canAccessResource($user, 'users')): ?>
           <a href="manage_users.php" class="<?= $activePage === 'manage_users.php' ? 'active' : '' ?>">Users, Per-Page RBAC &amp; Audit</a>
+          <a href="manage_backups.php" class="<?= $activePage === 'manage_backups.php' ? 'active' : '' ?>">Backup, Export &amp; Restore</a>
         <?php endif; ?>
       </nav>
     </div>

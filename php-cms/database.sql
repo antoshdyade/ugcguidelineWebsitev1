@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS department_labs (
   equipment_summary TEXT NOT NULL,
   incharge VARCHAR(140) NOT NULL,
   photo_url VARCHAR(255) NULL,
+  sort_order INT DEFAULT 1,
   CONSTRAINT fk_lab_dept FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
@@ -162,7 +163,7 @@ CREATE TABLE IF NOT EXISTS leadership_profiles (
   phone VARCHAR(64) NOT NULL,
   photo_url VARCHAR(255) NOT NULL,
   bio TEXT,
-  committee_group ENUM('statutory','governance','icc','academic_leadership') DEFAULT 'statutory',
+  committee_group VARCHAR(120) NOT NULL DEFAULT 'Statutory Officer',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -196,6 +197,7 @@ CREATE TABLE IF NOT EXISTS campus_events (
   content_html MEDIUMTEXT,
   image_url VARCHAR(255) DEFAULT '',
   is_featured TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1,
   FULLTEXT KEY ft_events (title, summary)
 ) ENGINE=InnoDB;
 
@@ -212,6 +214,7 @@ CREATE TABLE IF NOT EXISTS documents (
   uploaded_at DATE NOT NULL,
   uploaded_by VARCHAR(120) NOT NULL,
   is_quick_link TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1,
   FULLTEXT KEY ft_docs (title, category, file_name)
 ) ENGINE=InnoDB;
 
@@ -221,7 +224,8 @@ CREATE TABLE IF NOT EXISTS gallery_albums (
   title VARCHAR(180) NOT NULL,
   category VARCHAR(80) NOT NULL,
   event_date DATE NOT NULL,
-  cover_url VARCHAR(255) NOT NULL
+  cover_url VARCHAR(255) NOT NULL,
+  sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS gallery_photos (
@@ -241,7 +245,8 @@ CREATE TABLE IF NOT EXISTS telephone_directory (
   designation VARCHAR(140) NOT NULL,
   extension VARCHAR(20) NOT NULL,
   direct_phone VARCHAR(60) NOT NULL,
-  email VARCHAR(160) NOT NULL
+  email VARCHAR(160) NOT NULL,
+  sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -262,6 +267,13 @@ CREATE TABLE IF NOT EXISTS custom_home_components (
   html_content MEDIUMTEXT NOT NULL,
   sort_order INT DEFAULT 1,
   is_active TINYINT(1) DEFAULT 1,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 15. CMS Key-Value Store (Backup Schedules & Snapshot Metadata)
+CREATE TABLE IF NOT EXISTS cms_kv_store (
+  key_name VARCHAR(80) PRIMARY KEY,
+  val_json MEDIUMTEXT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -381,10 +393,10 @@ INSERT INTO department_labs (department_id, name, area_sqft, equipment_summary, 
 (5, 'Power Systems & EV Drives Lab', 1650, 'MATLAB Simulink RT, Three-Phase Synchronous Machines', 'Dr. M. R. Joshi', NULL),
 (6, 'Embedded Computing & Cloud IoT Lab', 1300, 'ARM Cortex Kits, Raspberry Pi Edge Clusters', 'Prof. P. S. Sawant', NULL);
 
-INSERT INTO leadership_profiles (role_title, name, qualification, email, phone, photo_url, bio, sort_order) VALUES
-('Principal & Director', 'Dr. B. P. Ronge', 'Ph.D. (Mech), M.Tech (IIT)', 'principal@coe.sveri.ac.in', '+91-02186-216063', 'assets/images/principal.jpg', 'Leading SVERI''s College of Engineering, Pandharpur in NAAC A+ quality governance and autonomy.', 1),
-('Registrar & PIO (RTI)', 'Shri S. G. Kulkarni', 'M.Com, LL.B., MBA', 'coe@coe.sveri.ac.in', '+91-02186-216062', 'assets/images/principal.jpg', 'Custodian of institutional records and statutory compliance.', 2),
-('Controller of Examinations', 'Dr. M. S. Kumbhar', 'Ph.D. (E&TC)', 'coe@coe.sveri.ac.in', '+91-02186-216061', 'assets/images/principal.jpg', 'Heads autonomous examination and ABC credit governance.', 3);
+INSERT INTO leadership_profiles (role_title, name, qualification, email, phone, photo_url, bio, committee_group, sort_order) VALUES
+('Principal & Director', 'Dr. B. P. Ronge', 'Ph.D. (Mech), M.Tech (IIT)', 'principal@coe.sveri.ac.in', '+91-02186-216063', 'assets/images/principal.jpg', 'Leading SVERI''s College of Engineering, Pandharpur in NAAC A+ quality governance and autonomy.', 'Statutory Officer', 1),
+('Registrar & PIO (RTI)', 'Shri S. G. Kulkarni', 'M.Com, LL.B., MBA', 'coe@coe.sveri.ac.in', '+91-02186-216062', 'assets/images/principal.jpg', 'Custodian of institutional records and statutory compliance.', 'Statutory Officer', 2),
+('Controller of Examinations', 'Dr. M. S. Kumbhar', 'Ph.D. (E&TC)', 'coe@coe.sveri.ac.in', '+91-02186-216061', 'assets/images/principal.jpg', 'Heads autonomous examination and ABC credit governance.', 'Statutory Officer', 3);
 
 INSERT INTO sliders (title, caption, image_url, cta_label, cta_link, sort_order) VALUES
 ('Empowering Engineering Excellence Under NEP 2020', 'Autonomous Institution (AY 2024-25) · NAAC A+ (CGPA 3.46) · DTE Code 06220 · Complete UGC Public Self-Disclosure.', 'assets/images/hero_campus.jpg', 'View FRA Fee Structure', 'page.php?slug=prospectus-fee-structure', 1),

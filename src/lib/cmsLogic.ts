@@ -245,6 +245,42 @@ export function canUserAccessCategory(
   return user.role === 'content_editor' || user.role === 'iqac_officer';
 }
 
+export const LEADERSHIP_GROUP_PRESETS = [
+  'Statutory Officer',
+  'Governing Body',
+  'Internal Complaint Committee (ICC)',
+  'Academic Leadership',
+  'Board of Studies',
+  'Finance Committee',
+  'Academic Council',
+] as const;
+
+export function formatCommitteeGroupLabel(group?: string): string {
+  const raw = (group || '').trim();
+  if (!raw) return 'Leadership & Governance';
+  switch (raw) {
+    case 'statutory':
+      return 'Statutory Officer';
+    case 'governance':
+      return 'Governing Body';
+    case 'icc':
+      return 'Internal Complaint Committee (ICC)';
+    case 'academic_leadership':
+      return 'Academic Leadership';
+    default:
+      return raw;
+  }
+}
+
+export function sortByOrder<T extends { id: number; sortOrder?: number }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const ao = a.sortOrder ?? a.id;
+    const bo = b.sortOrder ?? b.id;
+    if (ao !== bo) return ao - bo;
+    return a.id - b.id;
+  });
+}
+
 export function canUserAccessPage(
   user: RbacUserLike | null,
   page: Pick<CmsPage, 'id' | 'categorySlug'>,
@@ -253,11 +289,11 @@ export function canUserAccessPage(
   if (user.role === 'super_admin') return true;
   const allowedCats = user.allowedCategories ?? [];
   const allowedPages = user.allowedPageIds ?? [];
-  if (allowedCats.length > 0 || allowedPages.length > 0) {
-    return (
-      allowedPages.includes(page.id) ||
-      allowedCats.includes(page.categorySlug)
-    );
+  if (allowedPages.length > 0) {
+    return allowedPages.includes(page.id);
+  }
+  if (allowedCats.length > 0) {
+    return allowedCats.includes(page.categorySlug);
   }
   if (user.role === 'exam_controller') {
     return page.categorySlug === 'examination';

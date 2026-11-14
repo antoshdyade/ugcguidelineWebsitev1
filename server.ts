@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { createServer as createViteServer } from 'vite';
 import { createSeedDatabase, hashPassword, verifyPassword } from './src/data/seedDatabase';
 import {
@@ -9,26 +10,44 @@ import {
   canUserAccessPage,
   canUserAccessResource,
   searchCmsContent,
+  sortByOrder,
   validateExternalDocumentUrl,
   validateUploadMeta,
   type AdminResource,
 } from './src/lib/cmsLogic';
+import {
+  applyBackupRestore,
+  computeIncrementalDiff,
+  computeNextRunIso,
+  countDatabaseEntities,
+  defaultBackupSchedule,
+  extractSnapshotData,
+  validateBackupPackage,
+} from './src/lib/backupLogic';
 import type {
+  BackupDestination,
+  BackupMode,
+  BackupPackage,
+  BackupRecord,
+  BackupScheduleConfig,
   CmsCategory,
   CmsDatabase,
   CmsUser,
   CustomHomeComponent,
   HomeComponentPlacement,
+  ScpConfig,
   UserRole,
 } from './src/types/cms';
 
 const PORT = 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'cms-db.json');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const UPLOAD_DIR = path.resolve(process.cwd(), 'public', 'uploads');
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.createHash('sha256').update(process.cwd()).digest('hex');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(BACKUP_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 function loadDatabase(): CmsDatabase {
@@ -82,6 +101,15 @@ function loadDatabase(): CmsDatabase {
         categories,
         pages,
         users,
+        backups: Array.isArray(parsed.backups) ? parsed.backups : [],
+        backupSchedule: {
+          ...defaultBackupSchedule(),
+          ...(parsed.backupSchedule || {}),
+          scpConfig: {
+            ...defaultBackupSchedule().scpConfig!,
+            ...(parsed.backupSchedule?.scpConfig || {}),
+          },
+        },
         settings: {
           ...seed.settings,
           ...(parsed.settings || {}),
@@ -100,8 +128,13 @@ function loadDatabase(): CmsDatabase {
       // Fallback to fresh seed if file is corrupted
     }
   }
-  fs.writeFileSync(DB_FILE, JSON.stringify(seed, null, 2), 'utf-8');
-  return seed;
+  const initialSeed: CmsDatabase = {
+    ...seed,
+    backups: [],
+    backupSchedule: defaultBackupSchedule(),
+  };
+  fs.writeFileSync(DB_FILE, JSON.stringify(initialSeed, null, 2), 'utf-8');
+  return initialSeed;
 }
 
 let db: CmsDatabase = loadDatabase();
@@ -199,19 +232,21 @@ async function startServer() {
   // Public bootstrap endpoint (unrestricted access per UGC Rule 4)
   app.get('/api/public/bootstrap', (_req, res) => {
     res.json({
-      categories: [...db.categories].sort((a, b) => a.sortOrder - b.sortOrder),
-      pages: db.pages.filter((p) => p.isPublished).sort((a, b) => a.sortOrder - b.sortOrder),
-      leadership: db.leadership,
+      categories: sortByOrder(db.categories),
+      pages: sortByOrder(db.pages.filter((p) => p.isPublished)),
+      leadership: sortByOrder(db.leadership),
       departments: db.departments.map((d) => ({
         ...d,
-        subPages: d.subPages.filter((sp) => sp.isPublished),
+        subPages: sortByOrder(d.subPages.filter((sp) => sp.isPublished)),
+        faculty: sortByOrder(d.faculty),
+        labs: sortByOrder(d.labs),
       })),
-      sliders: db.sliders.filter((s) => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
-      ticker: db.ticker.filter((t) => t.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
-      events: db.events,
-      documents: db.documents,
-      gallery: db.gallery,
-      telephoneDirectory: db.telephoneDirectory,
+      sliders: sortByOrder(db.sliders.filter((s) => s.isActive)),
+      ticker: sortByOrder(db.ticker.filter((t) => t.isActive)),
+      events: sortByOrder(db.events),
+      documents: sortByOrder(db.documents),
+      gallery: sortByOrder(db.gallery),
+      telephoneDirectory: sortByOrder(db.telephoneDirectory),
       settings: db.settings,
     });
   });
@@ -305,21 +340,41 @@ async function startServer() {
   app.get('/api/admin/state', requireAdmin(), (req, res) => {
     const currentUser = (req as express.Request & { currentUser: CmsUser }).currentUser;
     res.json({
-      categories: [...db.categories].sort((a, b) => a.sortOrder - b.sortOrder),
-      pages: db.pages,
-      departments: db.departments,
-      sliders: db.sliders,
-      ticker: db.ticker,
-      events: db.events,
-      documents: db.documents,
-      gallery: db.gallery,
-      leadership: db.leadership,
-      telephoneDirectory: db.telephoneDirectory,
+      categories: sortByOrder(db.categories),
+      pages: sortByOrder(db.pages),
+      departments: db.departments.map((d) => ({
+        ...d,
+        subPages: sortByOrder(d.subPages),
+        faculty: sortByOrder(d.faculty),
+        labs: sortByOrder(d.labs),
+      })),
+      sliders: sortByOrder(db.sliders),
+      ticker: sortByOrder(db.ticker),
+      events: sortByOrder(db.events),
+      documents: sortByOrder(db.documents),
+      gallery: sortByOrder(db.gallery),
+      leadership: sortByOrder(db.leadership),
+      telephoneDirectory: sortByOrder(db.telephoneDirectory),
       settings: db.settings,
       users: canUserAccessResource(currentUser, 'users') ? db.users.map(sanitizeUser) : [],
       auditLogs: canUserAccessResource(currentUser, 'audit_logs') ? db.auditLogs : [],
     });
   });
+
+  function applyReorderIds<T extends { id: number; sortOrder?: number }>(list: T[], orderedIds: number[]): T[] {
+    const pos = new Map<number, number>();
+    orderedIds.forEach((id, idx) => pos.set(Number(id), idx + 1));
+    const maxPos = orderedIds.length + 1;
+    const sorted = [...list].sort((a, b) => {
+      const pa = pos.get(a.id) ?? (maxPos + (a.sortOrder ?? a.id));
+      const pb = pos.get(b.id) ?? (maxPos + (b.sortOrder ?? b.id));
+      return pa - pb;
+    });
+    sorted.forEach((item, idx) => {
+      item.sortOrder = idx + 1;
+    });
+    return sorted;
+  }
 
   // Categories & Navigation Builder CRUD
   app.post('/api/admin/categories', requireAdmin('categories'), (req, res) => {
@@ -496,6 +551,25 @@ async function startServer() {
     res.status(201).json(created);
   });
 
+  app.put('/api/admin/pages/reorder', requireAdmin('pages'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    orderedIds.forEach((id, idx) => {
+      const pg = db.pages.find((p) => p.id === Number(id));
+      if (pg && canUserAccessPage(actor, pg)) {
+        pg.sortOrder = idx + 1;
+      }
+    });
+    db.pages = sortByOrder(db.pages);
+    addAudit(actor, 'REORDER_PAGES', 'Page', 'Updated page display order');
+    saveDatabase();
+    res.json(db.pages);
+  });
+
   app.put('/api/admin/pages/:id', requireAdmin('pages'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const id = Number(req.params.id);
@@ -595,6 +669,24 @@ async function startServer() {
   );
 
   app.put(
+    '/api/admin/departments/:deptId/subpages/reorder',
+    requireAdmin('departments', (req) => Number(req.params.deptId)),
+    (req, res) => {
+      const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+      const dept = db.departments.find((d) => d.id === Number(req.params.deptId));
+      const { orderedIds } = req.body as { orderedIds?: number[] };
+      if (!dept || !Array.isArray(orderedIds)) {
+        res.status(400).json({ error: 'Department and orderedIds array are required.' });
+        return;
+      }
+      dept.subPages = applyReorderIds(dept.subPages, orderedIds);
+      addAudit(actor, 'REORDER_DEPT_SUBPAGES', dept.shortName, 'Updated micro-page menu order');
+      saveDatabase();
+      res.json(dept.subPages);
+    },
+  );
+
+  app.put(
     '/api/admin/departments/:deptId/subpages/:subId',
     requireAdmin('departments', (req) => Number(req.params.deptId)),
     (req, res) => {
@@ -672,12 +764,14 @@ async function startServer() {
         externalProfileLabel,
         customFields,
         isHod,
+        sortOrder,
       } = req.body;
       if (!name || !designation) {
         res.status(400).json({ error: 'Faculty name and designation are required.' });
         return;
       }
       const nextId = Math.max(1000, ...dept.faculty.map((f) => f.id)) + 1;
+      const maxOrder = Math.max(0, ...dept.faculty.map((f) => f.sortOrder ?? 0));
       const fac = {
         id: nextId,
         departmentId: deptId,
@@ -693,12 +787,31 @@ async function startServer() {
         externalProfileLabel: externalProfileLabel ? String(externalProfileLabel).trim() : undefined,
         customFields: Array.isArray(customFields) ? customFields : [],
         isHod: Boolean(isHod ?? false),
-        sortOrder: dept.faculty.length + 1,
+        sortOrder: sortOrder !== undefined && Number(sortOrder) > 0 ? Number(sortOrder) : maxOrder + 1,
       };
       dept.faculty.push(fac);
+      dept.faculty = sortByOrder(dept.faculty);
       addAudit(actor, 'ADD_FACULTY', dept.shortName, fac.name);
       saveDatabase();
       res.status(201).json(fac);
+    },
+  );
+
+  app.put(
+    '/api/admin/departments/:deptId/faculty/reorder',
+    requireAdmin('departments', (req) => Number(req.params.deptId)),
+    (req, res) => {
+      const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+      const dept = db.departments.find((d) => d.id === Number(req.params.deptId));
+      const { orderedIds } = req.body as { orderedIds?: number[] };
+      if (!dept || !Array.isArray(orderedIds)) {
+        res.status(400).json({ error: 'Department and orderedIds array are required.' });
+        return;
+      }
+      dept.faculty = applyReorderIds(dept.faculty, orderedIds);
+      addAudit(actor, 'REORDER_FACULTY', dept.shortName, 'Updated faculty serial numbers');
+      saveDatabase();
+      res.json(dept.faculty);
     },
   );
 
@@ -729,6 +842,10 @@ async function startServer() {
       }
       if (Array.isArray(req.body.customFields)) fac.customFields = req.body.customFields;
       if (req.body.isHod !== undefined) fac.isHod = Boolean(req.body.isHod);
+      if (req.body.sortOrder !== undefined && Number(req.body.sortOrder) > 0) {
+        fac.sortOrder = Number(req.body.sortOrder);
+      }
+      dept.faculty = sortByOrder(dept.faculty);
       addAudit(actor, 'UPDATE_FACULTY', dept.shortName, fac.name);
       saveDatabase();
       res.json(fac);
@@ -769,12 +886,13 @@ async function startServer() {
         res.status(404).json({ error: 'Department not found.' });
         return;
       }
-      const { name, areaSqFt, equipmentSummary, incharge, photoUrl } = req.body;
+      const { name, areaSqFt, equipmentSummary, incharge, photoUrl, sortOrder } = req.body;
       if (!name) {
         res.status(400).json({ error: 'Laboratory name is required.' });
         return;
       }
       const nextId = Math.max(2000, ...dept.labs.map((l) => l.id)) + 1;
+      const maxOrder = Math.max(0, ...dept.labs.map((l) => l.sortOrder ?? 0));
       const lab = {
         id: nextId,
         departmentId: deptId,
@@ -783,11 +901,30 @@ async function startServer() {
         equipmentSummary: String(equipmentSummary || ''),
         incharge: String(incharge || dept.hodName),
         photoUrl: photoUrl ? String(photoUrl) : undefined,
+        sortOrder: sortOrder !== undefined ? Number(sortOrder) : maxOrder + 1,
       };
       dept.labs.push(lab);
       addAudit(actor, 'ADD_LAB', dept.shortName, lab.name);
       saveDatabase();
       res.status(201).json(lab);
+    },
+  );
+
+  app.put(
+    '/api/admin/departments/:deptId/labs/reorder',
+    requireAdmin('departments', (req) => Number(req.params.deptId)),
+    (req, res) => {
+      const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+      const dept = db.departments.find((d) => d.id === Number(req.params.deptId));
+      const { orderedIds } = req.body as { orderedIds?: number[] };
+      if (!dept || !Array.isArray(orderedIds)) {
+        res.status(400).json({ error: 'Department and orderedIds array are required.' });
+        return;
+      }
+      dept.labs = applyReorderIds(dept.labs, orderedIds);
+      addAudit(actor, 'REORDER_LABS', dept.shortName, 'Updated laboratory order');
+      saveDatabase();
+      res.json(dept.labs);
     },
   );
 
@@ -807,6 +944,7 @@ async function startServer() {
       if (req.body.equipmentSummary !== undefined) lab.equipmentSummary = String(req.body.equipmentSummary);
       if (req.body.incharge !== undefined) lab.incharge = String(req.body.incharge);
       if (req.body.photoUrl !== undefined) lab.photoUrl = req.body.photoUrl ? String(req.body.photoUrl) : undefined;
+      if (req.body.sortOrder !== undefined) lab.sortOrder = Number(req.body.sortOrder);
       addAudit(actor, 'UPDATE_LAB', dept.shortName, lab.name);
       saveDatabase();
       res.json(lab);
@@ -1024,6 +1162,19 @@ async function startServer() {
     res.status(201).json(slide);
   });
 
+  app.put('/api/admin/sliders/reorder', requireAdmin('sliders_events'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    db.sliders = applyReorderIds(db.sliders, orderedIds);
+    addAudit(actor, 'REORDER_SLIDERS', 'Slider', 'Updated hero slider order');
+    saveDatabase();
+    res.json(db.sliders);
+  });
+
   app.put('/api/admin/sliders/:id', requireAdmin('sliders_events'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const slide = db.sliders.find((s) => s.id === Number(req.params.id));
@@ -1063,18 +1214,34 @@ async function startServer() {
       return;
     }
     const nextId = Math.max(1, ...db.ticker.map((t) => t.id)) + 1;
+    db.ticker.forEach((t, idx) => {
+      t.sortOrder = (t.sortOrder ?? idx + 1) + 1;
+    });
     const item = {
       id: nextId,
       text: String(text),
       linkUrl: String(linkUrl || '/page/circulars-notices'),
       badgeText: badgeText ? String(badgeText) : 'Notice',
       isActive: true,
-      sortOrder: db.ticker.length + 1,
+      sortOrder: 1,
     };
     db.ticker.unshift(item);
     addAudit(actor, 'CREATE_TICKER', 'Ticker', item.text);
     saveDatabase();
     res.status(201).json(item);
+  });
+
+  app.put('/api/admin/ticker/reorder', requireAdmin('sliders_events'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    db.ticker = applyReorderIds(db.ticker, orderedIds);
+    addAudit(actor, 'REORDER_TICKER', 'Ticker', 'Updated scrolling ticker order');
+    saveDatabase();
+    res.json(db.ticker);
   });
 
   app.delete('/api/admin/ticker/:id', requireAdmin('sliders_events'), (req, res) => {
@@ -1098,6 +1265,9 @@ async function startServer() {
       return;
     }
     const nextId = Math.max(1, ...db.events.map((e) => e.id)) + 1;
+    db.events.forEach((e, idx) => {
+      e.sortOrder = (e.sortOrder ?? idx + 1) + 1;
+    });
     const ev = {
       id: nextId,
       title: String(title),
@@ -1107,11 +1277,25 @@ async function startServer() {
       contentHtml: String(contentHtml || `<p>${summary || ''}</p>`),
       imageUrl: imageUrl ? String(imageUrl) : undefined,
       isFeatured: Boolean(isFeatured ?? true),
+      sortOrder: 1,
     };
     db.events.unshift(ev);
     addAudit(actor, 'CREATE_EVENT', ev.category, ev.title);
     saveDatabase();
     res.status(201).json(ev);
+  });
+
+  app.put('/api/admin/events/reorder', requireAdmin('sliders_events'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    db.events = applyReorderIds(db.events, orderedIds);
+    addAudit(actor, 'REORDER_EVENTS', 'Event', 'Updated events & circulars order');
+    saveDatabase();
+    res.json(db.events);
   });
 
   app.put('/api/admin/events/:id', requireAdmin('sliders_events'), (req, res) => {
@@ -1128,6 +1312,7 @@ async function startServer() {
     if (req.body.contentHtml !== undefined) ev.contentHtml = String(req.body.contentHtml);
     if (req.body.imageUrl !== undefined) ev.imageUrl = req.body.imageUrl ? String(req.body.imageUrl) : undefined;
     if (req.body.isFeatured !== undefined) ev.isFeatured = Boolean(req.body.isFeatured);
+    if (req.body.sortOrder !== undefined) ev.sortOrder = Number(req.body.sortOrder);
     addAudit(actor, 'UPDATE_EVENT', ev.category, ev.title);
     saveDatabase();
     res.json(ev);
@@ -1149,12 +1334,13 @@ async function startServer() {
   // Leadership & Statutory Officers CRUD
   app.post('/api/admin/leadership', requireAdmin('leadership'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
-    const { roleTitle, name, qualification, email, phone, photoUrl, bio, committeeGroup } = req.body;
+    const { roleTitle, name, qualification, email, phone, photoUrl, bio, committeeGroup, sortOrder } = req.body;
     if (!roleTitle || !name) {
       res.status(400).json({ error: 'Role title and officer name are required.' });
       return;
     }
     const nextId = Math.max(1, ...db.leadership.map((l) => l.id)) + 1;
+    const maxOrder = Math.max(0, ...db.leadership.map((l) => l.sortOrder ?? 0));
     const profile = {
       id: nextId,
       roleTitle: String(roleTitle),
@@ -1164,13 +1350,27 @@ async function startServer() {
       phone: String(phone || ''),
       photoUrl: String(photoUrl || '/src/assets/images/leadership_principal_1794512597061.jpg'),
       bio: String(bio || ''),
-      committeeGroup: committeeGroup || 'statutory',
-      sortOrder: db.leadership.length + 1,
+      committeeGroup: String(committeeGroup || 'Statutory Officer').trim() || 'Statutory Officer',
+      sortOrder: sortOrder !== undefined && Number(sortOrder) > 0 ? Number(sortOrder) : maxOrder + 1,
     };
     db.leadership.push(profile);
+    db.leadership = sortByOrder(db.leadership);
     addAudit(actor, 'CREATE_LEADERSHIP', 'Leadership', `${profile.name} (${profile.roleTitle})`);
     saveDatabase();
     res.status(201).json(profile);
+  });
+
+  app.put('/api/admin/leadership/reorder', requireAdmin('leadership'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    db.leadership = applyReorderIds(db.leadership, orderedIds);
+    addAudit(actor, 'REORDER_LEADERSHIP', 'Leadership', 'Updated leadership & governance order');
+    saveDatabase();
+    res.json(db.leadership);
   });
 
   app.put('/api/admin/leadership/:id', requireAdmin('leadership'), (req, res) => {
@@ -1185,6 +1385,10 @@ async function startServer() {
         (profile as unknown as Record<string, string>)[f] = String(req.body[f]);
       }
     }
+    if (req.body.sortOrder !== undefined && Number(req.body.sortOrder) > 0) {
+      profile.sortOrder = Number(req.body.sortOrder);
+    }
+    db.leadership = sortByOrder(db.leadership);
     addAudit(actor, 'UPDATE_LEADERSHIP', 'Leadership', profile.name);
     saveDatabase();
     res.json(profile);
@@ -1212,6 +1416,9 @@ async function startServer() {
       return;
     }
     const nextId = Math.max(1, ...db.gallery.map((g) => g.id)) + 1;
+    db.gallery.forEach((g, idx) => {
+      g.sortOrder = (g.sortOrder ?? idx + 1) + 1;
+    });
     const cover = String(coverUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg');
     const album = {
       id: nextId,
@@ -1219,6 +1426,7 @@ async function startServer() {
       category: String(category || 'Campus'),
       eventDate: String(eventDate || new Date().toISOString().slice(0, 10)),
       coverUrl: cover,
+      sortOrder: 1,
       photos: [
         {
           id: nextId * 100 + 1,
@@ -1232,6 +1440,19 @@ async function startServer() {
     addAudit(actor, 'CREATE_ALBUM', 'Gallery', album.title);
     saveDatabase();
     res.status(201).json(album);
+  });
+
+  app.put('/api/admin/gallery/albums/reorder', requireAdmin('gallery'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    db.gallery = applyReorderIds(db.gallery, orderedIds);
+    addAudit(actor, 'REORDER_GALLERY', 'Gallery', 'Updated album order');
+    saveDatabase();
+    res.json(db.gallery);
   });
 
   app.delete('/api/admin/gallery/albums/:id', requireAdmin('gallery'), (req, res) => {
@@ -1299,6 +1520,7 @@ async function startServer() {
       return;
     }
     const nextId = Math.max(1, ...db.telephoneDirectory.map((t) => t.id)) + 1;
+    const maxOrder = Math.max(0, ...db.telephoneDirectory.map((t) => t.sortOrder ?? t.id));
     const entry = {
       id: nextId,
       section: String(section),
@@ -1307,11 +1529,25 @@ async function startServer() {
       extension: String(extension || ''),
       directPhone: String(directPhone || ''),
       email: String(email || ''),
+      sortOrder: maxOrder + 1,
     };
     db.telephoneDirectory.push(entry);
     addAudit(actor, 'ADD_DIRECTORY_ENTRY', 'Directory', `${entry.section} - ${entry.officerName}`);
     saveDatabase();
     res.status(201).json(entry);
+  });
+
+  app.put('/api/admin/directory/reorder', requireAdmin('directory'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    db.telephoneDirectory = applyReorderIds(db.telephoneDirectory, orderedIds);
+    addAudit(actor, 'REORDER_DIRECTORY', 'Directory', 'Updated telephone directory order');
+    saveDatabase();
+    res.json(db.telephoneDirectory);
   });
 
   app.delete('/api/admin/directory/:id', requireAdmin('directory'), (req, res) => {
@@ -1347,6 +1583,9 @@ async function startServer() {
     }
 
     const nextId = Math.max(1, ...db.documents.map((d) => d.id)) + 1;
+    db.documents.forEach((d, idx) => {
+      d.sortOrder = (d.sortOrder ?? idx + 1) + 1;
+    });
 
     if (sourceType === 'external') {
       const urlCheck = validateExternalDocumentUrl(String(externalUrl || ''));
@@ -1373,6 +1612,7 @@ async function startServer() {
         uploadedAt: new Date().toISOString().slice(0, 10),
         uploadedBy: actor.fullName,
         isQuickLink: Boolean(isQuickLink ?? true),
+        sortOrder: 1,
       };
       db.documents.unshift(doc);
       addAudit(actor, 'ADD_EXTERNAL_DOCUMENT', 'Document', doc.title);
@@ -1416,11 +1656,25 @@ async function startServer() {
       uploadedAt: new Date().toISOString().slice(0, 10),
       uploadedBy: actor.fullName,
       isQuickLink: Boolean(isQuickLink ?? true),
+      sortOrder: 1,
     };
     db.documents.unshift(doc);
     addAudit(actor, 'UPLOAD_DOCUMENT', 'Document', doc.title);
     saveDatabase();
     res.status(201).json(doc);
+  });
+
+  app.put('/api/admin/documents/reorder', requireAdmin('documents'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    db.documents = applyReorderIds(db.documents, orderedIds);
+    addAudit(actor, 'REORDER_DOCUMENTS', 'Document', 'Updated documents repository order');
+    saveDatabase();
+    res.json(db.documents);
   });
 
   app.delete('/api/admin/documents/:id', requireAdmin('documents'), (req, res) => {
@@ -1639,6 +1893,470 @@ async function startServer() {
     saveDatabase();
     res.json(db.settings);
   });
+
+  // ============================================================================
+  // BACKUP, INCREMENTAL SNAPSHOT, SCHEDULED AUTO-BACKUP, SCP, WEBHOOK & RESTORE
+  // ============================================================================
+  function getUploadInventory(): { filename: string; sizeBytes: number; mtimeMs: number }[] {
+    try {
+      const files = fs.readdirSync(UPLOAD_DIR);
+      return files
+        .map((fn) => {
+          const full = path.join(UPLOAD_DIR, fn);
+          const st = fs.statSync(full);
+          if (!st.isFile()) return null;
+          return { filename: fn, sizeBytes: st.size, mtimeMs: Math.round(st.mtimeMs) };
+        })
+        .filter((x): x is { filename: string; sizeBytes: number; mtimeMs: number } => Boolean(x));
+    } catch {
+      return [];
+    }
+  }
+
+  function loadBackupFilePackage(filename: string): BackupPackage | null {
+    const safeName = path.basename(filename);
+    const full = path.join(BACKUP_DIR, safeName);
+    if (!fs.existsSync(full)) return null;
+    try {
+      return JSON.parse(fs.readFileSync(full, 'utf-8')) as BackupPackage;
+    } catch {
+      return null;
+    }
+  }
+
+  async function executeScpPush(localFilePath: string, scp: ScpConfig): Promise<{ ok: boolean; message: string }> {
+    const host = (scp.host || '').trim();
+    const user = (scp.username || '').trim();
+    const remoteDir = (scp.remoteDir || '').trim() || '/tmp';
+    const port = Number(scp.port || 22);
+    if (!/^[a-zA-Z0-9._-]+$/.test(host) || !/^[a-zA-Z0-9._-]+$/.test(user)) {
+      return { ok: false, message: 'Invalid SCP host or username format.' };
+    }
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return { ok: false, message: 'Invalid SSH/SCP port number.' };
+    }
+    const args: string[] = ['-P', String(port), '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8'];
+    if (scp.keyPath && scp.keyPath.trim()) {
+      if (!fs.existsSync(scp.keyPath.trim())) {
+        return { ok: false, message: `SSH identity key not found at ${scp.keyPath.trim()}` };
+      }
+      args.push('-i', scp.keyPath.trim());
+    }
+    const remoteTarget = `${user}@${host}:${remoteDir.replace(/\/$/, '')}/${path.basename(localFilePath)}`;
+    args.push(localFilePath, remoteTarget);
+
+    return new Promise((resolve) => {
+      execFile('scp', args, { timeout: 15000 }, (err, _stdout, stderr) => {
+        if (err) {
+          resolve({
+            ok: false,
+            message: (stderr || err.message || 'SCP transfer failed (verify SSH key & remote host reachability).').trim(),
+          });
+        } else {
+          resolve({ ok: true, message: `Transferred via SCP to ${remoteTarget}` });
+        }
+      });
+    });
+  }
+
+  async function pushWebhookBackup(webhookUrl: string, pkg: BackupPackage): Promise<{ ok: boolean; message: string }> {
+    const urlCheck = validateExternalDocumentUrl(webhookUrl);
+    if (!urlCheck.valid || !urlCheck.normalizedUrl) {
+      return { ok: false, message: urlCheck.reason || 'Invalid webhook / Google Drive Apps Script URL.' };
+    }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      const resp = await fetch(urlCheck.normalizedUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'svcoer_cms_backup',
+          createdAt: pkg.createdAt,
+          mode: pkg.mode,
+          package: pkg,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!resp.ok) {
+        return { ok: false, message: `Webhook returned HTTP ${resp.status}` };
+      }
+      return { ok: true, message: `Pushed backup to remote endpoint (HTTP ${resp.status})` };
+    } catch (err) {
+      return { ok: false, message: `Webhook push error: ${(err as Error).message}` };
+    }
+  }
+
+  async function createBackupSnapshot(opts: {
+    mode: BackupMode;
+    destination: BackupDestination;
+    createdBy: string;
+    notes?: string;
+    scpOverride?: ScpConfig;
+    webhookOverride?: string;
+  }): Promise<BackupRecord> {
+    const now = new Date();
+    const createdAt = now.toISOString();
+    const stamp = createdAt.replace(/[:.]/g, '-').slice(0, 19);
+    const id = `bk-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
+    const existing = db.backups ?? [];
+    const baselineRecord = existing.find((b) => b.mode === 'full') || existing[0];
+    const baselinePkg = baselineRecord ? loadBackupFilePackage(baselineRecord.filename) : null;
+
+    let effectiveMode: BackupMode = opts.mode;
+    let payloadData: Partial<Omit<CmsDatabase, 'backups' | 'backupSchedule'>>;
+    let changedKeys: string[] | undefined;
+    let baseBackupId: string | null = null;
+
+    if (opts.mode === 'incremental' && baselineRecord && baselinePkg?.data) {
+      const diff = computeIncrementalDiff(baselinePkg.data, db);
+      payloadData = diff.changedData;
+      changedKeys = diff.changedKeys;
+      baseBackupId = baselineRecord.id;
+    } else {
+      effectiveMode = 'full';
+      payloadData = extractSnapshotData(db);
+    }
+
+    const pkg: BackupPackage = {
+      format: 'svcoer-cms-backup',
+      version: 1,
+      mode: effectiveMode,
+      createdAt,
+      baseBackupId,
+      data: payloadData,
+      uploadManifest: getUploadInventory(),
+    };
+    const rawJson = JSON.stringify(pkg, null, 2);
+    const sha256 = crypto.createHash('sha256').update(rawJson).digest('hex');
+    pkg.sha256 = sha256;
+    const finalJson = JSON.stringify(pkg, null, 2);
+
+    const filename = `svcoer-${effectiveMode}-${stamp}.json`;
+    const filePath = path.join(BACKUP_DIR, filename);
+    fs.writeFileSync(filePath, finalJson, 'utf-8');
+
+    let remoteStatus: string | undefined;
+    if (opts.destination === 'scp') {
+      const scpCfg = opts.scpOverride || db.backupSchedule?.scpConfig;
+      if (scpCfg) {
+        const res = await executeScpPush(filePath, scpCfg);
+        remoteStatus = res.message;
+      } else {
+        remoteStatus = 'SCP destination selected, but no SCP host configured.';
+      }
+    } else if (opts.destination === 'webhook') {
+      const hookUrl = opts.webhookOverride || db.backupSchedule?.webhookUrl || '';
+      if (hookUrl) {
+        const res = await pushWebhookBackup(hookUrl, pkg);
+        remoteStatus = res.message;
+      } else {
+        remoteStatus = 'Webhook / Drive Script destination selected, but no URL configured.';
+      }
+    }
+
+    const record: BackupRecord = {
+      id,
+      createdAt,
+      createdBy: opts.createdBy,
+      mode: effectiveMode,
+      destination: opts.destination,
+      filename,
+      sizeBytes: Buffer.byteLength(finalJson, 'utf-8'),
+      sha256,
+      baseBackupId,
+      notes: opts.notes,
+      entityCounts: countDatabaseEntities(payloadData),
+      changedKeys,
+      remoteStatus,
+    };
+
+    const nextList = [record, ...existing];
+    const retention = Math.max(3, Number(db.backupSchedule?.retentionCount || 14));
+    if (nextList.length > retention) {
+      const keep = nextList.slice(0, retention);
+      const removed = nextList.slice(retention);
+      for (const old of removed) {
+        try {
+          const oldPath = path.join(BACKUP_DIR, path.basename(old.filename));
+          if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        } catch {
+          // ignore cleanup failure
+        }
+      }
+      db.backups = keep;
+    } else {
+      db.backups = nextList;
+    }
+
+    return record;
+  }
+
+  app.get('/api/admin/backups', requireAdmin('settings'), (_req, res) => {
+    res.json({
+      backups: db.backups ?? [],
+      schedule: db.backupSchedule ?? defaultBackupSchedule(),
+      uploadsInventory: getUploadInventory(),
+    });
+  });
+
+  app.post('/api/admin/backups/create', requireAdmin('settings'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { mode, destination, notes } = req.body as {
+      mode?: BackupMode;
+      destination?: BackupDestination;
+      notes?: string;
+    };
+    const record = await createBackupSnapshot({
+      mode: mode === 'incremental' ? 'incremental' : 'full',
+      destination: destination === 'scp' || destination === 'webhook' ? destination : 'local',
+      createdBy: actor.email,
+      notes: notes ? String(notes).trim() : undefined,
+    });
+    addAudit(actor, `CREATE_${record.mode.toUpperCase()}_BACKUP`, 'Backup', `${record.filename} (${record.destination})`);
+    saveDatabase();
+    res.status(201).json(record);
+  });
+
+  app.get('/api/admin/export', requireAdmin('settings'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const data = extractSnapshotData(db);
+    const createdAt = new Date().toISOString();
+    const pkg: BackupPackage = {
+      format: 'svcoer-cms-backup',
+      version: 1,
+      mode: 'full',
+      createdAt,
+      data,
+      uploadManifest: getUploadInventory(),
+    };
+    const json = JSON.stringify(pkg, null, 2);
+    pkg.sha256 = crypto.createHash('sha256').update(json).digest('hex');
+    const finalJson = JSON.stringify(pkg, null, 2);
+    addAudit(actor, 'EXPORT_CMS_DATA', 'Backup', 'Instant Full JSON Export');
+    saveDatabase();
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="svcoer-export-${createdAt.slice(0, 10)}.json"`,
+    );
+    res.send(finalJson);
+  });
+
+  app.get('/api/admin/backups/:id/download', requireAdmin('settings'), (req, res) => {
+    const record = (db.backups ?? []).find((b) => b.id === req.params.id);
+    if (!record) {
+      res.status(404).json({ error: 'Backup record not found.' });
+      return;
+    }
+    const full = path.join(BACKUP_DIR, path.basename(record.filename));
+    if (!fs.existsSync(full)) {
+      res.status(404).json({ error: 'Backup file no longer exists on disk.' });
+      return;
+    }
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(record.filename)}"`);
+    res.sendFile(full);
+  });
+
+  app.delete('/api/admin/backups/:id', requireAdmin('settings'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const list = db.backups ?? [];
+    const idx = list.findIndex((b) => b.id === req.params.id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'Backup not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    db.backups = list;
+    try {
+      const p = path.join(BACKUP_DIR, path.basename(removed.filename));
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    } catch {
+      // ignore missing file
+    }
+    addAudit(actor, 'DELETE_BACKUP', 'Backup', removed.filename);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/backups/:id/transfer-scp', requireAdmin('settings'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const record = (db.backups ?? []).find((b) => b.id === req.params.id);
+    if (!record) {
+      res.status(404).json({ error: 'Backup not found.' });
+      return;
+    }
+    const scpCfg: ScpConfig = {
+      ...(db.backupSchedule?.scpConfig || { host: '', port: 22, username: '', remoteDir: '/var/backups/svcoer-cms' }),
+      ...(req.body?.scpConfig || {}),
+    };
+    const filePath = path.join(BACKUP_DIR, path.basename(record.filename));
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({ error: 'Backup archive missing on disk.' });
+      return;
+    }
+    const transfer = await executeScpPush(filePath, scpCfg);
+    record.remoteStatus = transfer.message;
+    addAudit(actor, 'SCP_BACKUP_TRANSFER', 'Backup', `${record.filename}: ${transfer.ok ? 'OK' : 'FAILED'}`);
+    saveDatabase();
+    if (!transfer.ok) {
+      res.status(400).json({ error: transfer.message, record });
+      return;
+    }
+    res.json({ ok: true, message: transfer.message, record });
+  });
+
+  app.post('/api/admin/backups/:id/push-webhook', requireAdmin('settings'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const record = (db.backups ?? []).find((b) => b.id === req.params.id);
+    if (!record) {
+      res.status(404).json({ error: 'Backup not found.' });
+      return;
+    }
+    const pkg = loadBackupFilePackage(record.filename);
+    if (!pkg) {
+      res.status(404).json({ error: 'Backup archive unreadable.' });
+      return;
+    }
+    const hookUrl = String(req.body?.webhookUrl || db.backupSchedule?.webhookUrl || '');
+    const pushRes = await pushWebhookBackup(hookUrl, pkg);
+    record.remoteStatus = pushRes.message;
+    addAudit(actor, 'WEBHOOK_BACKUP_PUSH', 'Backup', `${record.filename}: ${pushRes.ok ? 'OK' : 'FAILED'}`);
+    saveDatabase();
+    if (!pushRes.ok) {
+      res.status(400).json({ error: pushRes.message, record });
+      return;
+    }
+    res.json({ ok: true, message: pushRes.message, record });
+  });
+
+  app.put('/api/admin/backups/schedule', requireAdmin('settings'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const incoming = req.body as Partial<BackupScheduleConfig>;
+    const prev = db.backupSchedule ?? defaultBackupSchedule();
+    const frequency = incoming.frequency || prev.frequency || 'daily';
+    const enabled = incoming.enabled !== undefined ? Boolean(incoming.enabled) : prev.enabled;
+    const nextSchedule: BackupScheduleConfig = {
+      ...prev,
+      ...incoming,
+      enabled,
+      frequency,
+      retentionCount: Math.max(3, Number(incoming.retentionCount ?? prev.retentionCount ?? 14)),
+      scpConfig: {
+        ...(prev.scpConfig || { host: '', port: 22, username: '', remoteDir: '/var/backups/svcoer-cms' }),
+        ...(incoming.scpConfig || {}),
+      },
+      nextRunAt: enabled ? computeNextRunIso(frequency) : undefined,
+    };
+    db.backupSchedule = nextSchedule;
+    addAudit(
+      actor,
+      'UPDATE_BACKUP_SCHEDULE',
+      'Backup',
+      `${nextSchedule.enabled ? 'Enabled' : 'Paused'} (${nextSchedule.frequency} · ${nextSchedule.mode} -> ${nextSchedule.destination})`,
+    );
+    saveDatabase();
+    res.json(nextSchedule);
+  });
+
+  app.post('/api/admin/backups/run-scheduled-now', requireAdmin('settings'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sched = db.backupSchedule ?? defaultBackupSchedule();
+    const record = await createBackupSnapshot({
+      mode: sched.mode,
+      destination: sched.destination,
+      createdBy: `${actor.email} (Manual Schedule Run)`,
+      notes: `Scheduled job trigger (${sched.frequency})`,
+    });
+    sched.lastRunAt = record.createdAt;
+    sched.nextRunAt = sched.enabled ? computeNextRunIso(sched.frequency) : undefined;
+    sched.lastStatus = record.remoteStatus || `Completed ${record.mode} backup (${record.filename})`;
+    db.backupSchedule = sched;
+    addAudit(actor, 'RUN_SCHEDULED_BACKUP', 'Backup', record.filename);
+    saveDatabase();
+    res.json({ record, schedule: sched });
+  });
+
+  app.post('/api/admin/backups/restore', requireAdmin('settings'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { packageData, backupId } = req.body as { packageData?: unknown; backupId?: string };
+
+    let rawPayload: unknown = packageData;
+    if (!rawPayload && backupId) {
+      const targetRec = (db.backups ?? []).find((b) => b.id === backupId);
+      if (!targetRec) {
+        res.status(404).json({ error: 'Selected server backup archive not found.' });
+        return;
+      }
+      rawPayload = loadBackupFilePackage(targetRec.filename);
+    }
+
+    const validation = validateBackupPackage(rawPayload);
+    if (!validation.valid || !validation.pkg) {
+      res.status(400).json({ error: validation.reason || 'Invalid or corrupted backup file.' });
+      return;
+    }
+
+    // Create automatic safety snapshot before overwriting live state
+    const safetyBackup = await createBackupSnapshot({
+      mode: 'full',
+      destination: 'local',
+      createdBy: actor.email,
+      notes: `Automatic pre-restore safety snapshot before restoring ${validation.pkg.mode} archive`,
+    });
+
+    db = applyBackupRestore(db, validation.pkg);
+    addAudit(
+      actor,
+      'RESTORE_BACKUP',
+      'Backup',
+      `Restored ${validation.pkg.mode} backup (safety snapshot: ${safetyBackup.filename})`,
+    );
+    saveDatabase();
+    res.json({
+      ok: true,
+      restoredMode: validation.pkg.mode,
+      entityCounts: validation.entityCounts,
+      safetyBackupId: safetyBackup.id,
+      safetyFilename: safetyBackup.filename,
+    });
+  });
+
+  // Periodic background scheduler for Automatic Backups & Scheduled Exports
+  let backupJobRunning = false;
+  setInterval(async () => {
+    if (backupJobRunning) return;
+    const sched = db.backupSchedule;
+    if (!sched || !sched.enabled) return;
+    const now = Date.now();
+    const dueAt = sched.nextRunAt ? Date.parse(sched.nextRunAt) : 0;
+    if (dueAt > now) return;
+
+    backupJobRunning = true;
+    try {
+      const record = await createBackupSnapshot({
+        mode: sched.mode,
+        destination: sched.destination,
+        createdBy: 'system-scheduler',
+        notes: `Automatic scheduled ${sched.frequency} backup`,
+      });
+      sched.lastRunAt = record.createdAt;
+      sched.nextRunAt = computeNextRunIso(sched.frequency);
+      sched.lastStatus = record.remoteStatus || `Auto-backup saved (${record.filename})`;
+      db.backupSchedule = sched;
+      saveDatabase();
+    } catch (err) {
+      if (db.backupSchedule) {
+        db.backupSchedule.lastStatus = `Auto-backup error: ${(err as Error).message}`;
+        db.backupSchedule.nextRunAt = computeNextRunIso(db.backupSchedule.frequency);
+        saveDatabase();
+      }
+    } finally {
+      backupJobRunning = false;
+    }
+  }, 60_000);
 
   // Vite middleware in development, static dist in production
   const isProd = process.env.NODE_ENV === 'production';

@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 $pdo = getDB();
 
-$albums = $pdo->query('SELECT * FROM gallery_albums ORDER BY event_date DESC')->fetchAll();
+$albums = $pdo->query('SELECT * FROM gallery_albums ORDER BY sort_order ASC, event_date DESC, id DESC')->fetchAll();
 $photosByAlbum = [];
 foreach ($pdo->query('SELECT * FROM gallery_photos')->fetchAll() as $ph) {
     $photosByAlbum[$ph['album_id']][] = $ph;

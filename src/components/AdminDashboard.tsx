@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Archive,
   ArrowDown,
   ArrowLeft,
   ArrowUp,
@@ -27,11 +28,16 @@ import {
   canUserAccessPage,
   canUserAccessResource,
   formatBytes,
+  formatCommitteeGroupLabel,
+  LEADERSHIP_GROUP_PRESETS,
+  sortByOrder,
   THEME_PALETTES,
   validateExternalDocumentUrl,
   validateUploadMeta,
 } from '../lib/cmsLogic';
+import { BackupRestorePanel } from './BackupRestorePanel';
 import { ImageUploader } from './ImageUploader';
+import { PerPageRbacSelector } from './PerPageRbacSelector';
 import { RichTextEditor } from './RichTextEditor';
 import type {
   AuditLogEntry,
@@ -87,7 +93,8 @@ type AdminTab =
   | 'documents'
   | 'directory'
   | 'settings'
-  | 'users';
+  | 'users'
+  | 'backups';
 
 function LinkTargetPicker({
   value,
@@ -275,6 +282,7 @@ export function AdminDashboard({
   const [facEmail, setFacEmail] = useState('');
   const [facPhone, setFacPhone] = useState('');
   const [facExp, setFacExp] = useState(5);
+  const [facSortOrder, setFacSortOrder] = useState(1);
   const [facPhoto, setFacPhoto] = useState('/src/assets/images/leadership_principal_1794512597061.jpg');
   const [facExtUrl, setFacExtUrl] = useState('');
   const [facExtLabel, setFacExtLabel] = useState('Google Scholar / Profile');
@@ -290,6 +298,7 @@ export function AdminDashboard({
   const [labEquip, setLabEquip] = useState('');
   const [labIncharge, setLabIncharge] = useState('');
   const [labPhotoUrl, setLabPhotoUrl] = useState('');
+  const [labSortOrder, setLabSortOrder] = useState(1);
 
   // Homepage / Events state
   const [editingSlideId, setEditingSlideId] = useState<number | null>(null);
@@ -319,7 +328,8 @@ export function AdminDashboard({
   const [leadPhone, setLeadPhone] = useState('');
   const [leadPhoto, setLeadPhoto] = useState('/src/assets/images/leadership_principal_1794512597061.jpg');
   const [leadBio, setLeadBio] = useState('');
-  const [leadGroup, setLeadGroup] = useState<LeadershipProfile['committeeGroup']>('statutory');
+  const [leadGroup, setLeadGroup] = useState<string>('Statutory Officer');
+  const [leadSortOrder, setLeadSortOrder] = useState(1);
 
   // Gallery state
   const [albumTitle, setAlbumTitle] = useState('');
@@ -353,6 +363,7 @@ export function AdminDashboard({
   const [newUserRole, setNewUserRole] = useState<UserRole>('content_editor');
   const [newUserDept, setNewUserDept] = useState<number>(1);
   const [newUserAllowedCats, setNewUserAllowedCats] = useState<string[]>([]);
+  const [newUserAllowedPageIds, setNewUserAllowedPageIds] = useState<number[]>([]);
   const [editingPermsUserId, setEditingPermsUserId] = useState<number | null>(null);
   const [permRole, setPermRole] = useState<UserRole>('content_editor');
   const [permDeptId, setPermDeptId] = useState<number>(1);
@@ -362,10 +373,15 @@ export function AdminDashboard({
   // Settings draft
   const [settingsDraft, setSettingsDraft] = useState<SiteSettings | null>(null);
 
-  const notify = (type: 'ok' | 'err', text: string) => {
+  const csrfTokenRef = useRef('');
+  csrfTokenRef.current = csrfToken;
+  const sessionTokenRef = useRef('');
+  sessionTokenRef.current = sessionToken;
+
+  const notify = useCallback((type: 'ok' | 'err', text: string) => {
     setStatusMsg({ type, text });
     setTimeout(() => setStatusMsg(null), 5000);
-  };
+  }, []);
 
   const clearStoredSession = () => {
     try {
@@ -387,8 +403,8 @@ export function AdminDashboard({
     }
   };
 
-  const getStoredToken = (): string => {
-    if (sessionToken) return sessionToken;
+  const getStoredToken = useCallback((): string => {
+    if (sessionTokenRef.current) return sessionTokenRef.current;
     try {
       const raw = window.sessionStorage.getItem('svcoer_admin_session');
       if (!raw) return '';
@@ -397,9 +413,9 @@ export function AdminDashboard({
     } catch {
       return '';
     }
-  };
+  }, []);
 
-  const fetchAdminState = async (tokenOverride?: string): Promise<boolean> => {
+  const fetchAdminState = useCallback(async (tokenOverride?: string): Promise<boolean> => {
     const activeToken = tokenOverride ?? getStoredToken();
     setStateLoading(true);
     setStateError('');
@@ -427,8 +443,8 @@ export function AdminDashboard({
       const data = (await resp.json()) as AdminStatePayload;
       setState(data);
       setSettingsDraft(data.settings);
-      if (data.gallery[0] && !data.gallery.some((g) => g.id === selectedAlbumId)) {
-        setSelectedAlbumId(data.gallery[0].id);
+      if (data.gallery[0]) {
+        setSelectedAlbumId((prev) => (data.gallery.some((g) => g.id === prev) ? prev : data.gallery[0].id));
       }
       return true;
     } catch {
@@ -437,7 +453,7 @@ export function AdminDashboard({
     } finally {
       setStateLoading(false);
     }
-  };
+  }, [getStoredToken]);
 
   useEffect(() => {
     (async () => {
@@ -460,10 +476,17 @@ export function AdminDashboard({
             if (data.user.assignedDepartmentId) {
               setSelectedDeptId(data.user.assignedDepartmentId);
               setActiveTab('departments');
-            } else if (data.user.role === 'exam_controller') {
+            } else if (
+              data.user.role === 'exam_controller' ||
+              (data.user.role !== 'super_admin' &&
+                ((Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) ||
+                  (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0)))
+            ) {
               setActiveTab('pages');
             }
-            if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
+            if (Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) {
+              setPageFilterCat('all');
+            } else if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
               setPageCat(data.user.allowedCategories[0]);
               setPageFilterCat(data.user.allowedCategories[0]);
             }
@@ -476,7 +499,7 @@ export function AdminDashboard({
         setAuthChecked(true);
       }
     })();
-  }, []);
+  }, [fetchAdminState, getStoredToken]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -500,12 +523,19 @@ export function AdminDashboard({
       if (data.user.assignedDepartmentId) {
         setSelectedDeptId(data.user.assignedDepartmentId);
         setActiveTab('departments');
-      } else if (data.user.role === 'exam_controller') {
+      } else if (
+        data.user.role === 'exam_controller' ||
+        (data.user.role !== 'super_admin' &&
+          ((Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) ||
+            (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0)))
+      ) {
         setActiveTab('pages');
       } else {
         setActiveTab('overview');
       }
-      if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
+      if (Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) {
+        setPageFilterCat('all');
+      } else if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
         setPageCat(data.user.allowedCategories[0]);
         setPageFilterCat(data.user.allowedCategories[0]);
       } else {
@@ -527,35 +557,60 @@ export function AdminDashboard({
     setStateError('');
   };
 
-  const adminFetch = async (url: string, method: string, body?: unknown) => {
-    const activeToken = getStoredToken();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrfToken,
-    };
-    if (activeToken) {
-      headers.Authorization = `Bearer ${activeToken}`;
+  const adminFetch = useCallback(
+    async <T = unknown>(url: string, method = 'GET', body?: unknown): Promise<T> => {
+      const activeToken = getStoredToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfTokenRef.current,
+      };
+      if (activeToken) {
+        headers.Authorization = `Bearer ${activeToken}`;
+      }
+      const resp = await fetch(url, {
+        method,
+        credentials: 'include',
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.status === 401) {
+        clearStoredSession();
+        setUser(null);
+        setState(null);
+        setLoginError('Session expired. Please sign in again.');
+        throw new Error('Session expired.');
+      }
+      if (!resp.ok) {
+        throw new Error((data as { error?: string }).error || 'Operation failed');
+      }
+      if (method !== 'GET') {
+        await fetchAdminState(activeToken);
+        await onPublicDataChanged();
+      }
+      return data as T;
+    },
+    [fetchAdminState, getStoredToken, onPublicDataChanged],
+  );
+
+  const reorderCollection = async <T extends { id: number; sortOrder?: number }>(
+    list: T[],
+    index: number,
+    direction: -1 | 1,
+    endpoint: string,
+    label: string,
+  ) => {
+    const ordered = sortByOrder(list);
+    const target = index + direction;
+    if (target < 0 || target >= ordered.length) return;
+    const ids = ordered.map((item) => item.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    try {
+      await adminFetch(endpoint, 'PUT', { orderedIds: ids });
+      notify('ok', `Reordered ${label}.`);
+    } catch (err) {
+      notify('err', (err as Error).message);
     }
-    const resp = await fetch(url, {
-      method,
-      credentials: 'include',
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (resp.status === 401) {
-      clearStoredSession();
-      setUser(null);
-      setState(null);
-      setLoginError('Session expired. Please sign in again.');
-      throw new Error('Session expired.');
-    }
-    if (!resp.ok) {
-      throw new Error(data.error || 'Operation failed');
-    }
-    await fetchAdminState(activeToken);
-    await onPublicDataChanged();
-    return data;
   };
 
   const uploadBinaryFile = async (file: File): Promise<string> => {
@@ -716,7 +771,7 @@ export function AdminDashboard({
   const navItems: { id: AdminTab; label: string; icon: React.ReactNode; allowed: boolean }[] = [
     { id: 'overview', label: 'Overview & UGC Audit', icon: <Shield className="w-4 h-4" />, allowed: true },
     { id: 'categories', label: 'Categories & Menus', icon: <LayoutGrid className="w-4 h-4" />, allowed: canCategories },
-    { id: 'pages', label: 'Pages & UGC Content', icon: <Layers className="w-4 h-4" />, allowed: canPages },
+    { id: 'pages', label: 'Pages & Portal Content', icon: <Layers className="w-4 h-4" />, allowed: canPages },
     { id: 'departments', label: 'Departments & Micro-Pages', icon: <Building2 className="w-4 h-4" />, allowed: canDepts },
     { id: 'homepage', label: 'Homepage, Sliders & Events', icon: <ImageIcon className="w-4 h-4" />, allowed: canHomepage },
     { id: 'leadership', label: 'Leadership & Governance', icon: <UserCheck className="w-4 h-4" />, allowed: canLeadership },
@@ -725,6 +780,7 @@ export function AdminDashboard({
     { id: 'directory', label: 'Telephone Directory', icon: <Phone className="w-4 h-4" />, allowed: canDirectory },
     { id: 'settings', label: 'Site Settings, Vision & Theme', icon: <Settings className="w-4 h-4" />, allowed: canSettings },
     { id: 'users', label: 'Users, RBAC & Audit', icon: <Users className="w-4 h-4" />, allowed: canUsers },
+    { id: 'backups', label: 'Backup, Export & Restore', icon: <Archive className="w-4 h-4" />, allowed: canUsers },
   ];
 
   const accessibleDepts = (state?.departments || []).filter((d) =>
@@ -748,10 +804,12 @@ export function AdminDashboard({
     setFacName('');
     setFacPhone('');
     setFacExtUrl('');
+    setFacSortOrder(dept.faculty.length + 1);
     setFacCustomFields([]);
     setEditingLabId(null);
     setLabName('');
     setLabPhotoUrl('');
+    setLabSortOrder(dept.labs.length + 1);
   };
 
   return (
@@ -1412,6 +1470,14 @@ export function AdminDashboard({
         {activeTab === 'pages' && canPages && state && (() => {
           const permittedCategories = state.categories.filter((c) => canUserAccessCategory(user, c.slug));
           const permittedPages = state.pages.filter((pg) => canUserAccessPage(user, pg));
+          const canCreatePage = permittedCategories.length > 0;
+          const activeCreateCategory = permittedCategories.some((c) => c.slug === pageCat)
+            ? pageCat
+            : (permittedCategories[0]?.slug ?? pageCat);
+          const selectableFormCategories =
+            permittedCategories.length > 0
+              ? permittedCategories
+              : state.categories.filter((c) => c.slug === pageCat);
           const hasExplicitScope =
             user.role === 'exam_controller' ||
             (user.allowedCategories && user.allowedCategories.length > 0) ||
@@ -1422,8 +1488,10 @@ export function AdminDashboard({
               <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2">
                 <span>
                   <strong>Scoped RBAC Access Active ({user.role.replace('_', ' ')}):</strong>{' '}
-                  Showing {permittedPages.length} authorized {permittedPages.length === 1 ? 'page' : 'pages'} across{' '}
-                  {permittedCategories.map((c) => c.shortLabel || c.name).join(', ') || 'assigned pages'}.
+                  Showing {permittedPages.length} authorized {permittedPages.length === 1 ? 'page' : 'pages'}{' '}
+                  {permittedCategories.length > 0
+                    ? `across ${permittedCategories.map((c) => c.shortLabel || c.name).join(', ')}`
+                    : '(individual page-wise permission)'}.
                 </span>
               </div>
             )}
@@ -1464,6 +1532,20 @@ export function AdminDashboard({
             </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            {!editingPageId && !canCreatePage ? (
+              <div className="xl:col-span-8 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex flex-col justify-center">
+                <h2 className="text-base font-bold text-stone-900 dark:text-white mb-2">
+                  Individual Page-Wise Access Active
+                </h2>
+                <p className="text-sm text-stone-600 dark:text-slate-300 leading-relaxed mb-3">
+                  Your account is scoped strictly to {permittedPages.length} individually assigned{' '}
+                  {permittedPages.length === 1 ? 'page' : 'pages'} without category-wide creation privileges.
+                </p>
+                <p className="text-xs text-stone-500 dark:text-slate-400">
+                  Select <strong>Edit</strong> next to any authorized page in the panel on the right to open the visual editor and update its content or attached PDF.
+                </p>
+              </div>
+            ) : (
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -1489,7 +1571,7 @@ export function AdminDashboard({
                     notify('ok', `Updated page "${pageTitle}".`);
                   } else {
                     await adminFetch('/api/admin/pages', 'POST', {
-                      categorySlug: pageCat,
+                      categorySlug: activeCreateCategory,
                       slug: pageSlug || pageTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
                       title: pageTitle,
                       subtitle: pageSubtitle,
@@ -1541,13 +1623,14 @@ export function AdminDashboard({
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold mb-1">Portal Category</label>
                   <select
-                    value={pageCat}
+                    disabled={Boolean(editingPageId && !canCreatePage)}
+                    value={editingPageId ? pageCat : activeCreateCategory}
                     onChange={(e) => setPageCat(e.target.value as UgcCategorySlug)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-60"
                   >
-                    {(permittedCategories.length > 0 ? permittedCategories : state.categories).map((c) => (
+                    {selectableFormCategories.map((c) => (
                       <option key={c.slug} value={c.slug}>
-                        {c.ugcCode} · {c.name}
+                        {c.name}
                       </option>
                     ))}
                   </select>
@@ -1705,6 +1788,7 @@ export function AdminDashboard({
                 </button>
               </div>
             </form>
+            )}
 
             <div className="xl:col-span-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 font-bold text-sm">
@@ -1713,55 +1797,91 @@ export function AdminDashboard({
                   : `${state.categories.find((c) => c.slug === pageFilterCat)?.name || pageFilterCat} Pages`}
               </div>
               <div className="max-h-[640px] overflow-y-auto divide-y divide-stone-100 dark:divide-slate-800">
-                {permittedPages
-                  .filter((pg) => pageFilterCat === 'all' || pg.categorySlug === pageFilterCat)
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map((pg) => (
-                  <div key={pg.id} className="p-3.5 flex items-center justify-between gap-3 text-sm">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-stone-900 dark:text-white truncate">{pg.title}</p>
-                      <p className="text-xs text-stone-500 dark:text-slate-400">
-                        {pg.categorySlug} · #{pg.sortOrder} · /{pg.slug} · {pg.isPublished ? 'Published' : 'Draft'}
-                      </p>
+                {(() => {
+                  const visiblePages = sortByOrder(
+                    permittedPages.filter((pg) => pageFilterCat === 'all' || pg.categorySlug === pageFilterCat),
+                  );
+                  const allOrderedPages = sortByOrder(state.pages);
+                  const moveVisiblePage = async (pgId: number, dir: -1 | 1) => {
+                    const idxInVis = visiblePages.findIndex((p) => p.id === pgId);
+                    const targetVis = idxInVis + dir;
+                    if (idxInVis < 0 || targetVis < 0 || targetVis >= visiblePages.length) return;
+                    const swapId = visiblePages[targetVis].id;
+                    const fullIds = allOrderedPages.map((p) => p.id);
+                    const aIdx = fullIds.indexOf(pgId);
+                    const bIdx = fullIds.indexOf(swapId);
+                    if (aIdx < 0 || bIdx < 0) return;
+                    [fullIds[aIdx], fullIds[bIdx]] = [fullIds[bIdx], fullIds[aIdx]];
+                    await adminFetch('/api/admin/pages/reorder', 'PUT', { orderedIds: fullIds });
+                    notify('ok', 'Reordered pages.');
+                  };
+                  return visiblePages.map((pg, idx) => (
+                    <div key={pg.id} className="p-3.5 flex items-center justify-between gap-3 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-stone-900 dark:text-white truncate">{pg.title}</p>
+                        <p className="text-xs text-stone-500 dark:text-slate-400">
+                          {pg.categorySlug} · #{pg.sortOrder} · /{pg.slug} · {pg.isPublished ? 'Published' : 'Draft'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => moveVisiblePage(pg.id, -1)}
+                          aria-label={`Move ${pg.title} up`}
+                          title="Move Up"
+                          className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === visiblePages.length - 1}
+                          onClick={() => moveVisiblePage(pg.id, 1)}
+                          aria-label={`Move ${pg.title} down`}
+                          title="Move Down"
+                          className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPageId(pg.id);
+                            setPageCat(pg.categorySlug);
+                            setPageTitle(pg.title ?? '');
+                            setPageSlug(pg.slug ?? '');
+                            setPageSubtitle(pg.subtitle ?? '');
+                            setPageSortOrder(pg.sortOrder ?? 1);
+                            setPageHtml(pg.contentHtml ?? '');
+                            setPagePdfUrl(pg.attachedPdfUrl || '');
+                            setPagePdfLabel(pg.attachedPdfLabel || '');
+                            setPagePdfMode(pg.attachedPdfUrl && /^https?:\/\//i.test(pg.attachedPdfUrl) ? 'external' : 'upload');
+                            setPagePublished(pg.isPublished !== false);
+                          }}
+                          className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${pg.title}`}
+                          onClick={async () => {
+                            try {
+                              await adminFetch(`/api/admin/pages/${pg.id}`, 'DELETE');
+                              notify('ok', `Deleted page "${pg.title}".`);
+                            } catch (err) {
+                              notify('err', (err as Error).message);
+                            }
+                          }}
+                          className="p-1.5 rounded text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingPageId(pg.id);
-                          setPageCat(pg.categorySlug);
-                          setPageTitle(pg.title ?? '');
-                          setPageSlug(pg.slug ?? '');
-                          setPageSubtitle(pg.subtitle ?? '');
-                          setPageSortOrder(pg.sortOrder ?? 1);
-                          setPageHtml(pg.contentHtml ?? '');
-                          setPagePdfUrl(pg.attachedPdfUrl || '');
-                          setPagePdfLabel(pg.attachedPdfLabel || '');
-                          setPagePdfMode(pg.attachedPdfUrl && /^https?:\/\//i.test(pg.attachedPdfUrl) ? 'external' : 'upload');
-                          setPagePublished(pg.isPublished !== false);
-                        }}
-                        className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Delete ${pg.title}`}
-                        onClick={async () => {
-                          try {
-                            await adminFetch(`/api/admin/pages/${pg.id}`, 'DELETE');
-                            notify('ok', `Deleted page "${pg.title}".`);
-                          } catch (err) {
-                            notify('err', (err as Error).message);
-                          }
-                        }}
-                        className="p-1.5 rounded text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
             </div>
           </div>
@@ -2369,15 +2489,51 @@ export function AdminDashboard({
                     <div className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
                       <h3 className="text-sm font-bold">{currentDept.shortName} Microsite Sub-Pages</h3>
                       <ul className="divide-y divide-stone-100 dark:divide-slate-800">
-                        {currentDept.subPages.map((sp: DepartmentSubPage) => (
+                        {sortByOrder(currentDept.subPages).map((sp: DepartmentSubPage, idx: number, arr: DepartmentSubPage[]) => (
                           <li key={sp.id} className="py-3 flex items-center justify-between gap-2 text-sm">
                             <div className="min-w-0">
                               <p className="font-semibold truncate">{sp.title}</p>
                               <p className="text-xs text-stone-500">
-                                {sp.pageType || 'general'} · /{sp.slug} · {sp.photos?.length || 0} photos · {sp.items?.length || 0} items · {sp.isPublished ? 'Live' : 'Draft'}
+                                #{sp.sortOrder ?? idx + 1} · {sp.pageType || 'general'} · /{sp.slug} · {sp.photos?.length || 0} photos · {sp.items?.length || 0} items · {sp.isPublished ? 'Live' : 'Draft'}
                               </p>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() =>
+                                  reorderCollection(
+                                    currentDept.subPages,
+                                    idx,
+                                    -1,
+                                    `/api/admin/departments/${currentDept.id}/subpages/reorder`,
+                                    'department micro-pages',
+                                  )
+                                }
+                                aria-label={`Move ${sp.title} up`}
+                                title="Move Up"
+                                className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === arr.length - 1}
+                                onClick={() =>
+                                  reorderCollection(
+                                    currentDept.subPages,
+                                    idx,
+                                    1,
+                                    `/api/admin/departments/${currentDept.id}/subpages/reorder`,
+                                    'department micro-pages',
+                                  )
+                                }
+                                aria-label={`Move ${sp.title} down`}
+                                title="Move Down"
+                                className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2417,7 +2573,7 @@ export function AdminDashboard({
                   </div>
                 )}
 
-                {/* Department Faculty Manager (Photo Upload + Area of Expertise + Phone + External Profile + Custom Fields) */}
+                {/* Department Faculty Manager (Photo Upload + Manual Sr. No. + Reordering + Custom Fields) */}
                 {deptPanelMode === 'faculty' && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     <form
@@ -2439,6 +2595,7 @@ export function AdminDashboard({
                             email: facEmail,
                             phone: facPhone || undefined,
                             experienceYears: facExp,
+                            sortOrder: Math.max(1, Number(facSortOrder) || 1),
                             photoUrl: facPhoto,
                             externalProfileUrl: facExtUrl.trim() || undefined,
                             externalProfileLabel: facExtLabel.trim() || undefined,
@@ -2461,6 +2618,7 @@ export function AdminDashboard({
                           setFacEmail('');
                           setFacPhone('');
                           setFacExtUrl('');
+                          setFacSortOrder(currentDept.faculty.length + 1);
                           setFacCustomFields([]);
                         } catch (err) {
                           notify('err', (err as Error).message);
@@ -2480,6 +2638,7 @@ export function AdminDashboard({
                               setFacName('');
                               setFacPhone('');
                               setFacExtUrl('');
+                              setFacSortOrder(currentDept.faculty.length + 1);
                               setFacCustomFields([]);
                             }}
                             className="text-xs underline"
@@ -2488,23 +2647,46 @@ export function AdminDashboard({
                           </button>
                         )}
                       </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                        <div className="sm:col-span-3">
+                          <label htmlFor="fac-sort-order" className="block text-[11px] font-semibold mb-1">
+                            Manual Sr. No.
+                          </label>
+                          <input
+                            id="fac-sort-order"
+                            type="number"
+                            min={1}
+                            required
+                            value={facSortOrder}
+                            onChange={(e) => setFacSortOrder(Number(e.target.value))}
+                            placeholder="Sr. No."
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                        </div>
+                        <div className="sm:col-span-5">
+                          <label className="block text-[11px] font-semibold mb-1">Full Name</label>
+                          <input
+                            type="text"
+                            required
+                            value={facName}
+                            onChange={(e) => setFacName(e.target.value)}
+                            placeholder="Full Name"
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                        </div>
+                        <div className="sm:col-span-4">
+                          <label className="block text-[11px] font-semibold mb-1">Designation</label>
+                          <input
+                            type="text"
+                            required
+                            value={facDesignation}
+                            onChange={(e) => setFacDesignation(e.target.value)}
+                            placeholder="Designation"
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-2.5">
-                        <input
-                          type="text"
-                          required
-                          value={facName}
-                          onChange={(e) => setFacName(e.target.value)}
-                          placeholder="Full Name"
-                          className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
-                        <input
-                          type="text"
-                          required
-                          value={facDesignation}
-                          onChange={(e) => setFacDesignation(e.target.value)}
-                          placeholder="Designation"
-                          className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                        />
                         <input
                           type="text"
                           value={facQual}
@@ -2665,11 +2847,14 @@ export function AdminDashboard({
                     </form>
 
                     <div className="lg:col-span-6 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-                      <h3 className="text-sm font-bold mb-3">{currentDept.shortName} Faculty Profiles</h3>
+                      <h3 className="text-sm font-bold mb-3">{currentDept.shortName} Faculty Profiles (Ordered by Sr. No.)</h3>
                       <ul className="divide-y divide-stone-100 dark:divide-slate-800">
-                        {currentDept.faculty.map((f: FacultyMember) => (
+                        {sortByOrder(currentDept.faculty).map((f: FacultyMember, idx: number, arr: FacultyMember[]) => (
                           <li key={f.id} className="py-3 flex items-center justify-between gap-3 text-sm">
                             <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-xs font-mono-tabular font-bold px-2 py-0.5 rounded bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300 shrink-0">
+                                Sr. {f.sortOrder ?? idx + 1}
+                              </span>
                               <img src={f.photoUrl} alt={f.name} className="w-10 h-10 rounded-full object-cover shrink-0 border border-stone-200" />
                               <div className="min-w-0">
                                 <p className="font-semibold truncate">{f.name}</p>
@@ -2678,7 +2863,43 @@ export function AdminDashboard({
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() =>
+                                  reorderCollection(
+                                    currentDept.faculty,
+                                    idx,
+                                    -1,
+                                    `/api/admin/departments/${currentDept.id}/faculty/reorder`,
+                                    'faculty directory order',
+                                  )
+                                }
+                                aria-label={`Move ${f.name} up`}
+                                title="Move Up"
+                                className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === arr.length - 1}
+                                onClick={() =>
+                                  reorderCollection(
+                                    currentDept.faculty,
+                                    idx,
+                                    1,
+                                    `/api/admin/departments/${currentDept.id}/faculty/reorder`,
+                                    'faculty directory order',
+                                  )
+                                }
+                                aria-label={`Move ${f.name} down`}
+                                title="Move Down"
+                                className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2690,6 +2911,7 @@ export function AdminDashboard({
                                   setFacEmail(f.email ?? '');
                                   setFacPhone(f.phone || '');
                                   setFacExp(f.experienceYears ?? 0);
+                                  setFacSortOrder(f.sortOrder ?? idx + 1);
                                   setFacPhoto(f.photoUrl ?? '');
                                   setFacExtUrl(f.externalProfileUrl || '');
                                   setFacExtLabel(f.externalProfileLabel || 'Google Scholar / Profile');
@@ -2717,7 +2939,7 @@ export function AdminDashboard({
                   </div>
                 )}
 
-                {/* Department Labs Manager (with Photo Upload & Edit) */}
+                {/* Department Labs Manager (with Photo Upload, Sort Order & Edit) */}
                 {deptPanelMode === 'labs' && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <form
@@ -2730,6 +2952,7 @@ export function AdminDashboard({
                             equipmentSummary: labEquip,
                             incharge: labIncharge || currentDept.hodName,
                             photoUrl: labPhotoUrl || undefined,
+                            sortOrder: Math.max(1, Number(labSortOrder) || 1),
                           };
                           if (editingLabId) {
                             await adminFetch(
@@ -2747,6 +2970,7 @@ export function AdminDashboard({
                           setLabEquip('');
                           setLabIncharge('');
                           setLabPhotoUrl('');
+                          setLabSortOrder(currentDept.labs.length + 1);
                         } catch (err) {
                           notify('err', (err as Error).message);
                         }
@@ -2766,6 +2990,7 @@ export function AdminDashboard({
                               setLabEquip('');
                               setLabIncharge('');
                               setLabPhotoUrl('');
+                              setLabSortOrder(currentDept.labs.length + 1);
                             }}
                             className="text-xs underline"
                           >
@@ -2781,12 +3006,20 @@ export function AdminDashboard({
                         placeholder="Laboratory Name"
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
-                      <div className="grid grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-3 gap-2.5">
                         <input
                           type="number"
                           value={labArea}
                           onChange={(e) => setLabArea(Number(e.target.value))}
                           placeholder="Area (sq. ft.)"
+                          className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                          type="number"
+                          min={1}
+                          value={labSortOrder}
+                          onChange={(e) => setLabSortOrder(Number(e.target.value))}
+                          placeholder="Order"
                           className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                         />
                         <input
@@ -2822,14 +3055,17 @@ export function AdminDashboard({
                     <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
                       <h3 className="text-sm font-bold">{currentDept.shortName} Laboratories</h3>
                       <ul className="divide-y divide-stone-100 dark:divide-slate-800">
-                        {currentDept.labs.map((lab) => (
+                        {sortByOrder(currentDept.labs).map((lab, idx, arr) => (
                           <li key={lab.id} className="py-3 flex items-start justify-between gap-3 text-sm">
                             <div className="flex items-start gap-3 min-w-0">
                               {lab.photoUrl && (
                                 <img src={lab.photoUrl} alt={lab.name} className="w-12 h-10 rounded object-cover shrink-0 border border-stone-200" />
                               )}
                               <div className="min-w-0">
-                                <p className="font-semibold">{lab.name}</p>
+                                <p className="font-semibold">
+                                  <span className="text-xs font-mono-tabular text-stone-500 mr-1.5">#{lab.sortOrder ?? idx + 1}</span>
+                                  {lab.name}
+                                </p>
                                 <p className="text-xs text-stone-500">
                                   {lab.areaSqFt} sq.ft · In-charge: {lab.incharge}
                                 </p>
@@ -2839,6 +3075,42 @@ export function AdminDashboard({
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
+                                disabled={idx === 0}
+                                onClick={() =>
+                                  reorderCollection(
+                                    currentDept.labs,
+                                    idx,
+                                    -1,
+                                    `/api/admin/departments/${currentDept.id}/labs/reorder`,
+                                    'department laboratories',
+                                  )
+                                }
+                                aria-label={`Move ${lab.name} up`}
+                                title="Move Up"
+                                className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === arr.length - 1}
+                                onClick={() =>
+                                  reorderCollection(
+                                    currentDept.labs,
+                                    idx,
+                                    1,
+                                    `/api/admin/departments/${currentDept.id}/labs/reorder`,
+                                    'department laboratories',
+                                  )
+                                }
+                                aria-label={`Move ${lab.name} down`}
+                                title="Move Down"
+                                className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => {
                                   setEditingLabId(lab.id);
                                   setLabName(lab.name);
@@ -2846,6 +3118,7 @@ export function AdminDashboard({
                                   setLabEquip(lab.equipmentSummary);
                                   setLabIncharge(lab.incharge);
                                   setLabPhotoUrl(lab.photoUrl || '');
+                                  setLabSortOrder(lab.sortOrder ?? idx + 1);
                                 }}
                                 className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs"
                               >
@@ -3629,16 +3902,36 @@ export function AdminDashboard({
                 )}
               </div>
               <ul className="space-y-2">
-                {state.sliders.map((s) => (
+                {sortByOrder(state.sliders).map((s, idx, arr) => (
                   <li key={s.id} className="p-2.5 rounded border border-stone-200 dark:border-slate-800 flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2 min-w-0">
                       <img src={s.imageUrl} alt={s.title} className="w-10 h-8 rounded object-cover shrink-0" />
                       <div className="min-w-0">
                         <p className="font-semibold truncate">{s.title}</p>
-                        <p className="text-stone-500 truncate">{s.ctaLink}</p>
+                        <p className="text-stone-500 truncate">#{s.sortOrder ?? idx + 1} · {s.ctaLink}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => reorderCollection(state.sliders, idx, -1, '/api/admin/sliders/reorder', 'hero sliders')}
+                        aria-label={`Move slide ${s.title} up`}
+                        title="Move Up"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={() => reorderCollection(state.sliders, idx, 1, '/api/admin/sliders/reorder', 'hero sliders')}
+                        aria-label={`Move slide ${s.title} down`}
+                        title="Move Down"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -3746,19 +4039,41 @@ export function AdminDashboard({
             <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
               <h2 className="text-base font-bold">Scrolling Ticker Manager</h2>
               <ul className="space-y-2 max-h-60 overflow-y-auto">
-                {state.ticker.map((t) => (
+                {sortByOrder(state.ticker).map((t, idx, arr) => (
                   <li key={t.id} className="p-2.5 rounded border border-stone-200 dark:border-slate-800 flex items-start justify-between gap-2 text-xs">
                     <div>
                       <span className="font-semibold text-amber-700 dark:text-amber-400">{t.badgeText}: </span>
                       <span>{t.text}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => adminFetch(`/api/admin/ticker/${t.id}`, 'DELETE').then(() => notify('ok', 'Ticker item removed'))}
-                      className="text-rose-600 shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => reorderCollection(state.ticker, idx, -1, '/api/admin/ticker/reorder', 'ticker items')}
+                        aria-label={`Move ticker item ${t.badgeText} up`}
+                        title="Move Up"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={() => reorderCollection(state.ticker, idx, 1, '/api/admin/ticker/reorder', 'ticker items')}
+                        aria-label={`Move ticker item ${t.badgeText} down`}
+                        title="Move Down"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => adminFetch(`/api/admin/ticker/${t.id}`, 'DELETE').then(() => notify('ok', 'Ticker item removed'))}
+                        className="text-rose-600 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -3827,15 +4142,35 @@ export function AdminDashboard({
                 )}
               </div>
               <ul className="space-y-2 max-h-56 overflow-y-auto">
-                {state.events.map((ev) => (
+                {sortByOrder(state.events).map((ev, idx, arr) => (
                   <li key={ev.id} className="p-2.5 rounded border border-stone-200 dark:border-slate-800 flex items-start justify-between gap-2 text-xs">
                     <div className="min-w-0">
                       <p className="font-semibold truncate">{ev.title}</p>
                       <p className="text-stone-500 tabular-nums">
-                        {ev.category} · {ev.eventDate}
+                        #{ev.sortOrder ?? idx + 1} · {ev.category} · {ev.eventDate}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => reorderCollection(state.events, idx, -1, '/api/admin/events/reorder', 'events & notices')}
+                        aria-label={`Move ${ev.title} up`}
+                        title="Move Up"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={() => reorderCollection(state.events, idx, 1, '/api/admin/events/reorder', 'events & notices')}
+                        aria-label={`Move ${ev.title} down`}
+                        title="Move Down"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -3945,7 +4280,7 @@ export function AdminDashboard({
           </div>
         )}
 
-        {/* 5. LEADERSHIP & GOVERNANCE PROFILES (with Photo Upload) */}
+        {/* 5. LEADERSHIP & GOVERNANCE PROFILES (Custom Manual Groups, Sr. No. & Reordering) */}
         {activeTab === 'leadership' && canLeadership && state && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <form
@@ -3960,7 +4295,8 @@ export function AdminDashboard({
                     phone: leadPhone,
                     photoUrl: leadPhoto,
                     bio: leadBio,
-                    committeeGroup: leadGroup,
+                    committeeGroup: leadGroup.trim() || 'Statutory Officer',
+                    sortOrder: Math.max(1, Number(leadSortOrder) || 1),
                   };
                   if (editingLeadId) {
                     await adminFetch(`/api/admin/leadership/${editingLeadId}`, 'PUT', payload);
@@ -3976,6 +4312,8 @@ export function AdminDashboard({
                   setLeadEmail('');
                   setLeadPhone('');
                   setLeadBio('');
+                  setLeadGroup('Statutory Officer');
+                  setLeadSortOrder(state.leadership.length + 1);
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -3987,19 +4325,46 @@ export function AdminDashboard({
                   {editingLeadId ? 'Edit Officer / Leadership Desk' : 'Add Officer / Governance Profile'}
                 </h2>
                 {editingLeadId && (
-                  <button type="button" onClick={() => setEditingLeadId(null)} className="text-xs underline">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingLeadId(null);
+                      setLeadSortOrder(state.leadership.length + 1);
+                    }}
+                    className="text-xs underline"
+                  >
                     Cancel
                   </button>
                 )}
               </div>
-              <input
-                type="text"
-                required
-                value={leadRole}
-                onChange={(e) => setLeadRole(e.target.value)}
-                placeholder="Role (e.g. Principal, President, Dean R&D)"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <div className="sm:col-span-3">
+                  <label htmlFor="lead-sort-order" className="block text-[11px] font-semibold mb-1">
+                    Sr. No.
+                  </label>
+                  <input
+                    id="lead-sort-order"
+                    type="number"
+                    min={1}
+                    required
+                    value={leadSortOrder}
+                    onChange={(e) => setLeadSortOrder(Number(e.target.value))}
+                    placeholder="Order"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div className="sm:col-span-9">
+                  <label className="block text-[11px] font-semibold mb-1">Role / Designation</label>
+                  <input
+                    type="text"
+                    required
+                    value={leadRole}
+                    onChange={(e) => setLeadRole(e.target.value)}
+                    placeholder="Role (e.g. Principal, President, Dean R&D)"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+              </div>
               <input
                 type="text"
                 required
@@ -4008,7 +4373,7 @@ export function AdminDashboard({
                 placeholder="Full Name"
                 className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="text"
                   value={leadQual}
@@ -4016,16 +4381,40 @@ export function AdminDashboard({
                   placeholder="Qualification"
                   className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
-                <select
-                  value={leadGroup}
-                  onChange={(e) => setLeadGroup(e.target.value as LeadershipProfile['committeeGroup'])}
-                  className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                >
-                  <option value="statutory">Statutory Officer</option>
-                  <option value="governance">Governing Body</option>
-                  <option value="icc">Internal Complaint (ICC)</option>
-                  <option value="academic_leadership">Academic Dean / HoD</option>
-                </select>
+                <div>
+                  <input
+                    type="text"
+                    required
+                    value={leadGroup}
+                    onChange={(e) => setLeadGroup(e.target.value)}
+                    list="leadership-group-presets"
+                    placeholder="Committee / Custom Group Name"
+                    aria-label="Committee or Leadership Group"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                  <datalist id="leadership-group-presets">
+                    {LEADERSHIP_GROUP_PRESETS.map((preset) => (
+                      <option key={preset} value={preset} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {LEADERSHIP_GROUP_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setLeadGroup(preset)}
+                    className={`px-2 py-0.5 rounded text-[11px] border transition-colors ${
+                      leadGroup === preset
+                        ? 'text-white border-transparent'
+                        : 'border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 hover:bg-stone-100'
+                    }`}
+                    style={leadGroup === preset ? { backgroundColor: 'var(--secondary-color)' } : undefined}
+                  >
+                    {preset}
+                  </button>
+                ))}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input
@@ -4068,17 +4457,42 @@ export function AdminDashboard({
             <div className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
               <h3 className="text-sm font-bold mb-3">Administration &amp; Leadership Desk ({state.leadership.length})</h3>
               <div className="divide-y divide-stone-100 dark:divide-slate-800">
-                {state.leadership.map((l) => (
+                {sortByOrder(state.leadership).map((l, idx, arr) => (
                   <div key={l.id} className="py-3 flex items-center justify-between gap-3 text-sm">
                     <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-xs font-mono-tabular font-bold px-2 py-0.5 rounded bg-stone-100 dark:bg-slate-800 shrink-0">
+                        #{l.sortOrder ?? idx + 1}
+                      </span>
                       <img src={l.photoUrl} alt={l.name} className="w-12 h-12 rounded-lg object-cover shrink-0 border border-stone-200" />
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">{l.roleTitle}</p>
+                        <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                          {l.roleTitle} · <span className="text-stone-600 dark:text-slate-300">{formatCommitteeGroupLabel(l.committeeGroup)}</span>
+                        </p>
                         <p className="font-bold truncate">{l.name}</p>
                         <p className="text-xs text-stone-500 truncate">{l.email} · {l.phone}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => reorderCollection(state.leadership, idx, -1, '/api/admin/leadership/reorder', 'leadership order')}
+                        aria-label={`Move ${l.name} up`}
+                        title="Move Up"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={() => reorderCollection(state.leadership, idx, 1, '/api/admin/leadership/reorder', 'leadership order')}
+                        aria-label={`Move ${l.name} down`}
+                        title="Move Down"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -4090,7 +4504,8 @@ export function AdminDashboard({
                           setLeadPhone(l.phone ?? '');
                           setLeadPhoto(l.photoUrl ?? '');
                           setLeadBio(l.bio ?? '');
-                          setLeadGroup(l.committeeGroup || 'statutory');
+                          setLeadGroup(formatCommitteeGroupLabel(l.committeeGroup));
+                          setLeadSortOrder(l.sortOrder ?? idx + 1);
                         }}
                         className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs"
                       >
@@ -4219,7 +4634,7 @@ export function AdminDashboard({
             <div className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
               <h3 className="text-sm font-bold">Albums &amp; Uploaded Photos ({state.gallery.length})</h3>
               <div className="space-y-4">
-                {state.gallery.map((alb) => (
+                {sortByOrder(state.gallery).map((alb, idx, arr) => (
                   <div key={alb.id} className="p-3.5 rounded-xl border border-stone-200 dark:border-slate-800 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <button
@@ -4227,10 +4642,30 @@ export function AdminDashboard({
                         onClick={() => setSelectedAlbumId(alb.id)}
                         className="text-left"
                       >
-                        <p className="font-bold text-sm">{alb.title}</p>
+                        <p className="font-bold text-sm">#{alb.sortOrder ?? idx + 1} · {alb.title}</p>
                         <p className="text-xs text-stone-500">{alb.category} · {alb.eventDate} · {alb.photos.length} Photos</p>
                       </button>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => reorderCollection(state.gallery, idx, -1, '/api/admin/gallery/albums/reorder', 'gallery albums')}
+                          aria-label={`Move album ${alb.title} up`}
+                          title="Move Up"
+                          className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === arr.length - 1}
+                          onClick={() => reorderCollection(state.gallery, idx, 1, '/api/admin/gallery/albums/reorder', 'gallery albums')}
+                          aria-label={`Move album ${alb.title} down`}
+                          title="Move Down"
+                          className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => setSelectedAlbumId(alb.id)}
@@ -4434,25 +4869,47 @@ export function AdminDashboard({
                 Published Documents ({state.documents.length})
               </div>
               <ul className="divide-y divide-stone-100 dark:divide-slate-800 max-h-[500px] overflow-y-auto">
-                {state.documents.map((doc) => (
+                {sortByOrder(state.documents).map((doc, idx, arr) => (
                   <li key={doc.id} className="p-3.5 flex items-center justify-between gap-3 text-sm">
                     <div className="flex items-start gap-2.5 min-w-0">
                       <FileText className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                       <div className="min-w-0">
                         <p className="font-semibold truncate">{doc.title}</p>
                         <p className="text-xs text-stone-500 font-mono-tabular truncate">
-                          {doc.category} ·{' '}
+                          #{doc.sortOrder ?? idx + 1} · {doc.category} ·{' '}
                           {doc.sourceType === 'external' ? 'External URL' : formatBytes(doc.fileSizeBytes)} · {doc.uploadedAt}
                         </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => adminFetch(`/api/admin/documents/${doc.id}`, 'DELETE').then(() => notify('ok', 'Document deleted'))}
-                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded shrink-0"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => reorderCollection(state.documents, idx, -1, '/api/admin/documents/reorder', 'documents')}
+                        aria-label={`Move ${doc.title} up`}
+                        title="Move Up"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={() => reorderCollection(state.documents, idx, 1, '/api/admin/documents/reorder', 'documents')}
+                        aria-label={`Move ${doc.title} down`}
+                        title="Move Down"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => adminFetch(`/api/admin/documents/${doc.id}`, 'DELETE').then(() => notify('ok', 'Document deleted'))}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -4543,21 +5000,50 @@ export function AdminDashboard({
             <div className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
               <h3 className="text-sm font-bold mb-3">Institutional Telephone Directory ({state.telephoneDirectory.length})</h3>
               <ul className="divide-y divide-stone-100 dark:divide-slate-800">
-                {state.telephoneDirectory.map((row: TelephoneEntry) => (
+                {sortByOrder(state.telephoneDirectory).map((row: TelephoneEntry, idx: number, arr: TelephoneEntry[]) => (
                   <li key={row.id} className="py-3 flex items-center justify-between gap-3 text-sm">
                     <div>
-                      <p className="font-semibold">{row.section} · {row.officerName}</p>
+                      <p className="font-semibold">
+                        <span className="text-xs font-mono-tabular text-stone-500 mr-1.5">#{row.sortOrder ?? idx + 1}</span>
+                        {row.section} · {row.officerName}
+                      </p>
                       <p className="text-xs text-stone-500">
                         {row.designation} · Ext {row.extension} · {row.directPhone} · {row.email}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => adminFetch(`/api/admin/directory/${row.id}`, 'DELETE').then(() => notify('ok', 'Contact removed'))}
-                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() =>
+                          reorderCollection(state.telephoneDirectory, idx, -1, '/api/admin/directory/reorder', 'telephone directory')
+                        }
+                        aria-label={`Move ${row.section} up`}
+                        title="Move Up"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={() =>
+                          reorderCollection(state.telephoneDirectory, idx, 1, '/api/admin/directory/reorder', 'telephone directory')
+                        }
+                        aria-label={`Move ${row.section} down`}
+                        title="Move Down"
+                        className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => adminFetch(`/api/admin/directory/${row.id}`, 'DELETE').then(() => notify('ok', 'Contact removed'))}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -4896,12 +5382,14 @@ export function AdminDashboard({
                       role: newUserRole,
                       assignedDepartmentId: newUserRole === 'department_admin' ? newUserDept : null,
                       allowedCategories: newUserAllowedCats,
+                      allowedPageIds: newUserAllowedPageIds,
                     });
                     setNewUserName('');
                     setNewUserEmail('');
                     setNewUserPass('');
                     setNewUserAllowedCats([]);
-                    notify('ok', 'Created RBAC user account.');
+                    setNewUserAllowedPageIds([]);
+                    notify('ok', 'Created RBAC user account with page-wise permissions.');
                   } catch (err) {
                     notify('err', (err as Error).message);
                   }
@@ -4964,24 +5452,32 @@ export function AdminDashboard({
                   </select>
                 )}
                 {newUserRole !== 'super_admin' && (
-                  <div className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-1.5">
-                    <p className="text-xs font-semibold">Allowed Portal Categories (Optional Scoping):</p>
-                    <div className="grid grid-cols-2 gap-1 text-[11px]">
-                      {state.categories.map((c) => (
-                        <label key={c.slug} className="inline-flex items-center gap-1.5 truncate">
-                          <input
-                            type="checkbox"
-                            checked={newUserAllowedCats.includes(c.slug)}
-                            onChange={(e) =>
-                              setNewUserAllowedCats((prev) =>
-                                e.target.checked ? [...prev, c.slug] : prev.filter((s) => s !== c.slug),
-                              )
-                            }
-                          />
-                          <span className="truncate">{c.shortLabel || c.name}</span>
-                        </label>
-                      ))}
+                  <div className="space-y-3">
+                    <div className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-1.5">
+                      <p className="text-xs font-semibold">Allowed Portal Categories (Optional Scoping):</p>
+                      <div className="grid grid-cols-2 gap-1 text-[11px]">
+                        {state.categories.map((c) => (
+                          <label key={c.slug} className="inline-flex items-center gap-1.5 truncate">
+                            <input
+                              type="checkbox"
+                              checked={newUserAllowedCats.includes(c.slug)}
+                              onChange={(e) =>
+                                setNewUserAllowedCats((prev) =>
+                                  e.target.checked ? [...prev, c.slug] : prev.filter((s) => s !== c.slug),
+                                )
+                              }
+                            />
+                            <span className="truncate">{c.shortLabel || c.name}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
+                    <PerPageRbacSelector
+                      categories={state.categories}
+                      pages={state.pages}
+                      selectedPageIds={newUserAllowedPageIds}
+                      onChange={setNewUserAllowedPageIds}
+                    />
                   </div>
                 )}
                 <button
@@ -5106,27 +5602,12 @@ export function AdminDashboard({
                                 ))}
                               </div>
                             </div>
-                            <div>
-                              <p className="font-semibold mb-1">Explicit Per-Page Access (overrides category if any checked):</p>
-                              <div className="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1 p-2 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-                                {state.pages.map((pg) => (
-                                  <label key={pg.id} className="inline-flex items-center gap-1.5 truncate text-[11px]">
-                                    <input
-                                      type="checkbox"
-                                      checked={permAllowedPageIds.includes(pg.id)}
-                                      onChange={(e) =>
-                                        setPermAllowedPageIds((prev) =>
-                                          e.target.checked ? [...prev, pg.id] : prev.filter((id) => id !== pg.id),
-                                        )
-                                      }
-                                    />
-                                    <span className="truncate">
-                                      [{pg.categorySlug}] {pg.title}
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
+                            <PerPageRbacSelector
+                              categories={state.categories}
+                              pages={state.pages}
+                              selectedPageIds={permAllowedPageIds}
+                              onChange={setPermAllowedPageIds}
+                            />
                             <button
                               type="button"
                               onClick={async () => {
@@ -5189,6 +5670,19 @@ export function AdminDashboard({
               </div>
             </div>
           </div>
+        )}
+
+        {/* 11. WEBSITE BACKUP, INCREMENTAL SNAPSHOTS, SCHEDULED EXPORT & DISASTER RECOVERY (SUPER ADMIN) */}
+        {activeTab === 'backups' && canUsers && state && (
+          <BackupRestorePanel
+            adminFetch={adminFetch}
+            sessionToken={sessionToken || getStoredToken()}
+            notify={notify}
+            onRestored={async () => {
+              await fetchAdminState();
+              await onPublicDataChanged();
+            }}
+          />
         )}
       </main>
     </div>

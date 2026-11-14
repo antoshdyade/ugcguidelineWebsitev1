@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronRight, Download, ExternalLink, Mail, Phone, Volume2 } from 'lucide-react';
+import { formatCommitteeGroupLabel, sortByOrder } from '../lib/cmsLogic';
 import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
 import type { CampusEvent, CmsCategory, CmsPage, LeadershipProfile } from '../types/cms';
 
@@ -47,7 +48,7 @@ export function PageViewer({
         </nav>
         <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-1">
-            {resolvedCategory.ugcCode}
+            Institutional Portal
           </p>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mb-3">
             {resolvedCategory.name}
@@ -106,7 +107,7 @@ export function PageViewer({
         {/* Category Left Sidebar */}
         <aside className="lg:col-span-3 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-slate-400 px-2 mb-3">
-            {category?.ugcCode} · {category?.name}
+            {category?.name}
           </p>
           <ul className="space-y-1">
             {siblingPages.map((sib) => {
@@ -136,7 +137,7 @@ export function PageViewer({
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 mb-6 border-b border-stone-200 dark:border-slate-800">
             <div>
               <p className="text-xs font-medium text-stone-500 dark:text-slate-400 mb-1">
-                {page.subtitle || `${category?.ugcCode} Mandatory Public Self-Disclosure`}
+                {page.subtitle || `${category?.name || 'Institutional'} · Official Information`}
               </p>
               <h1 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white">
                 {page.title}
@@ -206,7 +207,7 @@ export function PageViewer({
                 Profiles with Photographs &amp; Contact Particulars
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {leadership.map((officer) => (
+                {sortByOrder(leadership).map((officer) => (
                   <div
                     key={officer.id}
                     className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 flex items-start gap-4"
@@ -218,6 +219,9 @@ export function PageViewer({
                       className="w-20 h-20 rounded-lg object-cover border border-stone-200 dark:border-slate-700 shrink-0"
                     />
                     <div className="min-w-0 space-y-1">
+                      <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300">
+                        {formatCommitteeGroupLabel(officer.committeeGroup)}
+                      </span>
                       <p className="text-xs font-semibold" style={{ color: 'var(--secondary-color)' }}>
                         {officer.roleTitle}
                       </p>

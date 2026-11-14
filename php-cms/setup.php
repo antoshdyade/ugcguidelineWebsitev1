@@ -12,6 +12,8 @@ $pdoOk = extension_loaded('pdo_mysql');
 $finfoOk = extension_loaded('fileinfo');
 $uploadsDir = __DIR__ . '/uploads';
 $uploadsWritable = is_dir($uploadsDir) ? is_writable($uploadsDir) : @mkdir($uploadsDir, 0755, true);
+$backupsDir = __DIR__ . '/backups';
+$backupsWritable = is_dir($backupsDir) ? is_writable($backupsDir) : @mkdir($backupsDir, 0755, true);
 $sessionPath = session_save_path() ?: sys_get_temp_dir();
 $sessionOk = is_writable($sessionPath) || is_writable(__DIR__ . '/uploads');
 
@@ -101,9 +103,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
             "ALTER TABLE faculty ADD COLUMN external_profile_label VARCHAR(120) NULL",
             "ALTER TABLE faculty ADD COLUMN custom_fields_json TEXT NULL",
             "ALTER TABLE department_labs ADD COLUMN photo_url VARCHAR(255) NULL",
+            "ALTER TABLE department_labs ADD COLUMN sort_order INT DEFAULT 1",
+            "ALTER TABLE leadership_profiles MODIFY COLUMN committee_group VARCHAR(120) NOT NULL DEFAULT 'Statutory Officer'",
+            "ALTER TABLE campus_events ADD COLUMN sort_order INT DEFAULT 1",
             "ALTER TABLE documents ADD COLUMN source_type VARCHAR(20) DEFAULT 'upload'",
             "ALTER TABLE documents MODIFY COLUMN file_url VARCHAR(500) NOT NULL",
+            "ALTER TABLE documents ADD COLUMN sort_order INT DEFAULT 1",
+            "ALTER TABLE gallery_albums ADD COLUMN sort_order INT DEFAULT 1",
+            "ALTER TABLE telephone_directory ADD COLUMN sort_order INT DEFAULT 1",
             "CREATE TABLE IF NOT EXISTS custom_home_components (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(180) NOT NULL, placement ENUM('after-hero','after-about','after-depts','before-footer') DEFAULT 'after-hero', html_content MEDIUMTEXT NOT NULL, sort_order INT DEFAULT 1, is_active TINYINT(1) DEFAULT 1, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
+            "CREATE TABLE IF NOT EXISTS cms_kv_store (key_name VARCHAR(80) PRIMARY KEY, val_json MEDIUMTEXT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB",
         ];
         foreach ($alters as $sql) {
             try {
@@ -143,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         <tr><td>Visual Block Editor (<code>assets/js/editor.js</code>)</td><td><?= $editorOk ? 'PASS' : 'FAIL' ?></td><td><?= $editorOk ? 'Exists &amp; world-readable (0644)' : 'Missing or chmod blocked! Run: chmod 644 assets/js/editor.js' ?></td></tr>
         <tr><td>Apache Root <code>.htaccess</code></td><td><?= $htaccessOk ? 'PASS' : 'WARN' ?></td><td><?= $htaccessOk ? 'Present (MIME types &amp; DirectoryIndex configured)' : 'Upload .htaccess to public_html/' ?></td></tr>
         <tr><td>Uploads Directory</td><td><?= $uploadsWritable ? 'PASS' : 'FAIL' ?></td><td><code>uploads/</code> <?= $uploadsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
+        <tr><td>Backups Directory</td><td><?= $backupsWritable ? 'PASS' : 'WARN' ?></td><td><code>backups/</code> <?= $backupsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
         <tr><td>PHP Sessions</td><td><?= $sessionOk ? 'PASS' : 'FAIL' ?></td><td>Save path: <code><?= e($sessionPath) ?></code></td></tr>
         <tr><td>MySQL Connection</td><td><?= $dbConnected ? 'PASS' : 'FAIL' ?></td><td><?= $dbConnected ? ('Connected to ' . e(DB_NAME) . " ($tablesCount tables, $usersCount users)") : e($dbError) ?></td></tr>
         <tr><td>Enhanced Schema (Custom Home &amp; Dept Fields)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v2 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>

@@ -13,7 +13,7 @@ import {
   Play,
   ShieldCheck,
 } from 'lucide-react';
-import { formatBytes } from '../lib/cmsLogic';
+import { formatBytes, formatCommitteeGroupLabel, sortByOrder } from '../lib/cmsLogic';
 import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
 import type {
   CampusEvent,
@@ -92,7 +92,6 @@ export function HomePage({
     ...(settings.homeSections || {}),
   };
 
-  const examCategory = categories.find((c) => c.slug === 'examination');
   const examPages = pages
     .filter((p) => p.categorySlug === 'examination')
     .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -236,7 +235,7 @@ export function HomePage({
       {/* Hero Image Slider */}
       {hs.showSlider && activeSlide && (
         <section aria-label="Featured Campus Highlights" className="max-w-[1380px] mx-auto px-4 pt-1">
-          <div className="relative rounded-xl overflow-hidden border border-stone-200 dark:border-slate-800 bg-slate-900 min-h-[380px] lg:min-h-[460px] flex items-end">
+          <div className="relative rounded-xl overflow-hidden border border-stone-200 dark:border-slate-800 bg-slate-900 min-h-[380px] lg:min-h-[460px] flex flex-col justify-end">
             <img
               src={activeSlide.imageUrl}
               alt={activeSlide.title}
@@ -245,9 +244,9 @@ export function HomePage({
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/45 to-slate-950/15" />
 
-            <div className="relative z-10 p-6 pb-8 sm:p-10 lg:p-12 max-w-3xl text-white">
+            <div className="relative z-10 p-6 pb-4 sm:p-10 lg:p-12 md:pr-44 max-w-3xl text-white">
               <p className="text-xs font-medium uppercase tracking-widest text-amber-300 mb-2">
-                {settings.shortCode} · UGC NEP 2020 Self-Disclosure Portal
+                {settings.shortCode} · Autonomous Engineering Campus
               </p>
               <h2 className="font-display text-2xl sm:text-4xl lg:text-[42px] font-bold leading-tight mb-3 text-balance">
                 {activeSlide.title}
@@ -277,23 +276,23 @@ export function HomePage({
             </div>
 
             {sliders.length > 1 && (
-              <div className="absolute top-4 right-4 sm:top-auto sm:bottom-5 sm:right-5 z-10 flex items-center gap-2">
+              <div className="relative z-10 px-6 pb-5 pt-1 flex items-center justify-end gap-2 md:p-0 md:absolute md:bottom-6 md:right-6">
                 <button
                   type="button"
                   aria-label="Previous slide"
                   onClick={() => setSlideIdx((prev) => (prev - 1 + sliders.length) % sliders.length)}
-                  className="p-2 rounded-lg bg-slate-950/70 hover:bg-slate-950 text-white border border-white/20"
+                  className="p-2 rounded-lg bg-slate-950/75 hover:bg-slate-950 text-white border border-white/20"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-xs text-white/90 font-mono-tabular px-2">
+                <span className="text-xs text-white/95 font-mono-tabular px-2 bg-slate-950/60 py-1 rounded">
                   {slideIdx + 1} / {sliders.length}
                 </span>
                 <button
                   type="button"
                   aria-label="Next slide"
                   onClick={() => setSlideIdx((prev) => (prev + 1) % sliders.length)}
-                  className="p-2 rounded-lg bg-slate-950/70 hover:bg-slate-950 text-white border border-white/20"
+                  className="p-2 rounded-lg bg-slate-950/75 hover:bg-slate-950 text-white border border-white/20"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -537,7 +536,7 @@ export function HomePage({
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 pb-3 border-b border-stone-200 dark:border-slate-800">
             <div>
               <p className="text-xs uppercase tracking-widest text-stone-500 dark:text-slate-400">
-                UGC Section 5(b) · Governance &amp; Statutory Officers
+                Governance, Committees &amp; Statutory Officers
               </p>
               <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
                 {hs.leadershipHeading || 'OUR DESK & LEADERSHIP'}
@@ -555,7 +554,7 @@ export function HomePage({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {leadership.slice(0, 4).map((leader) => (
+            {sortByOrder(leadership).slice(0, 4).map((leader) => (
               <article
                 key={leader.id}
                 className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col justify-between"
@@ -569,6 +568,9 @@ export function HomePage({
                       className="w-16 h-16 rounded-full object-cover border-2 border-amber-500/40 shrink-0"
                     />
                     <div className="min-w-0">
+                      <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-stone-100 dark:bg-slate-800 text-stone-600 dark:text-slate-300 mb-1 truncate max-w-full">
+                        {formatCommitteeGroupLabel(leader.committeeGroup)}
+                      </span>
                       <p className="text-xs font-bold uppercase tracking-wider truncate" style={{ color: 'var(--secondary-color)' }}>
                         {leader.roleTitle}
                       </p>
@@ -601,7 +603,7 @@ export function HomePage({
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-3 border-b border-stone-200 dark:border-slate-800">
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--secondary-color)' }}>
-                  {examCategory?.ugcCode || 'Autonomous · CoE'} · NEP 2020 Credit &amp; Grading
+                  Controller of Examinations (CoE) · NEP 2020 Credit &amp; Grading
                 </p>
                 <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
                   {hs.examinationHeading || 'AUTONOMOUS EXAMINATION PORTAL'}
@@ -656,7 +658,7 @@ export function HomePage({
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 pb-3 border-b border-stone-200 dark:border-slate-800">
           <div>
             <p className="text-xs uppercase tracking-widest text-stone-500 dark:text-slate-400">
-              UGC Section 5(c) · Dedicated Departmental Microsites
+              Engineering &amp; Research · Dedicated Departmental Microsites
             </p>
             <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
               {hs.departmentsHeading || t('exploreDepts')}
@@ -731,10 +733,10 @@ export function HomePage({
       <section className="max-w-[1380px] mx-auto px-4">
         <div className="mb-6 pb-3 border-b border-stone-200 dark:border-slate-800">
           <p className="text-xs uppercase tracking-widest text-stone-500 dark:text-slate-400">
-            NEP 2020 Compliance &amp; Autonomous Structure
+            Campus Directory &amp; Autonomous Structure
           </p>
           <h2 className="font-display text-2xl sm:text-3xl font-bold text-stone-900 dark:text-white mt-1">
-            {hs.categoriesHeading || 'Statutory Self-Disclosure & Autonomous Portals'}
+            {hs.categoriesHeading || 'Institutional Sections & Autonomous Portals'}
           </h2>
         </div>
 
@@ -750,8 +752,8 @@ export function HomePage({
               >
                 <div>
                   <div className="flex items-center justify-between text-xs text-stone-500 dark:text-slate-400 mb-1.5">
-                    <span className="font-mono-tabular font-semibold" style={{ color: 'var(--secondary-color)' }}>
-                      {cat.ugcCode}
+                    <span className="font-semibold uppercase tracking-wider" style={{ color: 'var(--secondary-color)' }}>
+                      {cat.shortLabel || cat.name}
                     </span>
                     <span className="text-[11px] font-mono-tabular text-stone-400">
                       {catPages.length} {catPages.length === 1 ? 'Micro-Page' : 'Micro-Pages'}

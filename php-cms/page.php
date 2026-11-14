@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
 
 $slug = $_GET['slug'] ?? '';
@@ -36,7 +37,7 @@ if ($slug !== '') {
 if (!$page && $emptyCategory) {
     $pageTitle = $emptyCategory['name'];
     require_once __DIR__ . '/includes/header.php';
-    echo '<div class="card"><small style="color:var(--secondary-color);font-weight:700;">' . e($emptyCategory['ugc_code']) . '</small><h1>' . e($emptyCategory['name']) . '</h1><p>' . e($emptyCategory['description'] ?: 'Content for this portal is being updated via the CMS Admin Portal.') . '</p><a href="index.php" class="btn-primary">Return Home</a></div>';
+    echo '<div class="card"><h1>' . e($emptyCategory['name']) . '</h1><p>' . e($emptyCategory['description'] ?: 'Content for this portal is being updated via the CMS Admin Portal.') . '</p><a href="index.php" class="btn-primary">Return Home</a></div>';
     require_once __DIR__ . '/includes/footer.php';
     exit;
 }
@@ -64,7 +65,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="layout-sidebar">
   <aside class="card">
     <p style="font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-top:0;">
-      <?= e($page['ugc_code']) ?> · <?= e($page['category_name']) ?>
+      <?= e($page['category_name']) ?>
     </p>
     <ul style="list-style:none;padding:0;margin:0;">
       <?php foreach ($siblings as $sib): ?>
@@ -101,10 +102,18 @@ require_once __DIR__ . '/includes/header.php';
       <div class="grid-2">
         <?php foreach ($leaders as $l): ?>
           <div class="card">
-            <small style="color:var(--secondary-color);font-weight:600;"><?= e($l['role_title']) ?></small>
-            <h3 style="margin:0.25rem 0;"><?= e($l['name']) ?></h3>
-            <p style="font-size:0.85rem;margin:0;"><?= e($l['qualification']) ?></p>
-            <p style="font-size:0.82rem;color:var(--text-muted);"><?= e($l['email']) ?> · <?= e($l['phone']) ?></p>
+            <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+              <img src="<?= e($l['photo_url'] ?: 'assets/images/principal.jpg') ?>" alt="<?= e($l['name']) ?>" style="width:56px;height:56px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+              <div>
+                <small style="color:var(--secondary-color);font-weight:700;"><?= e(formatCommitteeGroupLabel($l['committee_group'] ?? '')) ?> · <?= e($l['role_title']) ?></small>
+                <h3 style="margin:0.2rem 0;"><?= e($l['name']) ?></h3>
+                <p style="font-size:0.84rem;margin:0;"><?= e($l['qualification']) ?></p>
+                <p style="font-size:0.8rem;color:var(--text-muted);margin:0.2rem 0 0;"><?= e($l['email']) ?> · <?= e($l['phone']) ?></p>
+              </div>
+            </div>
+            <?php if (!empty($l['bio'])): ?>
+              <p style="font-size:0.82rem;color:var(--text-muted);margin:0.6rem 0 0;"><?= e($l['bio']) ?></p>
+            <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </div>
