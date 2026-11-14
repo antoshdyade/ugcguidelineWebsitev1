@@ -965,7 +965,7 @@ export function RichTextEditor({
             ) : (
               <textarea
                 aria-label="HTML and CSS Source Code"
-                value={value}
+                value={value ?? ''}
                 onChange={(e) => onChange(e.target.value)}
                 style={{ minHeight: `${minHeight}px` }}
                 className="w-full h-full p-3.5 text-xs font-mono bg-slate-950 text-emerald-300 focus:outline-none resize-y min-h-[380px]"

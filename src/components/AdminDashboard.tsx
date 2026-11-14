@@ -116,7 +116,8 @@ function LinkTargetPicker({
     ...pages.map((p) => `/page/${p.slug}`),
     ...departments.map((d) => `/department/${d.slug}`),
   ]);
-  const selectVal = allUrls.has(value) ? value : '__custom__';
+  const safeValue = value ?? '';
+  const selectVal = allUrls.has(safeValue) ? safeValue : '__custom__';
 
   return (
     <div className="space-y-1">
@@ -160,7 +161,7 @@ function LinkTargetPicker({
       </select>
       <input
         type="text"
-        value={value}
+        value={safeValue}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full px-2.5 py-1 text-[11px] font-mono rounded border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900"
@@ -1162,11 +1163,11 @@ export function AdminDashboard({
                             type="button"
                             onClick={() => {
                               setEditingCatId(cat.id);
-                              setCatName(cat.name);
-                              setCatShort(cat.shortLabel || cat.name);
-                              setCatSlug(cat.slug);
-                              setCatUgcCode(cat.ugcCode);
-                              setCatDesc(cat.description);
+                              setCatName(cat.name ?? '');
+                              setCatShort(cat.shortLabel || cat.name || '');
+                              setCatSlug(cat.slug ?? '');
+                              setCatUgcCode(cat.ugcCode ?? '');
+                              setCatDesc(cat.description ?? '');
                               setCatShowMenu(cat.showInMenu !== false);
                               setCatShowHome(cat.showOnHome !== false);
                             }}
@@ -1227,7 +1228,7 @@ export function AdminDashboard({
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
-                            value={lk.label}
+                            value={lk.label ?? ''}
                             onChange={(e) => {
                               const next = [...settingsDraft.topBarLinks];
                               next[idx] = { ...lk, label: e.target.value };
@@ -1307,7 +1308,7 @@ export function AdminDashboard({
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
-                            value={col.title}
+                            value={col.title ?? ''}
                             onChange={(e) => {
                               const nextCols = [...settingsDraft.footerColumns];
                               nextCols[colIdx] = { ...col, title: e.target.value };
@@ -1348,7 +1349,7 @@ export function AdminDashboard({
                             <div className="flex items-center gap-1.5">
                               <input
                                 type="text"
-                                value={lk.label}
+                                value={lk.label ?? ''}
                                 onChange={(e) => {
                                   const nextCols = [...settingsDraft.footerColumns];
                                   const nextLinks = [...col.links];
@@ -1729,15 +1730,15 @@ export function AdminDashboard({
                         onClick={() => {
                           setEditingPageId(pg.id);
                           setPageCat(pg.categorySlug);
-                          setPageTitle(pg.title);
-                          setPageSlug(pg.slug);
-                          setPageSubtitle(pg.subtitle);
-                          setPageSortOrder(pg.sortOrder);
-                          setPageHtml(pg.contentHtml);
+                          setPageTitle(pg.title ?? '');
+                          setPageSlug(pg.slug ?? '');
+                          setPageSubtitle(pg.subtitle ?? '');
+                          setPageSortOrder(pg.sortOrder ?? 1);
+                          setPageHtml(pg.contentHtml ?? '');
                           setPagePdfUrl(pg.attachedPdfUrl || '');
                           setPagePdfLabel(pg.attachedPdfLabel || '');
                           setPagePdfMode(pg.attachedPdfUrl && /^https?:\/\//i.test(pg.attachedPdfUrl) ? 'external' : 'upload');
-                          setPagePublished(pg.isPublished);
+                          setPagePublished(pg.isPublished !== false);
                         }}
                         className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
                       >
@@ -2381,13 +2382,13 @@ export function AdminDashboard({
                                 type="button"
                                 onClick={() => {
                                   setEditingSubId(sp.id);
-                                  setSubTitle(sp.title);
-                                  setSubSlug(sp.slug);
+                                  setSubTitle(sp.title ?? '');
+                                  setSubSlug(sp.slug ?? '');
                                   setSubPageType(sp.pageType || 'general');
-                                  setSubHtml(sp.contentHtml);
+                                  setSubHtml(sp.contentHtml ?? '');
                                   setSubPhotos(sp.photos || []);
                                   setSubItems(sp.items || []);
-                                  setSubPublished(sp.isPublished);
+                                  setSubPublished(sp.isPublished !== false);
                                 }}
                                 className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
                               >
@@ -2682,14 +2683,14 @@ export function AdminDashboard({
                                 type="button"
                                 onClick={() => {
                                   setEditingFacId(f.id);
-                                  setFacName(f.name);
-                                  setFacDesignation(f.designation);
-                                  setFacQual(f.qualification);
-                                  setFacSpec(f.specialization);
-                                  setFacEmail(f.email);
+                                  setFacName(f.name ?? '');
+                                  setFacDesignation(f.designation ?? '');
+                                  setFacQual(f.qualification ?? '');
+                                  setFacSpec(f.specialization ?? '');
+                                  setFacEmail(f.email ?? '');
                                   setFacPhone(f.phone || '');
-                                  setFacExp(f.experienceYears);
-                                  setFacPhoto(f.photoUrl);
+                                  setFacExp(f.experienceYears ?? 0);
+                                  setFacPhoto(f.photoUrl ?? '');
                                   setFacExtUrl(f.externalProfileUrl || '');
                                   setFacExtLabel(f.externalProfileLabel || 'Google Scholar / Profile');
                                   setFacCustomFields(f.customFields || []);
@@ -2905,7 +2906,7 @@ export function AdminDashboard({
                         <h2 className="text-base font-bold">Department Library Showcase &amp; Photo Upload</h2>
                         <input
                           type="text"
-                          value={lib.title}
+                          value={lib.title ?? ''}
                           onChange={(e) => setDeptDraft({ ...deptDraft, library: { ...lib, title: e.target.value } })}
                           placeholder="Library Title"
                           className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -2931,7 +2932,7 @@ export function AdminDashboard({
                           />
                           <input
                             type="text"
-                            value={lib.timings || ''}
+                            value={lib.timings ?? ''}
                             onChange={(e) => setDeptDraft({ ...deptDraft, library: { ...lib, timings: e.target.value } })}
                             placeholder="Timings"
                             className="col-span-2 px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -2939,14 +2940,14 @@ export function AdminDashboard({
                         </div>
                         <input
                           type="text"
-                          value={lib.incharge || ''}
+                          value={lib.incharge ?? ''}
                           onChange={(e) => setDeptDraft({ ...deptDraft, library: { ...lib, incharge: e.target.value } })}
                           placeholder="Library In-Charge"
                           className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                         />
                         <textarea
                           rows={2}
-                          value={lib.description}
+                          value={lib.description ?? ''}
                           onChange={(e) =>
                             setDeptDraft({ ...deptDraft, library: { ...lib, description: e.target.value } })
                           }
@@ -2955,7 +2956,7 @@ export function AdminDashboard({
                         />
                         <ImageUploader
                           label="Department Library Photo"
-                          value={lib.photoUrl || ''}
+                          value={lib.photoUrl ?? ''}
                           onChange={(url) => setDeptDraft({ ...deptDraft, library: { ...lib, photoUrl: url } })}
                           uploadBinary={uploadBinaryFile}
                         />
@@ -3056,14 +3057,14 @@ export function AdminDashboard({
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <input
                         type="text"
-                        value={deptDraft.name ?? currentDept.name}
+                        value={deptDraft.name ?? currentDept.name ?? ''}
                         onChange={(e) => setDeptDraft({ ...deptDraft, name: e.target.value })}
                         placeholder="Department Name"
                         className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 sm:col-span-2"
                       />
                       <input
                         type="text"
-                        value={deptDraft.nbaStatus ?? currentDept.nbaStatus}
+                        value={deptDraft.nbaStatus ?? currentDept.nbaStatus ?? ''}
                         onChange={(e) => setDeptDraft({ ...deptDraft, nbaStatus: e.target.value })}
                         placeholder="NBA / Accreditation Status"
                         className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -3072,21 +3073,21 @@ export function AdminDashboard({
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <input
                         type="text"
-                        value={deptDraft.hodName ?? currentDept.hodName}
+                        value={deptDraft.hodName ?? currentDept.hodName ?? ''}
                         onChange={(e) => setDeptDraft({ ...deptDraft, hodName: e.target.value })}
                         placeholder="HoD Name"
                         className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
                       <input
                         type="number"
-                        value={deptDraft.establishedYear ?? currentDept.establishedYear}
+                        value={deptDraft.establishedYear ?? currentDept.establishedYear ?? 2026}
                         onChange={(e) => setDeptDraft({ ...deptDraft, establishedYear: Number(e.target.value) })}
                         placeholder="Established Year"
                         className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
                       <input
                         type="number"
-                        value={deptDraft.intakeCapacity ?? currentDept.intakeCapacity}
+                        value={deptDraft.intakeCapacity ?? currentDept.intakeCapacity ?? 60}
                         onChange={(e) => setDeptDraft({ ...deptDraft, intakeCapacity: Number(e.target.value) })}
                         placeholder="Intake Capacity"
                         className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -3094,7 +3095,7 @@ export function AdminDashboard({
                     </div>
                     <textarea
                       rows={2}
-                      value={deptDraft.overview ?? currentDept.overview}
+                      value={deptDraft.overview ?? currentDept.overview ?? ''}
                       onChange={(e) => setDeptDraft({ ...deptDraft, overview: e.target.value })}
                       placeholder="Department Overview"
                       className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -3102,14 +3103,14 @@ export function AdminDashboard({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <textarea
                         rows={2}
-                        value={deptDraft.vision ?? currentDept.vision}
+                        value={deptDraft.vision ?? currentDept.vision ?? ''}
                         onChange={(e) => setDeptDraft({ ...deptDraft, vision: e.target.value })}
                         placeholder="Department Vision"
                         className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
                       <textarea
                         rows={2}
-                        value={deptDraft.mission ?? currentDept.mission}
+                        value={deptDraft.mission ?? currentDept.mission ?? ''}
                         onChange={(e) => setDeptDraft({ ...deptDraft, mission: e.target.value })}
                         placeholder="Department Mission"
                         className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
@@ -3117,7 +3118,7 @@ export function AdminDashboard({
                     </div>
                     <ImageUploader
                       label="Department Hero Banner Image"
-                      value={deptDraft.heroImageUrl ?? currentDept.heroImageUrl}
+                      value={deptDraft.heroImageUrl ?? currentDept.heroImageUrl ?? ''}
                       onChange={(url) => setDeptDraft({ ...deptDraft, heroImageUrl: url })}
                       uploadBinary={uploadBinaryFile}
                     />
@@ -3341,10 +3342,10 @@ export function AdminDashboard({
                               type="button"
                               onClick={() => {
                                 setEditingHomeCompId(comp.id);
-                                setHomeCompTitle(comp.title);
-                                setHomeCompPlacement(comp.placement);
-                                setHomeCompHtml(comp.contentHtml);
-                                setHomeCompActive(comp.isActive);
+                                setHomeCompTitle(comp.title ?? '');
+                                setHomeCompPlacement(comp.placement || 'after-hero');
+                                setHomeCompHtml(comp.contentHtml ?? '');
+                                setHomeCompActive(comp.isActive !== false);
                               }}
                               className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
                             >
@@ -3507,7 +3508,7 @@ export function AdminDashboard({
                     <div key={idx} className="flex items-center gap-2">
                       <input
                         type="text"
-                        value={st.value}
+                        value={st.value ?? ''}
                         onChange={(e) => {
                           const next = [...(settingsDraft.highlightsStats || [])];
                           next[idx] = { ...st, value: e.target.value };
@@ -3518,7 +3519,7 @@ export function AdminDashboard({
                       />
                       <input
                         type="text"
-                        value={st.label}
+                        value={st.label ?? ''}
                         onChange={(e) => {
                           const next = [...(settingsDraft.highlightsStats || [])];
                           next[idx] = { ...st, label: e.target.value };
@@ -3569,7 +3570,7 @@ export function AdminDashboard({
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
-                          value={ab.name}
+                          value={ab.name ?? ''}
                           onChange={(e) => {
                             const next = [...(settingsDraft.approvedBodies || [])];
                             next[idx] = { ...ab, name: e.target.value };
@@ -3642,11 +3643,11 @@ export function AdminDashboard({
                         type="button"
                         onClick={() => {
                           setEditingSlideId(s.id);
-                          setSlideTitle(s.title);
-                          setSlideCaption(s.caption);
-                          setSlideImage(s.imageUrl);
-                          setSlideCta(s.ctaLabel);
-                          setSlideLink(s.ctaLink);
+                          setSlideTitle(s.title ?? '');
+                          setSlideCaption(s.caption ?? '');
+                          setSlideImage(s.imageUrl ?? '');
+                          setSlideCta(s.ctaLabel ?? '');
+                          setSlideLink(s.ctaLink ?? '');
                         }}
                         className="p-1 text-stone-600 hover:bg-stone-100 rounded"
                         title="Edit Slide"
@@ -3839,10 +3840,10 @@ export function AdminDashboard({
                         type="button"
                         onClick={() => {
                           setEditingEventId(ev.id);
-                          setEventTitle(ev.title);
-                          setEventDate(ev.eventDate);
-                          setEventCat(ev.category);
-                          setEventSummary(ev.summary);
+                          setEventTitle(ev.title ?? '');
+                          setEventDate(ev.eventDate ?? '');
+                          setEventCat(ev.category || 'Notice');
+                          setEventSummary(ev.summary ?? '');
                           setEventImage(ev.imageUrl || '');
                         }}
                         className="p-1 text-stone-600 hover:bg-stone-100 rounded"
@@ -4082,14 +4083,14 @@ export function AdminDashboard({
                         type="button"
                         onClick={() => {
                           setEditingLeadId(l.id);
-                          setLeadRole(l.roleTitle);
-                          setLeadName(l.name);
-                          setLeadQual(l.qualification);
-                          setLeadEmail(l.email);
-                          setLeadPhone(l.phone);
-                          setLeadPhoto(l.photoUrl);
-                          setLeadBio(l.bio);
-                          setLeadGroup(l.committeeGroup);
+                          setLeadRole(l.roleTitle ?? '');
+                          setLeadName(l.name ?? '');
+                          setLeadQual(l.qualification ?? '');
+                          setLeadEmail(l.email ?? '');
+                          setLeadPhone(l.phone ?? '');
+                          setLeadPhoto(l.photoUrl ?? '');
+                          setLeadBio(l.bio ?? '');
+                          setLeadGroup(l.committeeGroup || 'statutory');
                         }}
                         className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs"
                       >
@@ -4620,7 +4621,7 @@ export function AdminDashboard({
                       <label className="block text-xs font-semibold mb-1">Institution Full Name</label>
                       <input
                         type="text"
-                        value={settingsDraft.institutionName}
+                        value={settingsDraft.institutionName ?? ''}
                         onChange={(e) => setSettingsDraft({ ...settingsDraft, institutionName: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
@@ -4631,7 +4632,7 @@ export function AdminDashboard({
                     <label className="block text-xs font-semibold mb-1">Affiliation &amp; Recognition Line</label>
                     <input
                       type="text"
-                      value={settingsDraft.affiliation}
+                      value={settingsDraft.affiliation ?? ''}
                       onChange={(e) => setSettingsDraft({ ...settingsDraft, affiliation: e.target.value })}
                       className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                     />
@@ -4693,7 +4694,7 @@ export function AdminDashboard({
                       <label className="block text-xs font-semibold mb-1">Official Phone</label>
                       <input
                         type="text"
-                        value={settingsDraft.phone}
+                        value={settingsDraft.phone ?? ''}
                         onChange={(e) => setSettingsDraft({ ...settingsDraft, phone: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
@@ -4702,7 +4703,7 @@ export function AdminDashboard({
                       <label className="block text-xs font-semibold mb-1">Official Email</label>
                       <input
                         type="email"
-                        value={settingsDraft.email}
+                        value={settingsDraft.email ?? ''}
                         onChange={(e) => setSettingsDraft({ ...settingsDraft, email: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
@@ -4710,7 +4711,7 @@ export function AdminDashboard({
                     <div>
                       <label className="block text-xs font-semibold mb-1">Theme Palette</label>
                       <select
-                        value={settingsDraft.defaultPaletteId}
+                        value={settingsDraft.defaultPaletteId ?? 'royal-navy'}
                         onChange={(e) => {
                           const pal = THEME_PALETTES.find((p) => p.id === e.target.value);
                           setSettingsDraft({
@@ -4736,7 +4737,7 @@ export function AdminDashboard({
                       <label className="block text-xs font-semibold mb-1">DTE Code</label>
                       <input
                         type="text"
-                        value={settingsDraft.dteCode}
+                        value={settingsDraft.dteCode ?? ''}
                         onChange={(e) => setSettingsDraft({ ...settingsDraft, dteCode: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
@@ -4745,7 +4746,7 @@ export function AdminDashboard({
                       <label className="block text-xs font-semibold mb-1">AICTE Permanent ID</label>
                       <input
                         type="text"
-                        value={settingsDraft.aicteCode}
+                        value={settingsDraft.aicteCode ?? ''}
                         onChange={(e) => setSettingsDraft({ ...settingsDraft, aicteCode: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
@@ -4754,7 +4755,7 @@ export function AdminDashboard({
                       <label className="block text-xs font-semibold mb-1">Anti-Ragging Helpline</label>
                       <input
                         type="text"
-                        value={settingsDraft.antiRaggingHelpline}
+                        value={settingsDraft.antiRaggingHelpline ?? ''}
                         onChange={(e) => setSettingsDraft({ ...settingsDraft, antiRaggingHelpline: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
