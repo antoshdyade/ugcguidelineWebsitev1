@@ -1,9 +1,18 @@
 <?php
 /**
- * Local Database Override for Linux Webmin / Virtualmin / LAMP Hosting
- * Copy this file to config/config.local.php and fill in your MySQL credentials.
+ * Local Database & Base URL Override for Ubuntu Webmin / Virtualmin, LAMP & Windows XAMPP
+ * Copy this file to config/config.local.php and fill in your environment settings.
  */
 define('DB_HOST', '127.0.0.1');
 define('DB_NAME', 'svcoer_ugc_cms');
 define('DB_USER', 'svcoer_user');
 define('DB_PASS', 'YOUR_STRONG_MYSQL_PASSWORD');
+
+/**
+ * Optional Base URL Override:
+ * - Leave empty ('') for automatic detection on root domains AND XAMPP subfolders (e.g. http://localhost/svcoer).
+ * - Or set explicitly if behind a reverse proxy / custom port, without a trailing slash:
+ *   e.g. define('BASE_URL', 'https://coe.sveri.ac.in');
+ *   e.g. define('BASE_URL', 'http://localhost/php-cms');
+ */
+define('BASE_URL', '');

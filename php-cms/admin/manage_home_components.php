@@ -118,7 +118,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
   </div>
 
   <label style="display:block;font-weight:600;margin-bottom:0.35rem;">Component Content (Drag &amp; Drop Graphical Blocks or &lt;&gt; HTML Source):</label>
-  <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="upload_handler.php" name="html_content" rows="10"><?= htmlspecialchars($editing['html_content'] ?? '<div class="cms-prose"><div class="cms-block cms-banner-navy"><h2>Custom Institutional Highlight</h2><p>Drag blocks from the right panel or edit HTML source directly.</p></div></div>', ENT_QUOTES, 'UTF-8') ?></textarea>
+  <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="<?= e(baseUrl('admin/upload_handler.php')) ?>" name="html_content" rows="10"><?= htmlspecialchars($editing['html_content'] ?? '<div class="cms-prose"><div class="cms-block cms-banner-navy"><h2>Custom Institutional Highlight</h2><p>Drag blocks from the right panel or edit HTML source directly.</p></div></div>', ENT_QUOTES, 'UTF-8') ?></textarea>
 
   <label style="display:block;margin:0.75rem 0;">
     <input type="checkbox" name="is_active" <?= (!$editing || !empty($editing['is_active'])) ? 'checked' : '' ?>> Active on Public Homepage

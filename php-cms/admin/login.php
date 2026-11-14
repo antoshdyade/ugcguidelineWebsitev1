@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CMS Admin Login</title>
-  <link rel="stylesheet" href="../assets/css/style.css?v=2">
+  <link rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
 </head>
 <body style="display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem;">
   <form method="post" class="card" style="width:100%;max-width:440px;">
@@ -82,9 +82,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       CoE (Exam Cell): <code>coe@coe.sveri.ac.in</code> / <code>Exam@123</code>
     </div>
     <p style="margin-top:0.75rem;font-size:0.8rem;display:flex;justify-content:space-between;">
-      <a href="../index.php">&larr; Back to Public Website</a>
+      <a href="<?= e(baseUrl('index.php')) ?>">&larr; Back to Public Website</a>
       <?php if (file_exists(__DIR__ . '/../setup.php')): ?>
-        <a href="../setup.php">First-Time Setup Check &rarr;</a>
+        <a href="<?= e(baseUrl('setup.php')) ?>">First-Time Setup Check &rarr;</a>
       <?php endif; ?>
     </p>
   </form>

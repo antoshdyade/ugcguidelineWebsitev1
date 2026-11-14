@@ -2,7 +2,7 @@
 declare(strict_types=1);
 $activePage = basename($_SERVER['PHP_SELF'] ?? 'dashboard.php');
 $adminTitle = $adminPageTitle ?? 'CMS Console';
-$siteCssVer = 'v=2';
+$siteSettings = isset($pdo) ? getSiteSettings($pdo) : [];
 ?>
 <!doctype html>
 <html lang="en">
@@ -10,9 +10,20 @@ $siteCssVer = 'v=2';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= e($adminTitle) ?> — SVCOER Admin Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/css/style.css?<?= $siteCssVer ?>">
-  <script src="../assets/js/editor.js?<?= $siteCssVer ?>" defer></script>
+  <link rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
+  <?php if (!empty($siteSettings)): ?>
+  <style>
+    :root {
+      --primary-color: <?= e($siteSettings['primary_color'] ?? '#0F294A') ?>;
+      --secondary-color: <?= e($siteSettings['secondary_color'] ?? '#B45309') ?>;
+    }
+  </style>
+  <?php endif; ?>
+  <script>
+    window.SVCOER_BASE_URL = <?= json_encode(getBaseUrl(), JSON_UNESCAPED_SLASHES) ?>;
+  </script>
 </head>
 <body>
 <div class="admin-shell">
@@ -27,47 +38,47 @@ $siteCssVer = 'v=2';
       </div>
 
       <nav class="admin-nav" aria-label="Admin Console Navigation">
-        <a href="dashboard.php" class="<?= $activePage === 'dashboard.php' ? 'active' : '' ?>">Overview &amp; UGC Audit</a>
+        <a href="<?= e(baseUrl('admin/dashboard.php')) ?>" class="<?= $activePage === 'dashboard.php' ? 'active' : '' ?>">Overview &amp; UGC Audit</a>
         <?php if (canAccessResource($user, 'categories')): ?>
-          <a href="manage_categories.php" class="<?= $activePage === 'manage_categories.php' ? 'active' : '' ?>">Categories &amp; Menus</a>
+          <a href="<?= e(baseUrl('admin/manage_categories.php')) ?>" class="<?= $activePage === 'manage_categories.php' ? 'active' : '' ?>">Categories &amp; Menus</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'pages')): ?>
-          <a href="manage_pages.php" class="<?= $activePage === 'manage_pages.php' ? 'active' : '' ?>">Pages &amp; UGC Content</a>
+          <a href="<?= e(baseUrl('admin/manage_pages.php')) ?>" class="<?= $activePage === 'manage_pages.php' ? 'active' : '' ?>">Pages &amp; UGC Content</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'departments')): ?>
-          <a href="manage_departments.php" class="<?= $activePage === 'manage_departments.php' ? 'active' : '' ?>">Departments &amp; Micro-Pages</a>
+          <a href="<?= e(baseUrl('admin/manage_departments.php')) ?>" class="<?= $activePage === 'manage_departments.php' ? 'active' : '' ?>">Departments &amp; Micro-Pages</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'sliders_events')): ?>
-          <a href="manage_sliders.php" class="<?= $activePage === 'manage_sliders.php' ? 'active' : '' ?>">Sliders, Ticker &amp; Events</a>
+          <a href="<?= e(baseUrl('admin/manage_sliders.php')) ?>" class="<?= $activePage === 'manage_sliders.php' ? 'active' : '' ?>">Sliders, Ticker &amp; Events</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'settings')): ?>
-          <a href="manage_home_components.php" class="<?= $activePage === 'manage_home_components.php' ? 'active' : '' ?>">Homepage HTML Components</a>
+          <a href="<?= e(baseUrl('admin/manage_home_components.php')) ?>" class="<?= $activePage === 'manage_home_components.php' ? 'active' : '' ?>">Homepage HTML Components</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'leadership')): ?>
-          <a href="manage_leadership.php" class="<?= $activePage === 'manage_leadership.php' ? 'active' : '' ?>">Leadership &amp; Our Desk</a>
+          <a href="<?= e(baseUrl('admin/manage_leadership.php')) ?>" class="<?= $activePage === 'manage_leadership.php' ? 'active' : '' ?>">Leadership &amp; Our Desk</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'gallery')): ?>
-          <a href="manage_gallery.php" class="<?= $activePage === 'manage_gallery.php' ? 'active' : '' ?>">Picture Gallery</a>
+          <a href="<?= e(baseUrl('admin/manage_gallery.php')) ?>" class="<?= $activePage === 'manage_gallery.php' ? 'active' : '' ?>">Picture Gallery</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'documents')): ?>
-          <a href="manage_documents.php" class="<?= $activePage === 'manage_documents.php' ? 'active' : '' ?>">Document Repository</a>
+          <a href="<?= e(baseUrl('admin/manage_documents.php')) ?>" class="<?= $activePage === 'manage_documents.php' ? 'active' : '' ?>">Document Repository</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'directory')): ?>
-          <a href="manage_directory.php" class="<?= $activePage === 'manage_directory.php' ? 'active' : '' ?>">Telephone Directory</a>
+          <a href="<?= e(baseUrl('admin/manage_directory.php')) ?>" class="<?= $activePage === 'manage_directory.php' ? 'active' : '' ?>">Telephone Directory</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'settings')): ?>
-          <a href="site_settings.php" class="<?= $activePage === 'site_settings.php' ? 'active' : '' ?>">Site Settings, Vision &amp; Theme</a>
+          <a href="<?= e(baseUrl('admin/site_settings.php')) ?>" class="<?= $activePage === 'site_settings.php' ? 'active' : '' ?>">Site Settings, Vision &amp; Theme</a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'users')): ?>
-          <a href="manage_users.php" class="<?= $activePage === 'manage_users.php' ? 'active' : '' ?>">Users, Per-Page RBAC &amp; Audit</a>
-          <a href="manage_backups.php" class="<?= $activePage === 'manage_backups.php' ? 'active' : '' ?>">Backup, Export &amp; Restore</a>
+          <a href="<?= e(baseUrl('admin/manage_users.php')) ?>" class="<?= $activePage === 'manage_users.php' ? 'active' : '' ?>">Users, Per-Page RBAC &amp; Audit</a>
+          <a href="<?= e(baseUrl('admin/manage_backups.php')) ?>" class="<?= $activePage === 'manage_backups.php' ? 'active' : '' ?>">Backup, Export &amp; Restore</a>
         <?php endif; ?>
       </nav>
     </div>
 
     <div style="border-top:1px solid var(--border-color);padding-top:0.85rem;margin-top:1.25rem;display:flex;flex-direction:column;gap:0.45rem;">
-      <a href="../index.php" class="btn-secondary" style="justify-content:center;">&larr; View Public Website</a>
-      <a href="logout.php" class="btn-primary" style="justify-content:center;background:#991b1b;">Sign Out</a>
+      <a href="<?= e(baseUrl('index.php')) ?>" class="btn-secondary" style="justify-content:center;">&larr; View Public Website</a>
+      <a href="<?= e(baseUrl('admin/logout.php')) ?>" class="btn-primary" style="justify-content:center;background:#991b1b;">Sign Out</a>
     </div>
   </aside>
 

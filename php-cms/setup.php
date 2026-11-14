@@ -131,12 +131,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SVCOER PHP CMS — Webmin Pre-Flight Check</title>
-  <link rel="stylesheet" href="assets/css/style.css?v=2">
+  <title>SVCOER PHP CMS — Webmin & XAMPP Pre-Flight Check</title>
+  <link rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
 </head>
 <body class="container" style="padding:2rem 1rem;max-width:860px;">
   <div class="card">
-    <p style="color:#b45309;font-weight:700;font-size:0.8rem;margin:0;">WEBMIN / UBUNTU LINUX HOSTING DIAGNOSTICS</p>
+    <p style="color:#b45309;font-weight:700;font-size:0.8rem;margin:0;">WEBMIN / UBUNTU LINUX / WINDOWS XAMPP HOSTING DIAGNOSTICS</p>
     <h1 style="margin:0.25rem 0 1rem;">SVCOER UGC CMS Setup Check</h1>
     <?php if ($actionMsg): ?>
       <div class="alert-ok"><?= e($actionMsg) ?></div>
@@ -145,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
     <table class="data-table">
       <thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead>
       <tbody>
+        <tr><td>Detected <code>BASE_URL</code></td><td>INFO</td><td><code><?= e(getBaseUrl() ?: '/ (domain root)') ?></code> · CSS: <code><?= e(assetUrl('assets/css/style.css')) ?></code></td></tr>
         <tr><td>PHP Version (&ge; 8.0)</td><td><?= $phpOk ? 'PASS' : 'FAIL' ?></td><td>Running PHP <?= e(PHP_VERSION) ?></td></tr>
         <tr><td>MySQL PDO (pdo_mysql)</td><td><?= $pdoOk ? 'PASS' : 'FAIL' ?></td><td><?= $pdoOk ? 'Loaded' : 'Install php8.x-mysql and restart Apache/PHP-FPM' ?></td></tr>
         <tr><td>Fileinfo MIME Check</td><td><?= $finfoOk ? 'PASS' : 'FAIL' ?></td><td><?= $finfoOk ? 'Loaded' : 'Enable php-fileinfo extension' ?></td></tr>
@@ -169,8 +170,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
           <input type="hidden" name="action" value="reset_passwords">
           <button type="submit" class="btn-primary">Verify &amp; Reset Default RBAC Passwords (5 Accounts)</button>
         </form>
-        <a href="admin/login.php" class="btn-secondary">Open Admin Login &rarr;</a>
-        <a href="index.php" class="btn-secondary">Open Public Site &rarr;</a>
+        <a href="<?= e(baseUrl('admin/login.php')) ?>" class="btn-secondary">Open Admin Login &rarr;</a>
+        <a href="<?= e(baseUrl('index.php')) ?>" class="btn-secondary">Open Public Site &rarr;</a>
       </div>
     <?php endif; ?>
 

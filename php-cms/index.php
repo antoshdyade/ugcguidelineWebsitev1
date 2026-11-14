@@ -29,13 +29,13 @@ try {
 
 $renderHomeSlot = static function (string $slot) use ($customBlocksBySlot): void {
     foreach ($customBlocksBySlot[$slot] ?? [] as $blk) {
-        echo '<section class="card" style="margin-top:1.5rem;" data-custom-component="' . (int)$blk['id'] . '">';
+        echo '<section class="card cms-prose" style="margin-top:1.5rem;" data-custom-component="' . (int)$blk['id'] . '">';
         echo $blk['html_content'];
         echo '</section>';
     }
 };
 
-$pageTitle = 'Home — UGC NEP 2020 Self-Disclosure Portal';
+$pageTitle = $settings['institution_name'] ?? 'Home — Autonomous Institutional Portal';
 require_once __DIR__ . '/includes/header.php';
 
 $hs = $settings['home_sections'] ?? [];
@@ -44,57 +44,95 @@ $approvedBodies = $settings['approved_bodies'] ?? [];
 $missionLines = array_filter(array_map('trim', explode("\n", (string)($settings['mission_text'] ?? ''))));
 $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($settings['recruiters'] ?? ''))));
 ?>
+
 <?php if (!empty($hs['showTicker']) && $ticker): ?>
-  <div class="ticker-wrap" role="region" aria-label="Latest Announcements">
-    <div class="ticker-inner">
-      <?php foreach (array_merge($ticker, $ticker) as $tk): ?>
-        <a href="<?= e($tk['link_url']) ?>" style="margin-right:2.5rem;text-decoration:none;color:#1c1917;font-size:0.875rem;">
-          <strong style="color:var(--secondary-color);"><?= e($tk['badge_text']) ?>:</strong> <?= e($tk['text']) ?>
-        </a>
-      <?php endforeach; ?>
+  <div class="ticker-bar" role="region" aria-label="Latest Announcements">
+    <div class="ticker-bar-inner">
+      <div id="ticker-badge-label" class="ticker-badge">Latest Notices</div>
+      <div id="php-ticker-viewport" class="ticker-viewport">
+        <div id="php-ticker-track" class="ticker-inner">
+          <?php foreach (array_merge($ticker, $ticker) as $tk): ?>
+            <a href="<?= e(baseUrl($tk['link_url'])) ?>" style="margin-right:2.5rem;text-decoration:none;color:var(--text-main);font-size:0.86rem;">
+              <strong style="color:var(--secondary-color);"><?= e($tk['badge_text']) ?>:</strong> <?= e($tk['text']) ?>
+            </a>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      <div class="ticker-controls">
+        <button type="button" class="ticker-ctrl-btn" onclick="svcoerTickerStep(-1)" title="Previous Notice">&lsaquo;</button>
+        <button type="button" id="ticker-pause-btn" class="ticker-ctrl-btn" onclick="svcoerTickerToggle()">Pause</button>
+        <button type="button" class="ticker-ctrl-btn" onclick="svcoerTickerStep(1)" title="Next Notice">&rsaquo;</button>
+      </div>
     </div>
   </div>
 <?php endif; ?>
 
-<?php if (!empty($hs['showSlider']) && !empty($sliders[0])): $hero = $sliders[0]; ?>
-  <section class="card" style="position:relative;overflow:hidden;background:linear-gradient(120deg, var(--primary-color), #1e293b);color:#fff;padding:2.5rem;margin-top:1rem;">
-    <p style="text-transform:uppercase;letter-spacing:0.08em;font-size:0.75rem;color:#fde68a;margin:0 0 0.5rem;">UGC NEP 2020 Public Self-Disclosure Portal</p>
-    <h1 style="font-family:'Playfair Display',serif;font-size:2.2rem;margin:0 0 0.75rem;"><?= e($hero['title']) ?></h1>
-    <p style="max-width:680px;margin:0 0 1.25rem;color:#e2e8f0;"><?= e($hero['caption']) ?></p>
-    <a href="<?= e($hero['cta_link']) ?>" class="btn-secondary"><?= e($hero['cta_label']) ?></a>
-    <a href="quick-links.php" class="btn-primary" style="margin-left:0.5rem;background:rgba(255,255,255,0.16);">Document Repository</a>
+<?php if (!empty($hs['showSlider']) && !empty($sliders)): ?>
+  <section class="hero-slider" aria-label="Featured Campus Highlights">
+    <?php foreach ($sliders as $idx => $sl): ?>
+      <div class="hero-slide <?= $idx === 0 ? 'is-active' : '' ?>">
+        <img class="hero-slide-img" src="<?= e(mediaUrl($sl['image_url'], 'assets/images/hero_campus.jpg')) ?>" alt="<?= e($sl['title']) ?>">
+        <div class="hero-slide-overlay"></div>
+        <div class="hero-slide-content">
+          <p class="hero-eyebrow"><?= e($settings['short_code'] ?: 'SVERI') ?> · Autonomous Engineering Campus</p>
+          <h1 class="hero-title"><?= e($sl['title']) ?></h1>
+          <p class="hero-caption"><?= e($sl['caption']) ?></p>
+          <div class="hero-cta-row">
+            <a href="<?= e(baseUrl($sl['cta_link'])) ?>" class="btn-secondary"><?= e($sl['cta_label']) ?> &rarr;</a>
+            <a href="<?= e(baseUrl('quick-links.php')) ?>" class="btn-primary" style="background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.28);">Document Repository</a>
+          </div>
+        </div>
+      </div>
+    <?php endforeach; ?>
+
+    <?php if (count($sliders) > 1): ?>
+      <div class="hero-controls">
+        <button type="button" class="hero-ctrl-btn" onclick="svcoerSlidePrev()" aria-label="Previous slide">&lsaquo;</button>
+        <span id="hero-slide-counter" class="hero-counter">1 / <?= count($sliders) ?></span>
+        <button type="button" class="hero-ctrl-btn" onclick="svcoerSlideNext()" aria-label="Next slide">&rsaquo;</button>
+      </div>
+    <?php endif; ?>
   </section>
 <?php endif; ?>
 
 <?php $renderHomeSlot('after-hero'); ?>
 
 <?php if (!empty($hs['showStatsAndRecognitions']) && !empty($stats)): ?>
-  <section class="grid-4" style="margin-top:1.5rem;">
-    <?php foreach ($stats as $st): ?>
-      <div class="card" style="text-align:center;">
-        <div style="font-size:1.75rem;font-weight:700;color:var(--primary-color);"><?= e($st['value'] ?? '') ?></div>
-        <small style="color:var(--text-muted);font-weight:600;"><?= e($st['label'] ?? '') ?></small>
-      </div>
-    <?php endforeach; ?>
+  <section aria-label="Institutional Highlights">
+    <div class="kpi-strip">
+      <?php foreach ($stats as $st): ?>
+        <div class="kpi-cell">
+          <div class="kpi-value"><?= e($st['value'] ?? '') ?></div>
+          <div class="kpi-label"><?= e($st['label'] ?? '') ?></div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="recognition-row">
+      <div class="recognition-card"><small style="color:var(--secondary-color);font-weight:700;display:block;">RECOGNITION 01</small><strong>Autonomous Status (AY 2024–25)</strong></div>
+      <div class="recognition-card"><small style="color:var(--secondary-color);font-weight:700;display:block;">RECOGNITION 02</small><strong>NAAC A+ Accredited (CGPA 3.46)</strong></div>
+      <div class="recognition-card"><small style="color:var(--secondary-color);font-weight:700;display:block;">RECOGNITION 03</small><strong>NBA Accredited Core Programs</strong></div>
+      <div class="recognition-card"><small style="color:var(--secondary-color);font-weight:700;display:block;">RECOGNITION 04</small><strong>NIRF Ranked · DTE Code <?= e($dteDisplay) ?></strong></div>
+      <div class="recognition-card"><small style="color:var(--secondary-color);font-weight:700;display:block;">RECOGNITION 05</small><strong>AICTE Approved · 250+ Recruiters</strong></div>
+    </div>
   </section>
 <?php endif; ?>
 
 <?php if (!empty($hs['showAboutAndDownloads'])): ?>
 <section class="grid-2" style="margin-top:2rem;">
   <article class="card" style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start;">
-    <img src="<?= e($settings['about_image_url']) ?>" alt="Campus" style="width:200px;height:180px;object-fit:cover;border-radius:8px;">
+    <img src="<?= e(mediaUrl($settings['about_image_url'] ?? '', 'assets/images/hero_campus.jpg')) ?>" alt="Campus" style="width:210px;height:185px;object-fit:cover;border-radius:10px;">
     <div style="flex:1;min-width:220px;">
-      <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">About Campus</small>
+      <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">About Our Campus</small>
       <h2 style="font-family:'Playfair Display',serif;margin:0.25rem 0 0.75rem;">ABOUT US</h2>
       <p style="font-size:0.9rem;color:var(--text-muted);line-height:1.6;"><?= e($settings['about_summary']) ?></p>
-      <a href="page.php?slug=about-overview" class="btn-primary" style="margin-top:0.5rem;">Know More &rarr;</a>
+      <a href="<?= e(baseUrl('page.php?slug=about-overview')) ?>" class="btn-primary" style="margin-top:0.5rem;">Know More &rarr;</a>
     </div>
   </article>
 
   <aside class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-color);padding-bottom:0.5rem;margin-bottom:0.75rem;">
       <h2 style="margin:0;font-family:'Playfair Display',serif;">DOWNLOADS</h2>
-      <a href="quick-links.php" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;">View All</a>
+      <a href="<?= e(baseUrl('quick-links.php')) ?>" class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.75rem;">View All</a>
     </div>
     <?php foreach ($docs as $doc): $isExt = preg_match('#^https?://#i', (string)$doc['file_url']) === 1; ?>
       <div style="padding:0.5rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -105,7 +143,7 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
         <?php if ($isExt): ?>
           <a href="<?= e($doc['file_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size:0.78rem;">Open Link &nearr;</a>
         <?php else: ?>
-          <a href="<?= e($doc['file_url']) ?>" download class="btn-primary" style="font-size:0.78rem;">Download</a>
+          <a href="<?= e(baseUrl($doc['file_url'])) ?>" download class="btn-primary" style="font-size:0.78rem;">Download</a>
         <?php endif; ?>
       </div>
     <?php endforeach; ?>
@@ -120,9 +158,9 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   <div class="card">
     <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">Statutory Recognitions</small>
     <h2 style="font-family:'Playfair Display',serif;margin:0.25rem 0 1rem;">APPROVED &amp; AFFILIATED BY</h2>
-    <div class="grid-2">
+    <div class="grid-2" style="gap:0.85rem;">
       <?php foreach ($approvedBodies as $ab): ?>
-        <a href="<?= e($ab['href'] ?? 'page.php?slug=about-overview') ?>" class="card" style="text-decoration:none;color:inherit;">
+        <a href="<?= e(baseUrl($ab['href'] ?? 'page.php?slug=about-overview')) ?>" class="card" style="text-decoration:none;color:inherit;padding:0.9rem;">
           <strong><?= e($ab['name'] ?? '') ?></strong>
           <?php if (!empty($ab['subtitle'])): ?><small style="display:block;color:var(--text-muted);"><?= e($ab['subtitle']) ?></small><?php endif; ?>
         </a>
@@ -132,7 +170,7 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   <div class="card">
     <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">NEP 2020 Charter</small>
     <h2 style="font-family:'Playfair Display',serif;margin:0.25rem 0 0.75rem;">VISION &amp; MISSION</h2>
-    <p style="background:#f8fafc;border-left:4px solid var(--secondary-color);padding:0.75rem;margin-bottom:0.75rem;font-weight:500;">
+    <p style="background:rgba(15,41,74,0.05);border-left:4px solid var(--secondary-color);padding:0.75rem;margin-bottom:0.75rem;font-weight:500;">
       <?= e($settings['vision_text']) ?>
     </p>
     <ol style="padding-left:1.25rem;margin:0;color:var(--text-muted);font-size:0.9rem;">
@@ -144,18 +182,18 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
 
 <?php if (!empty($hs['showLeadershipDesk']) && $leadership): ?>
 <section style="margin-top:2rem;">
-  <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:0.75rem;">
+  <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem;">
     <h2 style="font-family:'Playfair Display',serif;margin:0;">OUR DESK &amp; LEADERSHIP</h2>
-    <a href="page.php?slug=statutory-officers" style="color:var(--primary-color);font-weight:600;text-decoration:none;">All Statutory Officers &rarr;</a>
+    <a href="<?= e(baseUrl('page.php?slug=statutory-officers')) ?>" style="color:var(--primary-color);font-weight:600;text-decoration:none;">All Statutory Officers &rarr;</a>
   </div>
   <div class="grid-4">
     <?php foreach ($leadership as $ld): ?>
       <article class="card">
-        <img src="<?= e($ld['photo_url']) ?>" alt="<?= e($ld['name']) ?>" style="width:60px;height:60px;border-radius:50%;object-fit:cover;">
+        <img src="<?= e(mediaUrl($ld['photo_url'] ?? '', 'assets/images/principal.jpg')) ?>" alt="<?= e($ld['name']) ?>" style="width:62px;height:62px;border-radius:50%;object-fit:cover;">
         <small style="display:block;color:var(--secondary-color);font-weight:700;margin-top:0.5rem;"><?= e(formatCommitteeGroupLabel($ld['committee_group'] ?? '')) ?> · <?= e($ld['role_title']) ?></small>
         <h3 style="margin:0.2rem 0;"><?= e($ld['name']) ?></h3>
         <small style="color:var(--text-muted);display:block;"><?= e($ld['qualification']) ?></small>
-        <p style="font-size:0.82rem;color:var(--text-muted);"><?= e($ld['bio']) ?></p>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0;"><?= e($ld['bio']) ?></p>
       </article>
     <?php endforeach; ?>
   </div>
@@ -169,11 +207,11 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
       <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">Controller of Examinations (Autonomous)</small>
       <h2 style="font-family:'Playfair Display',serif;margin:0.2rem 0 0;"><?= e($hs['examSpotlightTitle'] ?? 'Autonomous Examination Portal (CoE)') ?></h2>
     </div>
-    <a href="page.php?cat=examination" class="btn-primary">Open Examination Cell &rarr;</a>
+    <a href="<?= e(baseUrl('page.php?cat=examination')) ?>" class="btn-primary">Open Examination Cell &rarr;</a>
   </div>
   <div class="grid-3">
     <?php foreach ($examPages as $ep): ?>
-      <a href="page.php?slug=<?= urlencode($ep['slug']) ?>" class="card" style="text-decoration:none;color:inherit;">
+      <a href="<?= e(baseUrl('page.php?slug=' . urlencode($ep['slug']))) ?>" class="card" style="text-decoration:none;color:inherit;">
         <small style="color:var(--secondary-color);font-weight:700;"><?= e($ep['subtitle'] ?: 'Autonomous Examination') ?></small>
         <h3 style="margin:0.35rem 0 0;font-size:1rem;"><?= e($ep['title']) ?></h3>
       </a>
@@ -184,14 +222,22 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
 
 <?php if (!empty($hs['showDepartments']) && $depts): ?>
 <section style="margin-top:2rem;">
-  <h2 style="font-family:'Playfair Display',serif;"><?= e($hs['departmentsTitle'] ?? 'Academic Department Microsites') ?></h2>
+  <h2 style="font-family:'Playfair Display',serif;"><?= e($hs['departmentsTitle'] ?? 'Academic Departments') ?></h2>
   <div class="grid-3">
     <?php foreach ($depts as $d): ?>
-      <article class="card">
-        <small style="color:var(--text-muted);"><?= e($d['code']) ?> · Est. <?= e((string)$d['established_year']) ?> · Intake <?= e((string)$d['intake_capacity']) ?></small>
-        <h3 style="margin:0.4rem 0;"><?= e($d['name']) ?></h3>
-        <p style="font-size:0.85rem;color:var(--text-muted);"><?= e($d['overview']) ?></p>
-        <a href="department.php?dept=<?= urlencode($d['slug']) ?>" class="btn-primary" style="margin-top:0.5rem;">Open Microsite</a>
+      <article class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
+        <img src="<?= e(mediaUrl($d['hero_image_url'] ?? '', 'assets/images/hero_robotics.jpg')) ?>" alt="<?= e($d['name']) ?>" style="width:100%;height:150px;object-fit:cover;display:block;">
+        <div style="padding:1.1rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
+          <div>
+            <small style="color:var(--text-muted);"><?= e($d['code']) ?> · Est. <?= e((string)$d['established_year']) ?> · Intake <?= e((string)$d['intake_capacity']) ?></small>
+            <h3 style="margin:0.35rem 0;"><?= e($d['name']) ?></h3>
+            <p style="font-size:0.85rem;color:var(--text-muted);"><?= e($d['overview']) ?></p>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:0.65rem;border-top:1px solid var(--border-color);margin-top:0.5rem;gap:0.5rem;">
+            <small style="color:var(--text-muted);"><?= e($d['hod_name']) ?></small>
+            <a href="<?= e(baseUrl('department.php?dept=' . urlencode($d['slug']))) ?>" class="btn-primary" style="font-size:0.8rem;padding:0.4rem 0.75rem;">Open Microsite</a>
+          </div>
+        </div>
       </article>
     <?php endforeach; ?>
   </div>
@@ -210,9 +256,9 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
         <h3 style="margin:0.35rem 0;"><?= e($c['name']) ?></h3>
         <p style="font-size:0.82rem;color:var(--text-muted);"><?= e($c['description']) ?></p>
         <?php foreach (array_slice($subPages, 0, 3) as $sp): ?>
-          <a href="page.php?slug=<?= urlencode($sp['slug']) ?>" style="display:block;font-size:0.8rem;margin-bottom:0.2rem;color:var(--primary-color);text-decoration:none;">&rsaquo; <?= e($sp['title']) ?></a>
+          <a href="<?= e(baseUrl('page.php?slug=' . urlencode($sp['slug']))) ?>" style="display:block;font-size:0.8rem;margin-bottom:0.2rem;color:var(--primary-color);text-decoration:none;">&rsaquo; <?= e($sp['title']) ?></a>
         <?php endforeach; ?>
-        <a href="page.php?cat=<?= urlencode($c['slug']) ?>" class="btn-secondary" style="margin-top:0.65rem;font-size:0.8rem;">Explore <?= e(!empty($c['short_label']) ? $c['short_label'] : $c['name']) ?> &rarr;</a>
+        <a href="<?= e(baseUrl('page.php?cat=' . urlencode($c['slug']))) ?>" class="btn-secondary" style="margin-top:0.65rem;font-size:0.8rem;">Explore <?= e(!empty($c['short_label']) ? $c['short_label'] : $c['name']) ?> &rarr;</a>
       </div>
     <?php endforeach; ?>
   </div>
@@ -238,7 +284,7 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
         <div style="padding:0.6rem 0.75rem;border:1px solid var(--border-color);border-radius:6px;font-weight:600;font-size:0.88rem;"><?= e($rc) ?></div>
       <?php endforeach; ?>
     </div>
-    <a href="gallery.php" class="btn-primary" style="margin-top:1rem;">Explore Picture Gallery &rarr;</a>
+    <a href="<?= e(baseUrl('gallery.php')) ?>" class="btn-primary" style="margin-top:1rem;">Explore Picture Gallery &rarr;</a>
   </div>
 </section>
 <?php endif; ?>

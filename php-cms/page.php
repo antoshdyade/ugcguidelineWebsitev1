@@ -70,7 +70,7 @@ require_once __DIR__ . '/includes/header.php';
     <ul style="list-style:none;padding:0;margin:0;">
       <?php foreach ($siblings as $sib): ?>
         <li style="margin-bottom:0.35rem;">
-          <a href="page.php?slug=<?= urlencode($sib['slug']) ?>"
+          <a href="<?= e(baseUrl('page.php?slug=' . urlencode($sib['slug']))) ?>"
              style="display:block;padding:0.45rem 0.65rem;border-radius:6px;text-decoration:none;<?= $sib['slug'] === $slug ? 'background:var(--primary-color);color:#fff;font-weight:600;' : 'color:var(--text-main);' ?>">
             <?= e($sib['title']) ?>
           </a>
@@ -92,7 +92,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php if ($isExtPdf): ?>
           <a href="<?= e($page['attached_pdf_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-secondary">Open Document Link &nearr;</a>
         <?php else: ?>
-          <a href="<?= e($page['attached_pdf_url']) ?>" download class="btn-primary">Download PDF</a>
+          <a href="<?= e(baseUrl($page['attached_pdf_url'])) ?>" download class="btn-primary">Download PDF</a>
         <?php endif; ?>
       </div>
     <?php endif; ?>
@@ -103,7 +103,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php foreach ($leaders as $l): ?>
           <div class="card">
             <div style="display:flex;gap:0.75rem;align-items:flex-start;">
-              <img src="<?= e($l['photo_url'] ?: 'assets/images/principal.jpg') ?>" alt="<?= e($l['name']) ?>" style="width:56px;height:56px;border-radius:50%;object-fit:cover;flex-shrink:0;">
+              <img src="<?= e(mediaUrl($l['photo_url'] ?? '', 'assets/images/principal.jpg')) ?>" alt="<?= e($l['name']) ?>" style="width:56px;height:56px;border-radius:50%;object-fit:cover;flex-shrink:0;">
               <div>
                 <small style="color:var(--secondary-color);font-weight:700;"><?= e(formatCommitteeGroupLabel($l['committee_group'] ?? '')) ?> · <?= e($l['role_title']) ?></small>
                 <h3 style="margin:0.2rem 0;"><?= e($l['name']) ?></h3>

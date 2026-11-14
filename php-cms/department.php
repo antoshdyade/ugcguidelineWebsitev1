@@ -49,7 +49,7 @@ require_once __DIR__ . '/includes/header.php';
     <p style="margin:0;color:#e2e8f0;">HoD: <?= e($dept['hod_name']) ?> · Sanctioned Intake: <?= e((string)$dept['intake_capacity']) ?></p>
   </div>
   <?php if (!empty($dept['hero_image_url'])): ?>
-    <img src="<?= e($dept['hero_image_url']) ?>" alt="<?= e($dept['name']) ?>" style="width:210px;height:115px;object-fit:cover;border-radius:10px;border:2px solid rgba(255,255,255,0.25);">
+    <img src="<?= e(mediaUrl($dept['hero_image_url'])) ?>" alt="<?= e($dept['name']) ?>" style="width:210px;height:115px;object-fit:cover;border-radius:10px;border:2px solid rgba(255,255,255,0.25);">
   <?php endif; ?>
 </section>
 
@@ -59,27 +59,27 @@ require_once __DIR__ . '/includes/header.php';
     <ul style="list-style:none;padding:0;margin:0;">
       <?php foreach ($subPages as $sp): ?>
         <li style="margin-bottom:0.35rem;">
-          <a href="department.php?dept=<?= urlencode($dept['slug']) ?>&sub=<?= urlencode($sp['slug']) ?>"
+          <a href="<?= e(baseUrl('department.php?dept=' . urlencode($dept['slug']) . '&sub=' . urlencode($sp['slug']))) ?>"
              style="display:block;padding:0.45rem 0.65rem;border-radius:6px;text-decoration:none;<?= $subSlug === $sp['slug'] ? 'background:var(--primary-color);color:#fff;font-weight:600;' : 'color:var(--text-main);' ?>">
             <?= e($sp['title']) ?>
           </a>
         </li>
       <?php endforeach; ?>
       <li style="margin-bottom:0.35rem;">
-        <a href="department.php?dept=<?= urlencode($dept['slug']) ?>&sub=faculty"
+        <a href="<?= e(baseUrl('department.php?dept=' . urlencode($dept['slug']) . '&sub=faculty')) ?>"
            style="display:block;padding:0.45rem 0.65rem;border-radius:6px;text-decoration:none;<?= $subSlug === 'faculty' ? 'background:var(--primary-color);color:#fff;font-weight:600;' : 'color:var(--text-main);' ?>">
           Faculty &amp; Staff (<?= count($faculty) ?>)
         </a>
       </li>
       <li style="margin-bottom:0.35rem;">
-        <a href="department.php?dept=<?= urlencode($dept['slug']) ?>&sub=laboratories"
+        <a href="<?= e(baseUrl('department.php?dept=' . urlencode($dept['slug']) . '&sub=laboratories')) ?>"
            style="display:block;padding:0.45rem 0.65rem;border-radius:6px;text-decoration:none;<?= $subSlug === 'laboratories' ? 'background:var(--primary-color);color:#fff;font-weight:600;' : 'color:var(--text-main);' ?>">
           Laboratories (<?= count($labs) ?>)
         </a>
       </li>
       <?php if ($deptLibrary): ?>
         <li>
-          <a href="department.php?dept=<?= urlencode($dept['slug']) ?>&sub=library"
+          <a href="<?= e(baseUrl('department.php?dept=' . urlencode($dept['slug']) . '&sub=library')) ?>"
              style="display:block;padding:0.45rem 0.65rem;border-radius:6px;text-decoration:none;<?= $subSlug === 'library' ? 'background:var(--primary-color);color:#fff;font-weight:600;' : 'color:var(--text-main);' ?>">
             Department Library
           </a>
@@ -99,7 +99,7 @@ require_once __DIR__ . '/includes/header.php';
         ?>
           <article class="card">
             <div style="display:flex;gap:0.9rem;align-items:flex-start;">
-              <img src="<?= e($f['photo_url'] ?: 'assets/images/principal.jpg') ?>" alt="<?= e($f['name']) ?>" style="width:68px;height:68px;border-radius:10px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">
+              <img src="<?= e(mediaUrl($f['photo_url'] ?? '', 'assets/images/principal.jpg')) ?>" alt="<?= e($f['name']) ?>" style="width:68px;height:68px;border-radius:10px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">
               <div style="min-width:0;flex:1;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
                   <small style="color:var(--secondary-color);font-weight:700;"><?= e($f['designation']) ?></small>
@@ -132,7 +132,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php foreach ($labs as $lab): ?>
           <article class="card" style="padding:0;overflow:hidden;">
             <?php if (!empty($lab['photo_url'])): ?>
-              <img src="<?= e($lab['photo_url']) ?>" alt="<?= e($lab['name']) ?>" style="width:100%;height:175px;object-fit:cover;display:block;">
+              <img src="<?= e(mediaUrl($lab['photo_url'])) ?>" alt="<?= e($lab['name']) ?>" style="width:100%;height:175px;object-fit:cover;display:block;">
             <?php endif; ?>
             <div style="padding:1rem;">
               <small style="color:var(--secondary-color);font-weight:700;"><?= e((string)$lab['area_sqft']) ?> Sq.Ft.</small>
@@ -147,7 +147,7 @@ require_once __DIR__ . '/includes/header.php';
       <h2 style="margin-top:0;"><?= e($deptLibrary['name']) ?></h2>
       <div class="grid-2" style="align-items:start;">
         <?php if (!empty($deptLibrary['photoUrl'])): ?>
-          <img src="<?= e($deptLibrary['photoUrl']) ?>" alt="<?= e($deptLibrary['name']) ?>" style="width:100%;height:240px;object-fit:cover;border-radius:10px;border:1px solid var(--border-color);">
+          <img src="<?= e(mediaUrl($deptLibrary['photoUrl'])) ?>" alt="<?= e($deptLibrary['name']) ?>" style="width:100%;height:240px;object-fit:cover;border-radius:10px;border:1px solid var(--border-color);">
         <?php endif; ?>
         <div>
           <?php if (!empty($deptLibrary['description'])): ?>
@@ -181,7 +181,7 @@ require_once __DIR__ . '/includes/header.php';
           ?>
             <article class="card" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-start;">
               <?php if (!empty($it['photoUrl'])): ?>
-                <img src="<?= e($it['photoUrl']) ?>" alt="<?= e($it['title'] ?? '') ?>" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);">
+                <img src="<?= e(mediaUrl($it['photoUrl'])) ?>" alt="<?= e($it['title'] ?? '') ?>" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);">
               <?php endif; ?>
               <div style="flex:1;min-width:220px;">
                 <small style="color:var(--secondary-color);font-weight:700;">
@@ -198,7 +198,7 @@ require_once __DIR__ . '/includes/header.php';
                         <?= e($it['linkLabel'] ?? 'Open External Resource') ?> &nearr;
                       </a>
                     <?php else: ?>
-                      <a href="<?= e($itLink) ?>" download class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.7rem;">
+                      <a href="<?= e(baseUrl($itLink)) ?>" download class="btn-primary" style="font-size:0.78rem;padding:0.35rem 0.7rem;">
                         <?= e($it['linkLabel'] ?? 'Download Attachment') ?>
                       </a>
                     <?php endif; ?>
@@ -213,9 +213,9 @@ require_once __DIR__ . '/includes/header.php';
       <?php if ($subPhotos): ?>
         <h3 style="margin-top:1.75rem;margin-bottom:0.5rem;">Department Visual Gallery</h3>
         <div class="cms-gallery-grid">
-          <?php foreach ($subPhotos as $ph): ?>
-            <figure class="cms-gallery-card" style="margin:0;cursor:pointer;" onclick="openDeptLightbox(this.dataset.src, this.dataset.cap)" data-src="<?= e($ph['url'] ?? '') ?>" data-cap="<?= e($ph['caption'] ?? '') ?>">
-              <img src="<?= e($ph['url'] ?? '') ?>" alt="<?= e($ph['caption'] ?? 'Department photo') ?>">
+          <?php foreach ($subPhotos as $ph): $resolvedPh = mediaUrl($ph['url'] ?? ''); ?>
+            <figure class="cms-gallery-card" style="margin:0;cursor:pointer;" onclick="openDeptLightbox(this.dataset.src, this.dataset.cap)" data-src="<?= e($resolvedPh) ?>" data-cap="<?= e($ph['caption'] ?? '') ?>">
+              <img src="<?= e($resolvedPh) ?>" alt="<?= e($ph['caption'] ?? 'Department photo') ?>">
               <?php if (!empty($ph['caption'])): ?>
                 <figcaption><?= e($ph['caption']) ?></figcaption>
               <?php endif; ?>
@@ -227,7 +227,7 @@ require_once __DIR__ . '/includes/header.php';
       <?php if ($subSlug === 'about' && $deptLibrary): ?>
         <div class="card" style="margin-top:1.75rem;background:var(--surface-bg);display:flex;gap:1.1rem;flex-wrap:wrap;align-items:center;">
           <?php if (!empty($deptLibrary['photoUrl'])): ?>
-            <img src="<?= e($deptLibrary['photoUrl']) ?>" alt="<?= e($deptLibrary['name']) ?>" style="width:160px;height:110px;object-fit:cover;border-radius:8px;">
+            <img src="<?= e(mediaUrl($deptLibrary['photoUrl'])) ?>" alt="<?= e($deptLibrary['name']) ?>" style="width:160px;height:110px;object-fit:cover;border-radius:8px;">
           <?php endif; ?>
           <div style="flex:1;min-width:220px;">
             <small style="color:var(--secondary-color);font-weight:700;text-transform:uppercase;">Departmental Library</small>
@@ -235,7 +235,7 @@ require_once __DIR__ . '/includes/header.php';
             <p style="font-size:0.86rem;color:var(--text-muted);margin:0 0 0.5rem;">
               <?= e((string)($deptLibrary['volumesCount'] ?? '0')) ?> Volumes · <?= e((string)($deptLibrary['journalsCount'] ?? '0')) ?> Journals · <?= e((string)($deptLibrary['eResourcesSummary'] ?? '')) ?>
             </p>
-            <a href="department.php?dept=<?= urlencode($dept['slug']) ?>&sub=library" class="btn-primary" style="font-size:0.8rem;padding:0.35rem 0.75rem;">Open Library Showcase &rarr;</a>
+            <a href="<?= e(baseUrl('department.php?dept=' . urlencode($dept['slug']) . '&sub=library')) ?>" class="btn-primary" style="font-size:0.8rem;padding:0.35rem 0.75rem;">Open Library Showcase &rarr;</a>
           </div>
         </div>
       <?php endif; ?>

@@ -1,65 +1,91 @@
 /**
  * Rich Word-Processor + Drag-and-Drop Graphical Block Composer & HTML/CSS Source Editor
- * Compatible with non-technical staff in the PHP CMS Admin Portal
+ * Compatible with non-technical staff in the PHP CMS Admin Portal (Webmin & XAMPP safe)
  */
 (function () {
+  var BASE_URL = (typeof window.SVCOER_BASE_URL === 'string') ? window.SVCOER_BASE_URL : '';
+
+  function resolveUrl(rel) {
+    if (!rel) return '';
+    if (/^(https?:)?\/\//i.test(rel) || rel.indexOf('data:') === 0) return rel;
+    var clean = String(rel).replace(/^\/+/, '');
+    return (BASE_URL ? BASE_URL : '') + '/' + clean;
+  }
+
   var BLOCKS = [
     {
       id: 'hero-banner',
-      label: 'Hero Banner',
+      category: 'Callouts',
+      label: 'Colorful Hero Banner',
       badge: 'Gradient Header + CTA',
-      html: '<div class="cms-block cms-banner-navy" data-block="hero-banner"><h2>Program &amp; Institutional Highlights</h2><p>Empowering scholars with outcome-based autonomous curricula, NAAC A+ quality assurance, and complete UGC NEP 2020 transparency.</p><div class="cms-btn-row"><a href="quick-links.php" class="cms-btn cms-btn-amber">Download Prospectus PDF</a><a href="page.php?slug=admission-process" class="cms-btn cms-btn-light">Admission Guidelines</a></div></div><p><br></p>',
+      html: '<div class="cms-block cms-banner-navy" data-block="hero-banner"><p class="cms-kicker">Autonomous · NAAC A+ (3.46)</p><h2>Program &amp; Institutional Highlights</h2><p>Empowering scholars with outcome-based autonomous curricula, NAAC A+ quality assurance, and complete UGC NEP 2020 transparency.</p><div class="cms-btn-row"><a href="quick-links.php" class="cms-btn cms-btn-amber">Download Prospectus PDF</a><a href="page.php?slug=admission-process" class="cms-btn cms-btn-light">Admission Guidelines</a></div></div><p><br></p>',
     },
     {
       id: 'two-col-cards',
+      category: 'Layouts',
       label: '2-Column Feature Cards',
       badge: 'Colorful Split',
       html: '<div class="cms-block cms-grid-2" data-block="two-col-cards"><div class="cms-card cms-card-navy"><h3>Undergraduate Programs</h3><p>Outcome-based 160-credit curriculum with Multidisciplinary Minors, Skill Courses, and Semester VIII Internship.</p></div><div class="cms-card cms-card-amber"><h3>Research &amp; Innovation</h3><p>Sponsored DST-SERB, AICTE-MODROBS laboratories, patent filing cell, and student incubation support.</p></div></div><p><br></p>',
     },
     {
       id: 'three-col-stats',
+      category: 'Layouts',
       label: '3-Column KPI Stat Cards',
       badge: 'Metrics Row',
       html: '<div class="cms-block cms-grid-3" data-block="three-col-stats"><div class="cms-stat-box cms-accent-navy"><span class="cms-stat-value">A+ (3.46)</span><span class="cms-stat-label">NAAC Accreditation Grade</span></div><div class="cms-stat-box cms-accent-teal"><span class="cms-stat-value">250+</span><span class="cms-stat-label">Recruiting Companies</span></div><div class="cms-stat-box cms-accent-emerald"><span class="cms-stat-value">100%</span><span class="cms-stat-label">UGC Public Disclosure</span></div></div><p><br></p>',
     },
     {
       id: 'callout-info',
-      label: 'Info Notice Box',
-      badge: 'Blue Callout',
+      category: 'Callouts',
+      label: 'Blue Notice Callout',
+      badge: 'Info Notice Box',
       html: '<div class="cms-block cms-callout cms-callout-info" data-block="callout-info"><strong>Public Self-Disclosure Notice:</strong> All statutory documents, approved fee schedules, and ordinances are accessible publicly without login under UGC NEP 2020 Guidelines.</div><p><br></p>',
     },
     {
       id: 'callout-success',
-      label: 'Success Callout Box',
-      badge: 'Emerald Callout',
+      category: 'Callouts',
+      label: 'Emerald Highlight Box',
+      badge: 'Verified Green Callout',
       html: '<div class="cms-block cms-callout cms-callout-success" data-block="callout-success"><strong>Verified Accreditation &amp; Grants:</strong> Compliant with AICTE norms, PAHSUS Autonomous Ordinances, and Academic Bank of Credits (ABC / DigiLocker NAD).</div><p><br></p>',
     },
     {
       id: 'callout-warning',
-      label: 'Important Deadline Alert',
-      badge: 'Amber Warning',
+      category: 'Callouts',
+      label: 'Amber Deadline / Alert Box',
+      badge: 'Important Notice',
       html: '<div class="cms-block cms-callout cms-callout-warning" data-block="callout-warning"><strong>Attention Students &amp; Parents:</strong> Verify your APAAR / ABC ID on the Autonomous Examination Portal prior to form submission.</div><p><br></p>',
     },
     {
+      id: 'image-split',
+      category: 'Layouts',
+      label: 'Image + Text Split Feature',
+      badge: 'Media Showcase',
+      html: '<div class="cms-block cms-split" data-block="image-split"><div class="cms-split-media"><img src="' + resolveUrl('assets/images/hero_campus.jpg') + '" alt="Campus Highlight"></div><div><h3>State-of-the-Art Campus &amp; Research Labs</h3><p>Modern laboratories, central reading atrium, and green energy campus supporting engineering excellence.</p></div></div><p><br></p>',
+    },
+    {
       id: 'profile-card',
+      category: 'Academic',
       label: 'Officer / Coordinator Card',
       badge: 'Committee Contact',
-      html: '<div class="cms-block cms-profile-card" data-block="profile-card"><div class="cms-profile-avatar">👤</div><div><h4>Prof. / Dr. Coordinator Name</h4><p class="cms-profile-role">Statutory Role &amp; Department Designation</p><p class="cms-profile-meta">Email: office@coe.sveri.ac.in · Tel: +91-02186-216063 · Office: Admin Block</p></div></div><p><br></p>',
+      html: '<div class="cms-block cms-profile-card" data-block="profile-card"><div class="cms-profile-avatar">SV</div><div><h4>Prof. / Dr. Coordinator Name</h4><p class="cms-profile-role">Statutory Role &amp; Department Designation</p><p class="cms-profile-meta">Email: office@coe.sveri.ac.in · Tel: +91-02186-216063 · Office: Admin Block</p></div></div><p><br></p>',
     },
     {
       id: 'faq-accordion',
-      label: 'Expandable FAQ Accordion',
-      badge: 'Interactive Collapse',
+      category: 'Interactive',
+      label: 'Collapsible FAQ / Ordinance',
+      badge: 'Expandable Collapse',
       html: '<details class="cms-block cms-accordion" data-block="faq-accordion" open><summary>Frequently Asked Question / Statutory Ordinance Detail</summary><div class="cms-accordion-body"><p>Write your expandable ordinance explanation, scholarship rule, or examination FAQ answer here.</p></div></details><p><br></p>',
     },
     {
       id: 'checklist-box',
+      category: 'Academic',
       label: 'Checkmark Highlight List',
       badge: 'Structured Bullets',
       html: '<ul class="cms-block cms-checklist" data-block="checklist-box"><li>NBA Accredited Engineering Programs &amp; Autonomous Curricula</li><li>Mandatory 6-Month Industry Internship / Research Project</li><li>Digital Grievance Redressal &amp; 24x7 Anti-Ragging Compliance</li></ul><p><br></p>',
     },
     {
       id: 'btn-row',
+      category: 'Interactive',
       label: 'Button Action Strip',
       badge: 'CTA Buttons',
       html: '<div class="cms-block cms-btn-row" data-block="btn-row"><a href="quick-links.php" class="cms-btn cms-btn-primary">Download Circular (PDF)</a><a href="contact.php" class="cms-btn cms-btn-outline">Contact Helpdesk</a></div><p><br></p>',
@@ -76,8 +102,8 @@
   };
 
   function buildTableHtml(rows, cols, themeKey) {
-    var rCount = Math.max(1, Math.min(10, rows));
-    var cCount = Math.max(1, Math.min(8, cols));
+    var rCount = Math.max(1, Math.min(12, rows));
+    var cCount = Math.max(1, Math.min(10, cols));
     var ths = [];
     for (var c = 1; c <= cCount; c++) {
       ths.push('<th>Column ' + c + '</th>');
@@ -93,57 +119,48 @@
     return '<table class="cms-table cms-table-' + themeKey + '"><thead><tr>' + ths.join('') + '</tr></thead><tbody>' + trs.join('') + '</tbody></table><p><br></p>';
   }
 
+  function makeBtn(label, title, extraStyle) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    btn.title = title || label;
+    btn.style.cssText = 'padding:4px 8px;font-size:12px;font-weight:600;border:1px solid #d6d3d1;border-radius:5px;background:#fff;color:#1c1917;cursor:pointer;' + (extraStyle || '');
+    return btn;
+  }
+
   function mountEditor(textarea) {
-    if (textarea.dataset.mounted === '1') return;
+    if (!textarea || textarea.dataset.mounted === '1') return;
     textarea.dataset.mounted = '1';
 
     var csrf = textarea.getAttribute('data-csrf') || '';
     var wrapper = document.createElement('div');
-    wrapper.style.border = '1px solid var(--border-color, #d6d3d1)';
-    wrapper.style.borderRadius = '10px';
-    wrapper.style.overflow = 'hidden';
-    wrapper.style.background = '#fff';
-    wrapper.style.marginBottom = '0.85rem';
+    wrapper.style.cssText = 'border:1px solid var(--border-color, #d6d3d1);border-radius:10px;overflow:hidden;background:#fff;margin-bottom:0.85rem;';
 
     var toolbar = document.createElement('div');
-    toolbar.style.display = 'flex';
-    toolbar.style.flexWrap = 'wrap';
-    toolbar.style.alignItems = 'center';
-    toolbar.style.gap = '6px';
-    toolbar.style.padding = '8px 10px';
-    toolbar.style.background = '#f5f5f4';
-    toolbar.style.borderBottom = '1px solid #e7e5e4';
+    toolbar.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;background:#f5f5f4;border-bottom:1px solid #e7e5e4;';
+
+    var popoverBar = document.createElement('div');
+    popoverBar.style.cssText = 'display:none;padding:10px 12px;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:12px;';
+
+    var statusBanner = document.createElement('div');
+    statusBanner.style.cssText = 'display:none;padding:6px 10px;font-size:12px;font-weight:600;background:#fffbeb;color:#92400e;border-bottom:1px solid #fde68a;';
 
     var workspace = document.createElement('div');
-    workspace.style.display = 'flex';
-    workspace.style.flexWrap = 'wrap';
+    workspace.style.cssText = 'display:flex;flex-wrap:wrap;';
 
     var editorPane = document.createElement('div');
-    editorPane.style.flex = '1 1 520px';
-    editorPane.style.minWidth = '0';
+    editorPane.style.cssText = 'flex:1 1 500px;min-width:0;';
 
     var visual = document.createElement('div');
     visual.className = 'cms-prose cms-editor-canvas';
     visual.contentEditable = 'true';
     visual.innerHTML = textarea.value || '<p>Enter institutional content here or drag/click graphical blocks from the side panel...</p>';
-    visual.style.minHeight = '320px';
-    visual.style.padding = '16px';
-    visual.style.outline = 'none';
-    visual.style.lineHeight = '1.65';
-    visual.style.color = '#1c1917';
-    visual.style.background = '#fff';
+    visual.style.cssText = 'min-height:330px;padding:16px;outline:none;line-height:1.65;color:#1c1917;background:#fff;';
 
-    textarea.style.display = 'none';
-    textarea.style.width = '100%';
-    textarea.style.minHeight = '320px';
-    textarea.style.border = '0';
-    textarea.style.padding = '14px';
-    textarea.style.background = '#0f172a';
-    textarea.style.color = '#e2e8f0';
-    textarea.style.fontFamily = 'monospace';
-    textarea.style.fontSize = '12px';
+    textarea.style.cssText = 'display:none;width:100%;min-height:330px;border:0;padding:14px;background:#0f172a;color:#e2e8f0;font-family:monospace;font-size:12px;';
 
     var isHtmlMode = false;
+    var activePopover = null;
 
     function syncToTextarea() {
       if (!isHtmlMode) {
@@ -152,24 +169,33 @@
     }
     visual.addEventListener('input', syncToTextarea);
 
+    function showEditorNotice(msg, isError) {
+      statusBanner.textContent = msg;
+      statusBanner.style.background = isError ? '#fef2f2' : '#ecfdf5';
+      statusBanner.style.color = isError ? '#991b1b' : '#065f46';
+      statusBanner.style.borderBottomColor = isError ? '#fecaca' : '#a7f3d0';
+      statusBanner.style.display = 'block';
+      setTimeout(function () { statusBanner.style.display = 'none'; }, 4000);
+    }
+
     function insertHtmlAtFocus(html) {
       if (isHtmlMode) {
         textarea.value += '\n' + html + '\n';
         return;
       }
       visual.focus();
-      document.execCommand('insertHTML', false, html);
+      try {
+        document.execCommand('insertHTML', false, html);
+      } catch (e) {
+        visual.innerHTML += html;
+      }
       syncToTextarea();
     }
 
     function addSelect(options, onChange, title) {
       var sel = document.createElement('select');
       sel.title = title;
-      sel.style.padding = '4px 6px';
-      sel.style.fontSize = '12px';
-      sel.style.border = '1px solid #d6d3d1';
-      sel.style.borderRadius = '5px';
-      sel.style.background = '#fff';
+      sel.style.cssText = 'padding:4px 6px;font-size:12px;border:1px solid #d6d3d1;border-radius:5px;background:#fff;color:#1c1917;';
       options.forEach(function (opt) {
         var o = document.createElement('option');
         o.value = opt.value;
@@ -187,18 +213,8 @@
       toolbar.appendChild(sel);
     }
 
-    function addBtn(label, onClick, title) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = label;
-      btn.title = title || label;
-      btn.style.padding = '4px 8px';
-      btn.style.fontSize = '12px';
-      btn.style.fontWeight = '600';
-      btn.style.border = '1px solid #d6d3d1';
-      btn.style.borderRadius = '5px';
-      btn.style.background = '#fff';
-      btn.style.cursor = 'pointer';
+    function addToolBtn(label, onClick, title) {
+      var btn = makeBtn(label, title);
       btn.addEventListener('click', function () {
         if (isHtmlMode) return;
         visual.focus();
@@ -209,8 +225,8 @@
       return btn;
     }
 
-    addBtn('↶', function () { document.execCommand('undo'); }, 'Undo');
-    addBtn('↷', function () { document.execCommand('redo'); }, 'Redo');
+    addToolBtn('↶', function () { document.execCommand('undo'); }, 'Undo');
+    addToolBtn('↷', function () { document.execCommand('redo'); }, 'Redo');
 
     addSelect(
       [
@@ -227,7 +243,7 @@
 
     addSelect(
       [
-        { value: '', label: 'Font…' },
+        { value: '', label: 'Font Family…' },
         { value: 'Plus Jakarta Sans, system-ui, sans-serif', label: 'Modern Sans' },
         { value: 'Playfair Display, Georgia, serif', label: 'Editorial Serif' },
         { value: 'ui-monospace, monospace', label: 'Code Monospace' },
@@ -249,33 +265,20 @@
       'Font Size'
     );
 
-    addBtn('B', function () { document.execCommand('bold'); }, 'Bold');
-    addBtn('I', function () { document.execCommand('italic'); }, 'Italic');
-    addBtn('U', function () { document.execCommand('underline'); }, 'Underline');
-    addBtn('S', function () { document.execCommand('strikeThrough'); }, 'Strikethrough');
+    addToolBtn('B', function () { document.execCommand('bold'); }, 'Bold');
+    addToolBtn('I', function () { document.execCommand('italic'); }, 'Italic');
+    addToolBtn('U', function () { document.execCommand('underline'); }, 'Underline');
+    addToolBtn('S', function () { document.execCommand('strikeThrough'); }, 'Strikethrough');
 
     // Text Color Picker
     var textColorWrap = document.createElement('label');
     textColorWrap.title = 'Text Color';
-    textColorWrap.style.display = 'inline-flex';
-    textColorWrap.style.alignItems = 'center';
-    textColorWrap.style.gap = '4px';
-    textColorWrap.style.padding = '3px 7px';
-    textColorWrap.style.fontSize = '12px';
-    textColorWrap.style.fontWeight = '700';
-    textColorWrap.style.border = '1px solid #d6d3d1';
-    textColorWrap.style.borderRadius = '5px';
-    textColorWrap.style.background = '#fff';
-    textColorWrap.style.cursor = 'pointer';
+    textColorWrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 7px;font-size:12px;font-weight:700;border:1px solid #d6d3d1;border-radius:5px;background:#fff;color:#1c1917;cursor:pointer;';
     textColorWrap.textContent = 'A';
     var textColorInput = document.createElement('input');
     textColorInput.type = 'color';
     textColorInput.value = '#0F294A';
-    textColorInput.style.width = '18px';
-    textColorInput.style.height = '18px';
-    textColorInput.style.border = '0';
-    textColorInput.style.padding = '0';
-    textColorInput.style.background = 'transparent';
+    textColorInput.style.cssText = 'width:18px;height:18px;border:0;padding:0;background:transparent;';
     textColorInput.addEventListener('change', function () {
       if (isHtmlMode) return;
       visual.focus();
@@ -288,25 +291,12 @@
     // Highlight Background Picker
     var bgColorWrap = document.createElement('label');
     bgColorWrap.title = 'Highlight Color';
-    bgColorWrap.style.display = 'inline-flex';
-    bgColorWrap.style.alignItems = 'center';
-    bgColorWrap.style.gap = '4px';
-    bgColorWrap.style.padding = '3px 7px';
-    bgColorWrap.style.fontSize = '12px';
-    bgColorWrap.style.fontWeight = '700';
-    bgColorWrap.style.border = '1px solid #d6d3d1';
-    bgColorWrap.style.borderRadius = '5px';
-    bgColorWrap.style.background = '#fff';
-    bgColorWrap.style.cursor = 'pointer';
+    bgColorWrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 7px;font-size:12px;font-weight:700;border:1px solid #d6d3d1;border-radius:5px;background:#fff;color:#1c1917;cursor:pointer;';
     bgColorWrap.textContent = 'HL';
     var bgColorInput = document.createElement('input');
     bgColorInput.type = 'color';
     bgColorInput.value = '#FEF3C7';
-    bgColorInput.style.width = '18px';
-    bgColorInput.style.height = '18px';
-    bgColorInput.style.border = '0';
-    bgColorInput.style.padding = '0';
-    bgColorInput.style.background = 'transparent';
+    bgColorInput.style.cssText = 'width:18px;height:18px;border:0;padding:0;background:transparent;';
     bgColorInput.addEventListener('change', function () {
       if (isHtmlMode) return;
       visual.focus();
@@ -316,69 +306,129 @@
     bgColorWrap.appendChild(bgColorInput);
     toolbar.appendChild(bgColorWrap);
 
-    addBtn('• List', function () { document.execCommand('insertUnorderedList'); });
-    addBtn('1. List', function () { document.execCommand('insertOrderedList'); });
-    addBtn('⇇', function () { document.execCommand('justifyLeft'); }, 'Align Left');
-    addBtn('⇔', function () { document.execCommand('justifyCenter'); }, 'Align Center');
-    addBtn('⇉', function () { document.execCommand('justifyRight'); }, 'Align Right');
-    addBtn('— HR', function () { document.execCommand('insertHorizontalRule'); }, 'Divider Line');
+    addToolBtn('• List', function () { document.execCommand('insertUnorderedList'); }, 'Bullet List');
+    addToolBtn('1. List', function () { document.execCommand('insertOrderedList'); }, 'Numbered List');
+    addToolBtn('⇇', function () { document.execCommand('justifyLeft'); }, 'Align Left');
+    addToolBtn('⇔', function () { document.execCommand('justifyCenter'); }, 'Align Center');
+    addToolBtn('⇉', function () { document.execCommand('justifyRight'); }, 'Align Right');
+    addToolBtn('— HR', function () { document.execCommand('insertHorizontalRule'); }, 'Divider Line');
+    addToolBtn('Tx', function () { document.execCommand('removeFormat'); }, 'Clear Formatting');
 
-    // Table Designer Dropdown
-    addSelect(
-      [
-        { value: '', label: '⊞ Insert Table Theme…' },
-        { value: 'navy', label: 'Navy Academic Table (3×3)' },
-        { value: 'amber', label: 'Saffron Gold Table (3×3)' },
-        { value: 'teal', label: 'Ocean Teal Table (3×3)' },
-        { value: 'emerald', label: 'Emerald STEM Table (3×3)' },
-        { value: 'slate', label: 'Executive Slate Table (3×3)' },
-        { value: 'minimal', label: 'Clean Border Table (3×3)' },
-      ],
-      function (theme) {
-        var r = parseInt(window.prompt('Number of data rows (1-10):', '3') || '3', 10) || 3;
-        var c = parseInt(window.prompt('Number of columns (1-8):', '3') || '3', 10) || 3;
-        insertHtmlAtFocus(buildTableHtml(r, c, theme));
-      },
-      'Insert Styled Table'
-    );
+    // Inline Styled Table Designer Popover (no browser prompt)
+    var tableDesignerBtn = makeBtn('⊞ Table Designer', 'Insert Custom Styled Table');
+    tableDesignerBtn.addEventListener('click', function () {
+      if (activePopover === 'table') {
+        popoverBar.style.display = 'none';
+        activePopover = null;
+        return;
+      }
+      activePopover = 'table';
+      popoverBar.innerHTML = '';
+      popoverBar.style.display = 'flex';
+      popoverBar.style.flexWrap = 'wrap';
+      popoverBar.style.alignItems = 'center';
+      popoverBar.style.gap = '8px';
 
-    addBtn('+ Link / Button', function () {
-      var url = window.prompt('Enter PDF or web URL:', 'uploads/');
-      if (!url) return;
-      var txt = window.prompt('Enter clickable text:', 'View Document') || url;
-      var asBtn = window.confirm('Style as a colorful Primary Button? (Cancel = regular text link)');
-      var cls = asBtn ? ' class="cms-btn cms-btn-primary"' : '';
-      insertHtmlAtFocus('<a href="' + url + '"' + cls + ' target="_blank">' + txt + '</a>');
+      var rowInp = document.createElement('input');
+      rowInp.type = 'number'; rowInp.min = '1'; rowInp.max = '12'; rowInp.value = '3';
+      rowInp.style.cssText = 'width:58px;padding:4px 6px;border:1px solid #d6d3d1;border-radius:5px;';
+
+      var colInp = document.createElement('input');
+      colInp.type = 'number'; colInp.min = '1'; colInp.max = '10'; colInp.value = '3';
+      colInp.style.cssText = 'width:58px;padding:4px 6px;border:1px solid #d6d3d1;border-radius:5px;';
+
+      var themeSel = document.createElement('select');
+      themeSel.style.cssText = 'padding:4px 6px;border:1px solid #d6d3d1;border-radius:5px;background:#fff;';
+      Object.keys(TABLE_THEMES).forEach(function (k) {
+        var o = document.createElement('option');
+        o.value = k; o.textContent = TABLE_THEMES[k];
+        themeSel.appendChild(o);
+      });
+
+      var insertTBtn = makeBtn('Insert Table', 'Insert Styled Table', 'background:#0F294A;color:#fff;border-color:#0F294A;');
+      insertTBtn.addEventListener('click', function () {
+        insertHtmlAtFocus(buildTableHtml(parseInt(rowInp.value, 10) || 3, parseInt(colInp.value, 10) || 3, themeSel.value || 'navy'));
+        popoverBar.style.display = 'none';
+        activePopover = null;
+      });
+      var closeTBtn = makeBtn('Close', 'Close');
+      closeTBtn.addEventListener('click', function () {
+        popoverBar.style.display = 'none';
+        activePopover = null;
+      });
+
+      var lbl = document.createElement('strong');
+      lbl.textContent = 'Table Builder:';
+      popoverBar.appendChild(lbl);
+      popoverBar.appendChild(document.createTextNode(' Rows:'));
+      popoverBar.appendChild(rowInp);
+      popoverBar.appendChild(document.createTextNode(' Cols:'));
+      popoverBar.appendChild(colInp);
+      popoverBar.appendChild(document.createTextNode(' Theme:'));
+      popoverBar.appendChild(themeSel);
+      popoverBar.appendChild(insertTBtn);
+      popoverBar.appendChild(closeTBtn);
     });
+    toolbar.appendChild(tableDesignerBtn);
+
+    // Inline Link / Button Popover (no browser prompt)
+    var linkDesignerBtn = makeBtn('+ Link / PDF', 'Insert Link or Action Button');
+    linkDesignerBtn.addEventListener('click', function () {
+      if (activePopover === 'link') {
+        popoverBar.style.display = 'none';
+        activePopover = null;
+        return;
+      }
+      activePopover = 'link';
+      popoverBar.innerHTML = '';
+      popoverBar.style.display = 'flex';
+      popoverBar.style.flexWrap = 'wrap';
+      popoverBar.style.alignItems = 'center';
+      popoverBar.style.gap = '8px';
+
+      var urlInp = document.createElement('input');
+      urlInp.type = 'text'; urlInp.placeholder = 'https://... or uploads/file.pdf';
+      urlInp.style.cssText = 'min-width:210px;padding:4px 8px;border:1px solid #d6d3d1;border-radius:5px;';
+
+      var txtInp = document.createElement('input');
+      txtInp.type = 'text'; txtInp.placeholder = 'Link / Button Label';
+      txtInp.style.cssText = 'min-width:150px;padding:4px 8px;border:1px solid #d6d3d1;border-radius:5px;';
+
+      var asBtnLbl = document.createElement('label');
+      asBtnLbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;cursor:pointer;';
+      var asBtnChk = document.createElement('input');
+      asBtnChk.type = 'checkbox'; asBtnChk.checked = true;
+      asBtnLbl.appendChild(asBtnChk);
+      asBtnLbl.appendChild(document.createTextNode('Style as Button'));
+
+      var addLBtn = makeBtn('Insert', 'Insert Link', 'background:#B45309;color:#fff;border-color:#B45309;');
+      addLBtn.addEventListener('click', function () {
+        var u = urlInp.value.trim();
+        if (!u) return;
+        var t = txtInp.value.trim() || u;
+        var cls = asBtnChk.checked ? ' class="cms-btn cms-btn-primary"' : '';
+        insertHtmlAtFocus('<a href="' + u + '"' + cls + ' target="_blank" rel="noopener noreferrer">' + t + '</a>');
+        popoverBar.style.display = 'none';
+        activePopover = null;
+      });
+      var closeLBtn = makeBtn('Close', 'Close');
+      closeLBtn.addEventListener('click', function () {
+        popoverBar.style.display = 'none';
+        activePopover = null;
+      });
+
+      popoverBar.appendChild(urlInp);
+      popoverBar.appendChild(txtInp);
+      popoverBar.appendChild(asBtnLbl);
+      popoverBar.appendChild(addLBtn);
+      popoverBar.appendChild(closeLBtn);
+    });
+    toolbar.appendChild(linkDesignerBtn);
 
     // Inline photo uploader
     var imgLabel = document.createElement('label');
     imgLabel.textContent = '+ Upload Photo';
-    imgLabel.style.padding = '4px 8px';
-    imgLabel.style.fontSize = '12px';
-    imgLabel.style.fontWeight = '600';
-    imgLabel.style.border = '1px solid #d6d3d1';
-    imgLabel.style.borderRadius = '5px';
-    imgLabel.style.background = '#fff';
-    imgLabel.style.cursor = 'pointer';
-
-    var statusBanner = document.createElement('div');
-    statusBanner.style.display = 'none';
-    statusBanner.style.padding = '6px 10px';
-    statusBanner.style.fontSize = '12px';
-    statusBanner.style.fontWeight = '600';
-    statusBanner.style.background = '#fffbeb';
-    statusBanner.style.color = '#92400e';
-    statusBanner.style.borderBottom = '1px solid #fde68a';
-
-    function showEditorNotice(msg, isError) {
-      statusBanner.textContent = msg;
-      statusBanner.style.background = isError ? '#fef2f2' : '#ecfdf5';
-      statusBanner.style.color = isError ? '#991b1b' : '#065f46';
-      statusBanner.style.borderBottomColor = isError ? '#fecaca' : '#a7f3d0';
-      statusBanner.style.display = 'block';
-      setTimeout(function () { statusBanner.style.display = 'none'; }, 4000);
-    }
+    imgLabel.style.cssText = 'padding:4px 8px;font-size:12px;font-weight:600;border:1px solid #d6d3d1;border-radius:5px;background:#fff;color:#1c1917;cursor:pointer;';
 
     var imgInput = document.createElement('input');
     imgInput.type = 'file';
@@ -390,13 +440,13 @@
       var fd = new FormData();
       fd.append('csrf_token', csrf);
       fd.append('file', file);
-      var uploadUrl = textarea.getAttribute('data-upload-url') || 'upload_handler.php';
+      var uploadUrl = textarea.getAttribute('data-upload-url') || resolveUrl('admin/upload_handler.php');
       fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data && data.ok && data.file_url) {
-            var previewUrl = '../' + data.file_url.replace(/^\/+/, '');
-            insertHtmlAtFocus('<img src="' + data.file_url + '" data-admin-preview="' + previewUrl + '" alt="' + file.name + '" style="max-width:100%;border-radius:10px;margin:8px 0;">');
+            var srcUrl = resolveUrl(data.file_url);
+            insertHtmlAtFocus('<img src="' + srcUrl + '" alt="' + file.name + '" style="max-width:100%;border-radius:10px;margin:8px 0;">');
             showEditorNotice('Image uploaded: ' + data.file_url, false);
           } else {
             showEditorNotice((data && data.error) || 'Image upload failed.', true);
@@ -408,81 +458,86 @@
     imgLabel.appendChild(imgInput);
     toolbar.appendChild(imgLabel);
 
-    // Visual <-> HTML Source Switch
-    var modeBtn = document.createElement('button');
-    modeBtn.type = 'button';
-    modeBtn.textContent = '<> HTML Source';
-    modeBtn.style.marginLeft = 'auto';
-    modeBtn.style.padding = '5px 11px';
-    modeBtn.style.fontSize = '12px';
-    modeBtn.style.fontWeight = '700';
-    modeBtn.style.border = '1px solid #0f294a';
-    modeBtn.style.borderRadius = '5px';
-    modeBtn.style.background = '#0f294a';
-    modeBtn.style.color = '#fff';
-    modeBtn.style.cursor = 'pointer';
+    // Visual <-> HTML & CSS Source Switch
+    var modeBtn = makeBtn('</> HTML & CSS Source', 'Switch between Visual Word Editor and HTML/CSS Source', 'margin-left:auto;background:#0F294A;color:#fff;border-color:#0F294A;padding:5px 11px;');
     modeBtn.addEventListener('click', function () {
       if (!isHtmlMode) {
         textarea.value = visual.innerHTML;
         visual.style.display = 'none';
         textarea.style.display = 'block';
-        modeBtn.textContent = 'Visual Word Processor';
+        modeBtn.textContent = 'Visual Word Editor';
         isHtmlMode = true;
       } else {
         visual.innerHTML = textarea.value;
         textarea.style.display = 'none';
         visual.style.display = 'block';
-        modeBtn.textContent = '<> HTML Source';
+        modeBtn.textContent = '</> HTML & CSS Source';
         isHtmlMode = false;
       }
     });
     toolbar.appendChild(modeBtn);
 
-    // Graphical Blocks Drag & Click Drawer
+    // Graphical Blocks Drag & Click Drawer with Category Filter Tabs
     var drawer = document.createElement('aside');
-    drawer.style.width = '240px';
-    drawer.style.flex = '0 0 240px';
-    drawer.style.borderLeft = '1px solid #e7e5e4';
-    drawer.style.background = '#fafaf9';
-    drawer.style.padding = '10px';
-    drawer.style.maxHeight = '420px';
-    drawer.style.overflowY = 'auto';
+    drawer.style.cssText = 'width:265px;flex:0 0 265px;border-left:1px solid #e7e5e4;background:#fafaf9;padding:10px;max-height:430px;overflow-y:auto;';
 
     var drawerTitle = document.createElement('div');
-    drawerTitle.textContent = 'DRAG OR CLICK BLOCKS';
-    drawerTitle.style.fontSize = '11px';
-    drawerTitle.style.fontWeight = '800';
-    drawerTitle.style.letterSpacing = '0.06em';
-    drawerTitle.style.color = '#0F294A';
-    drawerTitle.style.marginBottom = '8px';
+    drawerTitle.textContent = 'DRAG OR CLICK HTML BLOCKS';
+    drawerTitle.style.cssText = 'font-size:11px;font-weight:800;letter-spacing:0.06em;color:#0F294A;margin-bottom:6px;';
     drawer.appendChild(drawerTitle);
 
-    BLOCKS.forEach(function (blk) {
-      var card = document.createElement('div');
-      card.draggable = true;
-      card.style.padding = '8px 9px';
-      card.style.marginBottom = '7px';
-      card.style.border = '1px solid #e7e5e4';
-      card.style.borderRadius = '7px';
-      card.style.background = '#fff';
-      card.style.cursor = 'grab';
-      card.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">' +
-        '<strong style="font-size:12px;color:#1c1917;">' + blk.label + '</strong>' +
-        '<span style="font-size:10px;color:#b45309;font-weight:700;">+ Add</span>' +
-        '</div>' +
-        '<div style="font-size:10.5px;color:#78716c;margin-top:2px;">' + blk.badge + '</div>';
-      card.addEventListener('dragstart', function (ev) {
-        if (ev.dataTransfer) {
-          ev.dataTransfer.setData('application/x-php-cms-block', blk.id);
-          ev.dataTransfer.effectAllowed = 'copy';
-        }
+    var catBar = document.createElement('div');
+    catBar.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;';
+    var cardsContainer = document.createElement('div');
+    var activeCat = 'All';
+
+    function renderDrawerBlocks() {
+      cardsContainer.innerHTML = '';
+      BLOCKS.filter(function (b) { return activeCat === 'All' || b.category === activeCat; }).forEach(function (blk) {
+        var card = document.createElement('div');
+        card.draggable = true;
+        card.style.cssText = 'padding:8px 9px;margin-bottom:7px;border:1px solid #e7e5e4;border-radius:7px;background:#fff;cursor:grab;';
+        card.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;">' +
+          '<strong style="font-size:12px;color:#1c1917;">' + blk.label + '</strong>' +
+          '<span style="font-size:10px;color:#b45309;font-weight:700;">+ Add</span>' +
+          '</div>' +
+          '<div style="font-size:10.5px;color:#78716c;margin-top:2px;">' + blk.badge + '</div>';
+        card.addEventListener('dragstart', function (ev) {
+          if (ev.dataTransfer) {
+            ev.dataTransfer.setData('application/x-php-cms-block', blk.id);
+            ev.dataTransfer.effectAllowed = 'copy';
+          }
+        });
+        card.addEventListener('click', function () {
+          insertHtmlAtFocus(blk.html);
+        });
+        cardsContainer.appendChild(card);
       });
-      card.addEventListener('click', function () {
-        insertHtmlAtFocus(blk.html);
+    }
+
+    ['All', 'Callouts', 'Layouts', 'Academic', 'Interactive'].forEach(function (cat) {
+      var cBtn = document.createElement('button');
+      cBtn.type = 'button';
+      cBtn.textContent = cat;
+      cBtn.style.cssText = 'font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:4px;border:1px solid #d6d3d1;cursor:pointer;' +
+        (cat === activeCat ? 'background:#0F294A;color:#fff;border-color:#0F294A;' : 'background:#fff;color:#44403c;');
+      cBtn.addEventListener('click', function () {
+        activeCat = cat;
+        Array.prototype.forEach.call(catBar.children, function (el) {
+          var sel = el.textContent === activeCat;
+          el.style.background = sel ? '#0F294A' : '#fff';
+          el.style.color = sel ? '#fff' : '#44403c';
+          el.style.borderColor = sel ? '#0F294A' : '#d6d3d1';
+        });
+        renderDrawerBlocks();
       });
-      drawer.appendChild(card);
+      catBar.appendChild(cBtn);
     });
+
+    drawer.appendChild(catBar);
+    renderDrawerBlocks();
+    drawer.appendChild(cardsContainer);
 
     visual.addEventListener('dragover', function (ev) {
       ev.preventDefault();
@@ -504,6 +559,7 @@
 
     textarea.parentNode.insertBefore(wrapper, textarea);
     wrapper.appendChild(toolbar);
+    wrapper.appendChild(popoverBar);
     wrapper.appendChild(statusBanner);
     wrapper.appendChild(workspace);
 
@@ -523,4 +579,5 @@
   } else {
     initAllEditors();
   }
+  window.addEventListener('load', initAllEditors);
 })();

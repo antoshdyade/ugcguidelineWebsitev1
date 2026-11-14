@@ -97,7 +97,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <?php foreach ($profiles as $idx => $p): ?>
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
-          <img src="../<?= e($p['photo_url']) ?>" alt="<?= e($p['name']) ?>" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">
+          <img src="<?= e(mediaUrl($p['photo_url'] ?? '', 'assets/images/principal.jpg')) ?>" alt="<?= e($p['name']) ?>" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">
           <div style="display:flex;align-items:center;gap:4px;">
             <span style="font-size:0.72rem;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--surface-bg);border:1px solid var(--border-color);">#<?= (int)($p['sort_order'] ?? ($idx + 1)) ?></span>
             <form method="post" style="display:inline;">

@@ -13,30 +13,33 @@ Verify these critical files exist:
 
 ---
 
-## 2. Fixing Broken Design / Missing Visual HTML Editor on Ubuntu Webmin
-If your site design changed or the Admin Visual/HTML Block Editor turned into a plain text box after uploading to Ubuntu Webmin:
+## 2. Fixing Broken Design / Missing Visual HTML Editor (Ubuntu Webmin & Windows XAMPP)
+If your site design changed, the top utility/Statutory bar or hero slider disappeared, or the Admin Visual/HTML Block Editor turned into a plain text box after uploading to Ubuntu Webmin or Windows XAMPP:
 
-1. **Fix File & Folder Permissions (Most Common Cause):**
-   Uploading as `root` via Webmin File Manager or SFTP often sets `0600` on `.css`/`.js` files or `0700` on `assets/`, causing Apache to return **403 Forbidden** for `style.css` and `editor.js`. Run via Webmin **Tools → Terminal** or SSH:
+1. **Fix File & Folder Permissions on Ubuntu Linux (Most Common Cause):**
+   Uploading as `root` via Webmin File Manager or SFTP often sets `0600` on `.css`/`.js` files or `0700` on `assets/`, causing Apache to return **403 Forbidden** for `style.css`, `accessibility.js`, and `editor.js`. Run via Webmin **Tools → Terminal** or SSH:
    ```bash
    chown -R <domain-user>:<domain-user> /home/<domain-user>/public_html
    find /home/<domain-user>/public_html -type d -exec chmod 755 {} \;
    find /home/<domain-user>/public_html -type f -exec chmod 644 {} \;
    chmod 755 /home/<domain-user>/public_html/uploads
    ```
-2. **Verify Apache `AllowOverride All` & Modules on Ubuntu:**
+2. **Verify Apache Modules & `.htaccess` Compatibility:**
+   - Root `.htaccess` and `uploads/.htaccess` omit `Options -Indexes` / `Options -ExecCGI` so servers with restricted `AllowOverride` (both Ubuntu Virtualmin and Windows XAMPP) will **not** return Apache `500 Internal Server Error` on CSS/JS assets.
+   - Ensure Apache MIME & headers modules are enabled on Ubuntu:
    ```bash
    sudo a2enmod rewrite headers mime
    sudo systemctl reload apache2
    ```
-   Ensure your VirtualHost in `/etc/apache2/sites-available/<domain>.conf` allows `.htaccess` overrides (`AllowOverride All`) for `<Directory /home/<domain-user>/public_html>`.
-3. **Clear Browser Cache:** Press `Ctrl + Shift + R` after fixing permissions (CSS & JS also carry `?v=2` cache-busters).
-4. **Confirm via `setup.php`:** Visit `https://your-domain.com/setup.php` and verify `CSS Stylesheet` and `Visual Block Editor` both show **PASS**.
+3. **Configure `BASE_URL` (If Hosted in a Subfolder or Behind a Reverse Proxy):**
+   By default (`BASE_URL = ''`), `config/db.php` auto-detects domain roots (`http://coe.yourdomain.ac.in`), Virtualmin VirtualHosts, and Windows XAMPP subfolders (`http://localhost/php-cms`). If your server uses an Apache `Alias`, proxy prefix, or custom port, set `BASE_URL` explicitly in `config/config.local.php` (see Section 4).
+4. **Clear Browser Cache:** Press `Ctrl + Shift + R` after updating (all CSS & JS includes carry automatic `filemtime()` `?v=` cache-busters).
+5. **Confirm via `setup.php`:** Visit `https://your-domain.com/setup.php` (or `http://localhost/php-cms/setup.php` on XAMPP) and verify **Detected `BASE_URL`**, **CSS Stylesheet**, and **Visual Block Editor** all show **PASS**.
 
 ---
 
-## 3. Create MySQL Database & Import Schema in Webmin
-1. Log into Webmin (`https://your-server-ip:10000`).
+## 3. Create MySQL Database & Import Schema in Webmin / XAMPP
+1. Log into Webmin (`https://your-server-ip:10000`) or XAMPP phpMyAdmin (`http://localhost/phpmyadmin`).
 2. Go to **Servers → MySQL Database Server** (or Virtualmin → **Edit Databases**).
 3. Create a database (e.g., `svcoer_ugc_cms`, UTF-8 `utf8mb4_unicode_ci`).
 4. Create a MySQL user (e.g., `svcoer_user`) with full privileges on `svcoer_ugc_cms`.
@@ -44,7 +47,7 @@ If your site design changed or the Admin Visual/HTML Block Editor turned into a 
 
 ---
 
-## 4. Configure Database Credentials
+## 4. Configure Database Credentials & `BASE_URL`
 Copy `config/config.local.php.example` to `config/config.local.php`:
 ```php
 <?php
@@ -52,6 +55,12 @@ define('DB_HOST', '127.0.0.1');
 define('DB_NAME', 'svcoer_ugc_cms');
 define('DB_USER', 'svcoer_user');
 define('DB_PASS', 'YOUR_STRONG_PASSWORD');
+
+// Leave empty ('') for automatic detection, or set explicitly without trailing slash:
+// - Domain root (Webmin VirtualHost): ''
+// - XAMPP subfolder (http://localhost/svcoer): '/svcoer'
+// - Custom canonical origin: 'https://coe.yourdomain.ac.in'
+define('BASE_URL', '');
 ```
 
 ---

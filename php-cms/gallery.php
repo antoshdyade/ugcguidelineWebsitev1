@@ -16,7 +16,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="grid-4">
   <?php foreach ($albums as $alb): ?>
     <article class="card">
-      <img src="<?= e($alb['cover_url']) ?>" alt="<?= e($alb['title']) ?>" style="width:100%;height:180px;object-fit:cover;border-radius:8px;">
+      <img src="<?= e(mediaUrl($alb['cover_url'] ?? '')) ?>" alt="<?= e($alb['title']) ?>" style="width:100%;height:180px;object-fit:cover;border-radius:8px;">
       <small style="color:var(--text-muted);display:block;margin-top:0.5rem;"><?= e($alb['category']) ?> · <?= e($alb['event_date']) ?></small>
       <h3 style="margin:0.25rem 0;"><?= e($alb['title']) ?></h3>
     </article>

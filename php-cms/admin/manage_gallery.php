@@ -91,7 +91,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
   <div class="grid-3">
     <?php foreach ($albums as $al): $phs = $photosByAlbum[$al['id']] ?? []; ?>
       <div class="card">
-        <img src="../<?= e($al['cover_url']) ?>" alt="<?= e($al['title']) ?>" style="width:100%;height:150px;object-fit:cover;border-radius:6px;">
+        <img src="<?= e(mediaUrl($al['cover_url'] ?? '')) ?>" alt="<?= e($al['title']) ?>" style="width:100%;height:150px;object-fit:cover;border-radius:6px;">
         <h3 style="margin:0.5rem 0 0.2rem;"><?= e($al['title']) ?></h3>
         <small style="color:var(--text-muted);"><?= e($al['category']) ?> · <?= count($phs) ?> photos</small>
         <div style="display:flex;gap:0.4rem;align-items:center;margin-top:0.5rem;">

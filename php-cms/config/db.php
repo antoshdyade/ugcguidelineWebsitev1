@@ -24,6 +24,81 @@ if (!defined('DB_PASS')) {
 if (!defined('DB_CHARSET')) {
     define('DB_CHARSET', 'utf8mb4');
 }
+if (!defined('BASE_URL')) {
+    define('BASE_URL', getenv('BASE_URL') ?: '');
+}
+
+/**
+ * Returns the base web path or configured BASE_URL (without trailing slash).
+ * Automatically handles domain roots, Ubuntu Webmin VirtualHosts, and Windows XAMPP subfolders.
+ */
+function getBaseUrl(): string
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $configured = trim((string)BASE_URL);
+    if ($configured !== '') {
+        $cached = rtrim($configured, '/');
+        return $cached;
+    }
+
+    // Auto-detect subfolder relative to DOCUMENT_ROOT (cross-platform Windows & Linux)
+    $appRoot = realpath(__DIR__ . '/..');
+    $docRoot = !empty($_SERVER['DOCUMENT_ROOT']) ? realpath((string)$_SERVER['DOCUMENT_ROOT']) : false;
+    if ($appRoot !== false && $docRoot !== false) {
+        $normApp = str_replace('\\', '/', $appRoot);
+        $normDoc = rtrim(str_replace('\\', '/', $docRoot), '/');
+        if ($normDoc !== '' && strpos($normApp, $normDoc) === 0) {
+            $rel = substr($normApp, strlen($normDoc));
+            $cached = $rel === '/' ? '' : rtrim($rel, '/');
+            return $cached;
+        }
+    }
+
+    // Fallback using SCRIPT_NAME (handles Apache Alias/symlink setups)
+    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $dir = rtrim(dirname($scriptName), '/');
+    if (substr($dir, -6) === '/admin') {
+        $dir = substr($dir, 0, -6);
+    }
+    $cached = ($dir === '/' || $dir === '.') ? '' : $dir;
+    return $cached;
+}
+
+function baseUrl(string $path = ''): string
+{
+    $trimmed = ltrim($path);
+    if ($trimmed === '') {
+        $base = getBaseUrl();
+        return $base === '' ? '/' : $base . '/';
+    }
+    if (preg_match('#^(https?:)?//#i', $trimmed) || preg_match('#^(mailto:|tel:|data:|javascript:|\#)#i', $trimmed)) {
+        return $trimmed;
+    }
+    $clean = ltrim($trimmed, '/');
+    $prefix = getBaseUrl();
+    return ($prefix === '' ? '' : $prefix) . '/' . $clean;
+}
+
+function assetUrl(string $path): string
+{
+    $clean = ltrim($path, '/');
+    $fullFile = __DIR__ . '/../' . $clean;
+    $ver = file_exists($fullFile) ? (string)filemtime($fullFile) : '3';
+    $sep = strpos($clean, '?') !== false ? '&' : '?';
+    return baseUrl($clean . $sep . 'v=' . $ver);
+}
+
+function mediaUrl(?string $path, string $fallback = 'assets/images/hero_campus.jpg'): string
+{
+    $p = trim((string)$path);
+    if ($p === '') {
+        $p = $fallback;
+    }
+    return baseUrl($p);
+}
 
 function getDB(): PDO
 {

@@ -1,9 +1,8 @@
-# SVCOER UGC CMS — Apache / Ubuntu Webmin Configuration
+# SVCOER UGC CMS — Apache Configuration (Ubuntu Webmin & Windows XAMPP Compatible)
 DirectoryIndex index.php index.html
-AddDefaultCharset UTF-8
-Options -Indexes
 
 <IfModule mod_mime.c>
+  AddDefaultCharset UTF-8
   AddType text/css .css
   AddType application/javascript .js
   AddType application/json .json

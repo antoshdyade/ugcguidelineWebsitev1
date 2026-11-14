@@ -45,7 +45,7 @@ require_once __DIR__ . '/includes/header.php';
     <ul>
       <?php foreach ($results as $item): ?>
         <li style="margin-bottom:0.65rem;">
-          <a href="<?= e($item['url']) ?>"><strong><?= e($item['title']) ?></strong></a>
+          <a href="<?= e(baseUrl($item['url'])) ?>"><strong><?= e($item['title']) ?></strong></a>
           <small style="color:var(--text-muted);"> (<?= e($item['type']) ?>)</small>
         </li>
       <?php endforeach; ?>

@@ -52,7 +52,7 @@ require_once __DIR__ . '/includes/header.php';
             <?php if ($isExt): ?>
               <a href="<?= e($d['file_url']) ?>" target="_blank" rel="noopener noreferrer" class="btn-secondary">Open Link &nearr;</a>
             <?php else: ?>
-              <a href="<?= e($d['file_url']) ?>" download class="btn-primary">Download</a>
+              <a href="<?= e(baseUrl($d['file_url'])) ?>" download class="btn-primary">Download</a>
             <?php endif; ?>
           </td>
         </tr>

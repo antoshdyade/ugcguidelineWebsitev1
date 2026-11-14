@@ -515,7 +515,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             <?php endforeach; ?>
           </select>
         </div>
-        <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="upload_handler.php" name="content_html" rows="8"><?= htmlspecialchars($editSub['content_html'] ?? '<p>Department micro-page content...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
+        <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="<?= e(baseUrl('admin/upload_handler.php')) ?>" name="content_html" rows="8"><?= htmlspecialchars($editSub['content_html'] ?? '<p>Department micro-page content...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
         <label style="display:block;margin:0.5rem 0;"><input type="checkbox" name="is_published" <?= (!$editSub || !empty($editSub['is_published'])) ? 'checked' : '' ?>> Published</label>
         <button type="submit" class="btn-primary"><?= $editSub ? 'Update Micro-Page' : 'Save Micro-Page' ?></button>
         <?php if ($editSub): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Finish Editing</a><?php endif; ?>
@@ -542,7 +542,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:0.5rem;">
               <?php foreach ($editPhotos as $pIdx => $ph): ?>
                 <div style="border:1px solid var(--border-color);border-radius:6px;overflow:hidden;background:#fff;">
-                  <img src="../<?= e($ph['url'] ?? '') ?>" alt="" style="width:100%;height:70px;object-fit:cover;">
+                  <img src="<?= e(mediaUrl($ph['url'] ?? '')) ?>" alt="" style="width:100%;height:70px;object-fit:cover;">
                   <div style="padding:4px;font-size:0.72rem;"><?= e($ph['caption'] ?? '') ?></div>
                   <form method="post" style="padding:0 4px 4px;">
                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
