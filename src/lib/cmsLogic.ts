@@ -167,7 +167,8 @@ export type AdminResource =
   | 'documents'
   | 'gallery'
   | 'leadership'
-  | 'directory';
+  | 'directory'
+  | 'alumni';
 
 export type RbacUserLike = Pick<
   CmsUser,
@@ -199,6 +200,7 @@ export function canUserAccessResource(
       return role === 'content_editor';
     case 'categories':
     case 'leadership':
+    case 'alumni':
       return role === 'content_editor' || role === 'iqac_officer';
     case 'pages':
       return (

@@ -10,6 +10,7 @@ import {
   FilePlus2,
   FileText,
   FolderOpen,
+  GraduationCap,
   Image as ImageIcon,
   Layers,
   LayoutGrid,
@@ -40,11 +41,13 @@ import {
   getUploadSizeLimitMb,
   isImageFileMeta,
 } from '../lib/imageCrop';
+import { AlumniAdminPanel } from './AlumniAdminPanel';
 import { BackupRestorePanel } from './BackupRestorePanel';
 import { ImageUploader } from './ImageUploader';
 import { PerPageRbacSelector } from './PerPageRbacSelector';
 import { RichTextEditor } from './RichTextEditor';
 import type {
+  AlumniData,
   AuditLogEntry,
   CampusEvent,
   CmsCategory,
@@ -82,6 +85,7 @@ interface AdminStatePayload {
   gallery: GalleryAlbum[];
   leadership: LeadershipProfile[];
   telephoneDirectory: TelephoneEntry[];
+  alumni?: AlumniData;
   settings: SiteSettings;
   users: CmsUser[];
   auditLogs: AuditLogEntry[];
@@ -94,6 +98,7 @@ type AdminTab =
   | 'departments'
   | 'homepage'
   | 'leadership'
+  | 'alumni'
   | 'gallery'
   | 'documents'
   | 'directory'
@@ -118,6 +123,7 @@ function LinkTargetPicker({
 }) {
   const builtinTargets = [
     { label: 'Home Page (/)', url: '/' },
+    { label: 'Alumni Network, Jobs & Registration (/alumni)', url: '/alumni' },
     { label: 'Quick Links & Document Repository', url: '/quick-links' },
     { label: 'Picture Gallery', url: '/gallery' },
     { label: 'Contact & Telephone Directory', url: '/contact' },
@@ -774,6 +780,7 @@ export function AdminDashboard({
   const canDepts = canUserAccessResource(user, 'departments');
   const canHomepage = canUserAccessResource(user, 'sliders_events');
   const canLeadership = canUserAccessResource(user, 'leadership');
+  const canAlumni = canUserAccessResource(user, 'alumni');
   const canGallery = canUserAccessResource(user, 'gallery');
   const canDocs = canUserAccessResource(user, 'documents');
   const canDirectory = canUserAccessResource(user, 'directory');
@@ -787,6 +794,7 @@ export function AdminDashboard({
     { id: 'departments', label: 'Departments & Micro-Pages', icon: <Building2 className="w-4 h-4" />, allowed: canDepts },
     { id: 'homepage', label: 'Homepage, Sliders & Events', icon: <ImageIcon className="w-4 h-4" />, allowed: canHomepage },
     { id: 'leadership', label: 'Leadership & Governance', icon: <UserCheck className="w-4 h-4" />, allowed: canLeadership },
+    { id: 'alumni', label: 'Alumni Network & Jobs', icon: <GraduationCap className="w-4 h-4" />, allowed: canAlumni },
     { id: 'gallery', label: 'Picture Gallery', icon: <ImageIcon className="w-4 h-4" />, allowed: canGallery },
     { id: 'documents', label: 'Document Repository', icon: <FolderOpen className="w-4 h-4" />, allowed: canDocs },
     { id: 'directory', label: 'Telephone Directory', icon: <Phone className="w-4 h-4" />, allowed: canDirectory },
@@ -5831,6 +5839,18 @@ export function AdminDashboard({
               </div>
             </div>
           </div>
+        )}
+
+        {/* 10B. ALUMNI NETWORK, REGISTRATION MODERATION & JOB BOARD */}
+        {activeTab === 'alumni' && canAlumni && state && state.alumni && (
+          <AlumniAdminPanel
+            alumni={state.alumni}
+            departments={state.departments}
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
         )}
 
         {/* 11. WEBSITE BACKUP, INCREMENTAL SNAPSHOTS, SCHEDULED EXPORT & DISASTER RECOVERY (SUPER ADMIN) */}

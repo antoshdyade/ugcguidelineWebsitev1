@@ -277,6 +277,64 @@ CREATE TABLE IF NOT EXISTS cms_kv_store (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- 16. Alumni Network Profiles, Jobs & Chapter Events
+CREATE TABLE IF NOT EXISTS alumni_profiles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  full_name VARCHAR(150) NOT NULL,
+  email VARCHAR(160) NOT NULL,
+  phone VARCHAR(60) NULL,
+  graduation_year SMALLINT NOT NULL,
+  department_code VARCHAR(20) NOT NULL,
+  department_name VARCHAR(160) NOT NULL,
+  degree VARCHAR(120) NOT NULL,
+  current_company VARCHAR(160) NULL,
+  designation VARCHAR(160) NULL,
+  location VARCHAR(160) NULL,
+  chapter VARCHAR(120) DEFAULT 'Pandharpur Home Chapter',
+  linkedin_url VARCHAR(500) NULL,
+  photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
+  bio TEXT NULL,
+  open_to_mentorship TINYINT(1) DEFAULT 0,
+  is_featured TINYINT(1) DEFAULT 0,
+  status ENUM('approved','pending','rejected') DEFAULT 'pending',
+  sort_order INT DEFAULT 1,
+  registered_at DATE NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS alumni_jobs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  company VARCHAR(160) NOT NULL,
+  location VARCHAR(160) NOT NULL,
+  job_type ENUM('Full-Time','Internship','Referral','Part-Time') DEFAULT 'Full-Time',
+  department_focus VARCHAR(80) DEFAULT 'ALL',
+  experience_range VARCHAR(80) DEFAULT '0-2 Years',
+  compensation VARCHAR(100) NULL,
+  description TEXT NOT NULL,
+  apply_url_or_email VARCHAR(300) NOT NULL,
+  posted_by_alumni_name VARCHAR(140) NOT NULL,
+  posted_by_batch VARCHAR(80) NOT NULL,
+  deadline_date DATE NULL,
+  status ENUM('open','pending','closed') DEFAULT 'open',
+  posted_at DATE NOT NULL,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS alumni_events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(220) NOT NULL,
+  chapter VARCHAR(120) NOT NULL,
+  event_date DATE NOT NULL,
+  venue VARCHAR(255) NOT NULL,
+  organizer VARCHAR(180) NOT NULL,
+  description TEXT NOT NULL,
+  banner_url VARCHAR(255) DEFAULT 'assets/images/convocation.jpg',
+  registration_url VARCHAR(500) NULL,
+  rsvp_count INT UNSIGNED DEFAULT 0,
+  is_active TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
 -- ============================================================================
 -- Seed Data
 -- ============================================================================
@@ -438,3 +496,27 @@ INSERT INTO telephone_directory (section, officer_name, designation, extension, 
 
 INSERT INTO custom_home_components (title, placement, html_content, sort_order, is_active) VALUES
 ('Autonomous Admissions & NEP 2020 Accreditation Ribbon', 'after-hero', '<div class="cms-prose"><div class="cms-block cms-banner-navy"><p class="cms-kicker">Autonomous · NAAC A+ (3.46) · DTE Code 06220</p><h2>Admissions Open 2026–27 &amp; Autonomous Examination Cell</h2><p>Direct Second Year &amp; First Year B.Tech Admissions, ABC/DigiLocker NAD Credit Transfers, and FRA-Approved Fee Disclosures available publicly without login.</p><div class="cms-btn-row"><a href="page.php?slug=prospectus-fee-structure" class="cms-btn cms-btn-amber">Fee Structure &amp; Admissions</a><a href="page.php?cat=examination" class="cms-btn cms-btn-light">Examination Portal</a></div></div></div>', 1, 1);
+
+INSERT INTO alumni_profiles (id, full_name, email, phone, graduation_year, department_code, department_name, degree, current_company, designation, location, chapter, linkedin_url, photo_url, bio, open_to_mentorship, is_featured, status, sort_order, registered_at) VALUES
+(1, 'Rohan Deshmukh', 'rohan.deshmukh@alumni.svcoer.edu.in', '+91-98220-11201', 2016, 'CSE', 'Computer Science & Engineering', 'B.E. (CSE)', 'Microsoft India', 'Principal Cloud Architect', 'Hyderabad, India', 'Hyderabad Chapter', 'https://linkedin.com', 'assets/images/principal.jpg', 'Mentoring final-year CSE students in distributed systems, Azure architecture, and product engineering interviews.', 1, 1, 'approved', 1, '2026-01-12'),
+(2, 'Snehal Patwardhan', 'snehal.patwardhan@alumni.svcoer.edu.in', '+91-98901-44310', 2018, 'ENTC', 'Electronics & Telecommunication Engineering', 'B.E. (E&TC)', 'Qualcomm', 'Staff SoC Verification Engineer', 'Bengaluru, India', 'Bengaluru Chapter', 'https://linkedin.com', 'assets/images/faculty_default.jpg', 'Conducting annual VLSI & RTL verification bootcamps for E&TC undergraduates at Pandharpur.', 1, 1, 'approved', 2, '2026-02-04'),
+(3, 'Aditya Kulkarni', 'aditya.k@alumni.svcoer.edu.in', NULL, 2015, 'MECH', 'Mechanical Engineering', 'B.E. (Mechanical)', 'Bharat Forge Ltd.', 'Deputy General Manager - EV Powertrain', 'Pune, India', 'Pune Chapter', 'https://linkedin.com', 'assets/images/principal.jpg', 'Facilitating sponsored industrial projects and plant visits for SVERI Mechanical and Mechatronics cohorts.', 1, 1, 'approved', 3, '2026-03-19'),
+(4, 'Priya Joshi', 'priya.joshi@alumni.svcoer.edu.in', NULL, 2020, 'CIVIL', 'Civil Engineering', 'B.E. (Civil)', 'Larsen & Toubro', 'Senior Structural Design Engineer', 'Mumbai, India', 'Mumbai Chapter', 'https://linkedin.com', 'assets/images/faculty_default.jpg', 'Infrastructure & metro rail structural design specialist supporting GATE aspirants.', 0, 0, 'approved', 4, '2026-05-08'),
+(5, 'Omkar Shinde', 'omkar.shinde@alumni.svcoer.edu.in', NULL, 2022, 'ELEC', 'Electrical Engineering', 'B.Tech (Electrical)', 'Tata Power', 'Lead Smart Grid Automation Engineer', 'Pune, India', 'Pune Chapter', 'https://linkedin.com', 'assets/images/hero_campus.jpg', 'Working on SCADA renewable integration and helping pre-final students with core electrical internships.', 1, 0, 'approved', 5, '2026-07-14'),
+(6, 'Tanvi Mane', 'tanvi.mane@alumni.svcoer.edu.in', NULL, 2023, 'CSE', 'Computer Science & Engineering', 'B.Tech (CSE)', 'Infosys Finacle', 'Systems Specialist - AI & Data', 'Pandharpur, India', 'Pandharpur Home Chapter', NULL, 'assets/images/convocation.jpg', 'Recent graduate eager to mentor coding club members on full-stack TypeScript and placements.', 1, 0, 'pending', 6, '2026-11-01');
+
+INSERT INTO alumni_jobs (id, title, company, location, job_type, department_focus, experience_range, compensation, description, apply_url_or_email, posted_by_alumni_name, posted_by_batch, deadline_date, status, posted_at, sort_order) VALUES
+(1, 'Graduate Software Engineer (React & Cloud)', 'Infosys Digital', 'Pune / Hybrid', 'Full-Time', 'CSE', '0-2 Years', 'Rs. 6.5 - 9.0 LPA', 'Alumni referral drive for 2025/2026 batch CSE & E&TC graduates with strong TypeScript, Node.js, and SQL fundamentals.', 'https://careers.infosys.com', 'Rohan Deshmukh', '2016 CSE', '2026-12-20', 'open', '2026-11-02', 1),
+(2, 'EV Battery Pack Thermal Design Intern', 'Bharat Forge EV', 'Chakan, Pune', 'Internship', 'MECH', 'Final Year Students', 'Rs. 22,000 / month', '6-month industrial internship with PPO conversion opportunity in CAD/FEA thermal simulation.', 'mailto:alumni.jobs@coe.sveri.ac.in', 'Aditya Kulkarni', '2015 MECH', '2026-12-15', 'open', '2026-10-28', 2),
+(3, 'VLSI RTL Verification Referral', 'Qualcomm India', 'Bengaluru', 'Referral', 'ENTC', '1-3 Years', 'Rs. 14 - 20 LPA', 'SystemVerilog / UVM verification openings for SVERI alumni and M.Tech microelectronics graduates.', 'https://www.qualcomm.com/company/careers', 'Snehal Patwardhan', '2018 ENTC', '2026-12-30', 'open', '2026-10-20', 3),
+(4, 'Substation SCADA Commissioning Engineer', 'Tata Power', 'Maharashtra / Pan-India', 'Full-Time', 'ELEC', '0-2 Years', 'Rs. 6.0 LPA', 'Field & automation role covering smart grid protection relays and PLC telemetry.', 'mailto:hr.grid@coe.sveri.ac.in', 'Omkar Shinde', '2022 ELEC', '2026-12-10', 'open', '2026-11-05', 4);
+
+INSERT INTO alumni_events (id, title, chapter, event_date, venue, organizer, description, banner_url, registration_url, rsvp_count, is_active, sort_order) VALUES
+(1, 'Annual Grand Alumni Homecoming & Silver Jubilee Meet', 'Pandharpur Home Chapter', '2026-12-26', 'SVERI Central Auditorium, Gopalpur, Pandharpur', 'SVERI Alumni Association & Principal Office', 'Reunite on campus with batchmates, tour the new Autonomous Research Centres, felicitate Distinguished Alumni Awardees, and mentor current B.Tech students.', 'assets/images/convocation.jpg', '', 142, 1, 1),
+(2, 'Pune Chapter Industry Connect & Tech Networking Mixer', 'Pune Chapter', '2026-11-29', 'MCCIA Trade Tower, Senapati Bapat Road, Pune', 'Pune Chapter Committee (Batch 2010-2024)', 'Evening networking mixer for Pune-based SVERI engineers across IT, Automotive EV, and Infrastructure sectors with live placement referral desks.', 'assets/images/hero_campus.jpg', '', 86, 1, 2),
+(3, 'Bengaluru VLSI & Cloud Architecture Mentorship Roundtable', 'Bengaluru Chapter', '2026-12-12', 'Koramangala Tech Hub / Hybrid Live Stream', 'Bengaluru Chapter Leads', 'Structured 1-on-1 career mentorship session pairing senior Bengaluru alumni with pre-final year students.', 'assets/images/hero_library.jpg', '', 54, 1, 3);
+
+INSERT INTO cms_kv_store (key_name, val_json) VALUES
+('alumni_settings', '{"heroTitle":"SVERI''s COE Alumni Association & Global Network","heroSubtitle":"Connecting 11,500+ engineering graduates, mentors, industry leaders, and chapter communities across Pune, Bengaluru, Mumbai, USA, Europe & Pandharpur.","associationRegNo":"MH/SOL/ALU-2016/06220","coordinatorName":"Prof. D. B. Kulkarni","coordinatorEmail":"alumni@coe.sveri.ac.in","allowSelfRegistration":true,"allowPublicJobPosting":true}'),
+('alumni_seeded_v1', '1')
+ON DUPLICATE KEY UPDATE val_json = VALUES(val_json);

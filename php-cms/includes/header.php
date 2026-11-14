@@ -179,6 +179,7 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
             </div>
           </li>
         <?php endif; ?>
+        <li class="nav-item"><a class="nav-link <?= $currentScript === 'alumni.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('alumni.php')) ?>">Alumni</a></li>
         <li class="nav-item"><a class="nav-link <?= $currentScript === 'gallery.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('gallery.php')) ?>">Gallery</a></li>
         <li class="nav-item"><a class="nav-link <?= $currentScript === 'contact.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('contact.php')) ?>">Contact Us</a></li>
       </ul>
@@ -192,6 +193,8 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
       <a class="statutory-link" href="<?= e(baseUrl('quick-links.php')) ?>">Quick Links</a>
       <span class="statutory-sep">|</span>
       <a class="statutory-link" href="<?= e(baseUrl('page.php?cat=examination')) ?>">Examination Cell</a>
+      <span class="statutory-sep">|</span>
+      <a class="statutory-link" href="<?= e(baseUrl('alumni.php')) ?>">Alumni Network</a>
       <span class="statutory-sep">|</span>
       <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=prospectus-fee-structure')) ?>">FRA Fee Structure</a>
       <span class="statutory-sep">|</span>

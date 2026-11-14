@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createServer as createViteServer } from 'vite';
-import { createSeedDatabase, hashPassword, verifyPassword } from './src/data/seedDatabase';
+import { createSeedAlumniData, createSeedDatabase, hashPassword, verifyPassword } from './src/data/seedDatabase';
 import {
   canUserAccessCategory,
   canUserAccessPage,
@@ -22,14 +22,27 @@ import {
   countDatabaseEntities,
   defaultBackupSchedule,
   extractSnapshotData,
+  rewriteDomainUrlsInValue,
   validateBackupPackage,
+  validateSafeRestoreAssetPath,
 } from './src/lib/backupLogic';
 import {
   clampUploadLimitMb,
   getUploadSizeLimitBytes,
   isImageFileMeta,
 } from './src/lib/imageCrop';
+import {
+  validateAlumniJobInput,
+  validateAlumniRegistrationInput,
+} from './src/lib/alumniLogic';
+import { buildZipBuffer, parseZipBuffer, type ZipInputEntry } from './src/lib/zipArchive';
 import type {
+  AlumniApprovalStatus,
+  AlumniData,
+  AlumniEventChapter,
+  AlumniJob,
+  AlumniJobStatus,
+  AlumniProfile,
   BackupDestination,
   BackupMode,
   BackupPackage,
@@ -41,6 +54,7 @@ import type {
   CustomHomeComponent,
   HomeComponentPlacement,
   ScpConfig,
+  SiteMigrationManifest,
   UserRole,
 } from './src/types/cms';
 
@@ -100,12 +114,43 @@ function loadDatabase(): CmsDatabase {
         needsSave = true;
       }
 
+      const seedAlumni = createSeedAlumniData();
+      const healAssetPath = (url: string | undefined, fallback: string): string => {
+        if (!url) return fallback;
+        if (url.includes('portrait_')) return '/src/assets/images/leadership_principal_1794512597061.jpg';
+        if (url.includes('campus_convocation_ceremony_')) return '/src/assets/images/campus_convocation_1794512597749.jpg';
+        if (url.includes('campus_students_library_')) return '/src/assets/images/hero_library_atrium_1794512596890.jpg';
+        return url;
+      };
+      const alumni: AlumniData = parsed.alumni
+        ? {
+            settings: { ...seedAlumni.settings, ...(parsed.alumni.settings || {}) },
+            profiles: Array.isArray(parsed.alumni.profiles)
+              ? parsed.alumni.profiles.map((p) => ({
+                  ...p,
+                  photoUrl: healAssetPath(p.photoUrl, '/src/assets/images/leadership_principal_1794512597061.jpg'),
+                }))
+              : seedAlumni.profiles,
+            jobs: Array.isArray(parsed.alumni.jobs) ? parsed.alumni.jobs : seedAlumni.jobs,
+            events: Array.isArray(parsed.alumni.events)
+              ? parsed.alumni.events.map((ev) => ({
+                  ...ev,
+                  bannerUrl: healAssetPath(ev.bannerUrl, '/src/assets/images/campus_convocation_1794512597749.jpg'),
+                }))
+              : seedAlumni.events,
+          }
+        : seedAlumni;
+      if (!parsed.alumni || JSON.stringify(alumni) !== JSON.stringify(parsed.alumni)) {
+        needsSave = true;
+      }
+
       const merged: CmsDatabase = {
         ...seed,
         ...parsed,
         categories,
         pages,
         users,
+        alumni,
         backups: Array.isArray(parsed.backups) ? parsed.backups : [],
         backupSchedule: {
           ...defaultBackupSchedule(),
@@ -229,13 +274,21 @@ function sanitizeUser(u: CmsDatabase['users'][number]): CmsUser {
 async function startServer() {
   const app = express();
   app.set('trust proxy', true);
-  app.use(express.json({ limit: '60mb' }));
+  app.use(express.json({ limit: '150mb' }));
 
   // Serve uploaded safe assets statically
   app.use('/uploads', express.static(UPLOAD_DIR));
 
+  function ensureAlumniState(): AlumniData {
+    if (!db.alumni) {
+      db.alumni = createSeedAlumniData();
+    }
+    return db.alumni;
+  }
+
   // Public bootstrap endpoint (unrestricted access per UGC Rule 4)
   app.get('/api/public/bootstrap', (_req, res) => {
+    const alumniState = ensureAlumniState();
     res.json({
       categories: sortByOrder(db.categories),
       pages: sortByOrder(db.pages.filter((p) => p.isPublished)),
@@ -252,8 +305,162 @@ async function startServer() {
       documents: sortByOrder(db.documents),
       gallery: sortByOrder(db.gallery),
       telephoneDirectory: sortByOrder(db.telephoneDirectory),
+      alumni: {
+        settings: alumniState.settings,
+        profiles: sortByOrder(alumniState.profiles.filter((p) => p.status === 'approved')),
+        jobs: sortByOrder(alumniState.jobs.filter((j) => j.status === 'open')),
+        events: sortByOrder(alumniState.events.filter((e) => e.isActive)),
+      },
       settings: db.settings,
     });
+  });
+
+  // Public Alumni Network interactive endpoints
+  app.post('/api/public/alumni/upload-photo', (req, res) => {
+    const alumniState = ensureAlumniState();
+    if (!alumniState.settings.allowSelfRegistration) {
+      res.status(403).json({ error: 'Public alumni photo upload is disabled.' });
+      return;
+    }
+    const { filename, mimeType, base64Data } = req.body as {
+      filename?: string;
+      mimeType?: string;
+      base64Data?: string;
+    };
+    if (!filename || !mimeType || !base64Data) {
+      res.status(400).json({ error: 'Missing filename, mimeType, or file data.' });
+      return;
+    }
+    if (!isImageFileMeta(filename, mimeType)) {
+      res.status(400).json({ error: 'Only JPEG, PNG, or WEBP photos are permitted.' });
+      return;
+    }
+    const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const maxBytes = getUploadSizeLimitBytes(db.settings, 'photo');
+    const check = validateUploadMeta(filename, mimeType, buffer.length, maxBytes);
+    if (!check.valid || !check.safeFilename) {
+      res.status(400).json({ error: check.reason || 'Photo upload rejected.' });
+      return;
+    }
+    const safeName = `alumni-${check.safeFilename}`;
+    fs.writeFileSync(path.join(UPLOAD_DIR, safeName), buffer);
+    res.json({ url: `/uploads/${safeName}`, filename: safeName, sizeBytes: buffer.length });
+  });
+
+  app.post('/api/public/alumni/register', (req, res) => {
+    const alumniState = ensureAlumniState();
+    if (!alumniState.settings.allowSelfRegistration) {
+      res.status(403).json({ error: 'Public alumni registration is currently closed by Administrator.' });
+      return;
+    }
+    const body = req.body as Partial<AlumniProfile>;
+    const validation = validateAlumniRegistrationInput(body);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    if (body.photoUrl && body.photoUrl.trim()) {
+      const pCheck = validateExternalDocumentUrl(body.photoUrl);
+      if (!pCheck.valid) {
+        res.status(400).json({ error: pCheck.reason || 'Invalid photo URL.' });
+        return;
+      }
+    }
+    if (body.linkedinUrl && body.linkedinUrl.trim()) {
+      const lCheck = validateExternalDocumentUrl(body.linkedinUrl);
+      if (!lCheck.valid) {
+        res.status(400).json({ error: lCheck.reason || 'Invalid LinkedIn URL.' });
+        return;
+      }
+    }
+    const nextId = Math.max(0, ...alumniState.profiles.map((p) => p.id)) + 1;
+    const nextSort = Math.max(0, ...alumniState.profiles.map((p) => p.sortOrder)) + 1;
+    const matchedDept = db.departments.find((d) => d.code === body.departmentCode);
+    const created: AlumniProfile = {
+      id: nextId,
+      fullName: String(body.fullName).trim(),
+      email: String(body.email).trim(),
+      phone: body.phone ? String(body.phone).trim() : '',
+      graduationYear: Number(body.graduationYear),
+      departmentCode: String(body.departmentCode).trim(),
+      departmentName: matchedDept ? matchedDept.name : String(body.departmentName || body.departmentCode).trim(),
+      degree: String(body.degree || 'B.Tech').trim(),
+      currentCompany: String(body.currentCompany).trim(),
+      designation: String(body.designation).trim(),
+      location: String(body.location || 'India').trim(),
+      chapter: String(body.chapter || 'Pandharpur Home Chapter').trim(),
+      linkedinUrl: body.linkedinUrl ? String(body.linkedinUrl).trim() : '',
+      websiteUrl: body.websiteUrl ? String(body.websiteUrl).trim() : '',
+      photoUrl: body.photoUrl ? String(body.photoUrl).trim() : '/src/assets/images/leadership_principal_1794512597061.jpg',
+      bio: String(body.bio || '').trim(),
+      openToMentorship: Boolean(body.openToMentorship),
+      isFeatured: false,
+      status: 'pending',
+      sortOrder: nextSort,
+      registeredAt: new Date().toISOString().slice(0, 10),
+    };
+    alumniState.profiles.push(created);
+    saveDatabase();
+    res.status(201).json({
+      ok: true,
+      message: 'Registration received! Your alumni profile will appear in the directory after admin verification.',
+      profile: created,
+    });
+  });
+
+  app.post('/api/public/alumni/jobs', (req, res) => {
+    const alumniState = ensureAlumniState();
+    if (!alumniState.settings.allowPublicJobPosting) {
+      res.status(403).json({ error: 'Public alumni job posting is currently disabled by Administrator.' });
+      return;
+    }
+    const body = req.body as Partial<AlumniJob>;
+    const validation = validateAlumniJobInput(body);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    const nextId = Math.max(0, ...alumniState.jobs.map((j) => j.id)) + 1;
+    const nextSort = Math.max(0, ...alumniState.jobs.map((j) => j.sortOrder)) + 1;
+    const created: AlumniJob = {
+      id: nextId,
+      title: String(body.title).trim(),
+      company: String(body.company).trim(),
+      location: String(body.location || 'India / Remote').trim(),
+      jobType: (body.jobType || 'Full-Time') as AlumniJob['jobType'],
+      departmentFocus: String(body.departmentFocus || 'All Branches').trim(),
+      experienceRange: String(body.experienceRange || '0–2 Years').trim(),
+      compensation: String(body.compensation || 'As per industry norms').trim(),
+      description: String(body.description || '').trim(),
+      applyUrlOrEmail: String(body.applyUrlOrEmail).trim(),
+      postedByAlumniName: String(body.postedByAlumniName).trim(),
+      postedByBatch: String(body.postedByBatch || '').trim(),
+      deadlineDate: String(body.deadlineDate || '').trim(),
+      status: 'pending',
+      postedAt: new Date().toISOString().slice(0, 10),
+      sortOrder: nextSort,
+    };
+    alumniState.jobs.push(created);
+    saveDatabase();
+    res.status(201).json({
+      ok: true,
+      message: 'Job opportunity submitted for admin moderation and will go live shortly.',
+      job: created,
+    });
+  });
+
+  app.post('/api/public/alumni/events/:id/rsvp', (req, res) => {
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const ev = alumniState.events.find((e) => e.id === id);
+    if (!ev) {
+      res.status(404).json({ error: 'Alumni event not found.' });
+      return;
+    }
+    ev.rsvpCount = Number(ev.rsvpCount || 0) + 1;
+    saveDatabase();
+    res.json({ ok: true, event: ev });
   });
 
   // Fast Global AJAX Search endpoint (UGC Rule 4)
@@ -344,6 +551,7 @@ async function startServer() {
   // Admin overview data (all pages including unpublished, users, audit logs)
   app.get('/api/admin/state', requireAdmin(), (req, res) => {
     const currentUser = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
     res.json({
       categories: sortByOrder(db.categories),
       pages: sortByOrder(db.pages),
@@ -360,6 +568,12 @@ async function startServer() {
       gallery: sortByOrder(db.gallery),
       leadership: sortByOrder(db.leadership),
       telephoneDirectory: sortByOrder(db.telephoneDirectory),
+      alumni: {
+        settings: alumniState.settings,
+        profiles: sortByOrder(alumniState.profiles),
+        jobs: sortByOrder(alumniState.jobs),
+        events: sortByOrder(alumniState.events),
+      },
       settings: db.settings,
       users: canUserAccessResource(currentUser, 'users') ? db.users.map(sanitizeUser) : [],
       auditLogs: canUserAccessResource(currentUser, 'audit_logs') ? db.auditLogs : [],
@@ -2195,14 +2409,599 @@ async function startServer() {
       res.status(404).json({ error: 'Backup record not found.' });
       return;
     }
-    const full = path.join(BACKUP_DIR, path.basename(record.filename));
+    const safeName = path.basename(record.filename);
+    const full = path.join(BACKUP_DIR, safeName);
     if (!fs.existsSync(full)) {
       res.status(404).json({ error: 'Backup file no longer exists on disk.' });
       return;
     }
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(record.filename)}"`);
+    const isZip = safeName.toLowerCase().endsWith('.zip') || record.archiveType === 'site-zip';
+    res.setHeader(
+      'Content-Type',
+      isZip ? 'application/zip' : 'application/json; charset=utf-8',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
     res.sendFile(full);
+  });
+
+  // Alumni Network Admin CRUD & Moderation
+  app.post('/api/admin/alumni/profiles', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const body = req.body as Partial<AlumniProfile>;
+    const validation = validateAlumniRegistrationInput(body);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    const nextId = Math.max(0, ...alumniState.profiles.map((p) => p.id)) + 1;
+    const nextSort = Math.max(0, ...alumniState.profiles.map((p) => p.sortOrder)) + 1;
+    const matchedDept = db.departments.find((d) => d.code === body.departmentCode);
+    const profile: AlumniProfile = {
+      id: nextId,
+      fullName: String(body.fullName).trim(),
+      email: String(body.email).trim(),
+      phone: body.phone ? String(body.phone).trim() : '',
+      graduationYear: Number(body.graduationYear),
+      departmentCode: String(body.departmentCode).trim(),
+      departmentName: matchedDept ? matchedDept.name : String(body.departmentName || body.departmentCode).trim(),
+      degree: String(body.degree || 'B.Tech').trim(),
+      currentCompany: String(body.currentCompany).trim(),
+      designation: String(body.designation).trim(),
+      location: String(body.location || 'India').trim(),
+      chapter: String(body.chapter || 'Pandharpur Home Chapter').trim(),
+      linkedinUrl: body.linkedinUrl ? String(body.linkedinUrl).trim() : '',
+      websiteUrl: body.websiteUrl ? String(body.websiteUrl).trim() : '',
+      photoUrl: body.photoUrl ? String(body.photoUrl).trim() : '/src/assets/images/leadership_principal_1794512597061.jpg',
+      bio: String(body.bio || '').trim(),
+      openToMentorship: Boolean(body.openToMentorship),
+      isFeatured: Boolean(body.isFeatured),
+      status: (body.status || 'approved') as AlumniApprovalStatus,
+      sortOrder: Number(body.sortOrder ?? nextSort),
+      registeredAt: new Date().toISOString().slice(0, 10),
+    };
+    alumniState.profiles.push(profile);
+    addAudit(actor, 'CREATE_ALUMNI_PROFILE', 'AlumniProfile', profile.fullName);
+    saveDatabase();
+    res.status(201).json(profile);
+  });
+
+  app.put('/api/admin/alumni/profiles/reorder', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    alumniState.profiles = applyReorderIds(alumniState.profiles, orderedIds);
+    addAudit(actor, 'REORDER_ALUMNI_PROFILES', 'AlumniProfile', `${orderedIds.length} profiles reordered`);
+    saveDatabase();
+    res.json(alumniState.profiles);
+  });
+
+  app.put('/api/admin/alumni/profiles/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const prof = alumniState.profiles.find((p) => p.id === id);
+    if (!prof) {
+      res.status(404).json({ error: 'Alumni profile not found.' });
+      return;
+    }
+    const patch = req.body as Partial<AlumniProfile>;
+    Object.assign(prof, patch);
+    if (patch.departmentCode) {
+      const matchedDept = db.departments.find((d) => d.code === patch.departmentCode);
+      if (matchedDept) prof.departmentName = matchedDept.name;
+    }
+    addAudit(actor, 'UPDATE_ALUMNI_PROFILE', 'AlumniProfile', prof.fullName);
+    saveDatabase();
+    res.json(prof);
+  });
+
+  app.put('/api/admin/alumni/profiles/:id/status', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const prof = alumniState.profiles.find((p) => p.id === id);
+    if (!prof) {
+      res.status(404).json({ error: 'Alumni profile not found.' });
+      return;
+    }
+    const { status } = req.body as { status?: AlumniApprovalStatus };
+    if (!status || !['approved', 'pending', 'rejected'].includes(status)) {
+      res.status(400).json({ error: 'Invalid status.' });
+      return;
+    }
+    prof.status = status;
+    addAudit(actor, `ALUMNI_${status.toUpperCase()}`, 'AlumniProfile', prof.fullName);
+    saveDatabase();
+    res.json(prof);
+  });
+
+  app.delete('/api/admin/alumni/profiles/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const idx = alumniState.profiles.findIndex((p) => p.id === id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'Alumni profile not found.' });
+      return;
+    }
+    const [removed] = alumniState.profiles.splice(idx, 1);
+    addAudit(actor, 'DELETE_ALUMNI_PROFILE', 'AlumniProfile', removed.fullName);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/alumni/jobs', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const body = req.body as Partial<AlumniJob>;
+    const check = validateAlumniJobInput(body);
+    if (!check.valid) {
+      res.status(400).json({ error: check.reason });
+      return;
+    }
+    const nextId = Math.max(0, ...alumniState.jobs.map((j) => j.id)) + 1;
+    const nextSort = Math.max(0, ...alumniState.jobs.map((j) => j.sortOrder)) + 1;
+    const job: AlumniJob = {
+      id: nextId,
+      title: String(body.title).trim(),
+      company: String(body.company).trim(),
+      location: String(body.location || 'India').trim(),
+      jobType: (body.jobType || 'Full-Time') as AlumniJob['jobType'],
+      departmentFocus: String(body.departmentFocus || 'All Branches').trim(),
+      experienceRange: String(body.experienceRange || '0–2 Years').trim(),
+      compensation: String(body.compensation || '').trim(),
+      description: String(body.description || '').trim(),
+      applyUrlOrEmail: String(body.applyUrlOrEmail).trim(),
+      postedByAlumniName: String(body.postedByAlumniName).trim(),
+      postedByBatch: String(body.postedByBatch || '').trim(),
+      deadlineDate: String(body.deadlineDate || '').trim(),
+      status: (body.status || 'open') as AlumniJobStatus,
+      postedAt: new Date().toISOString().slice(0, 10),
+      sortOrder: Number(body.sortOrder ?? nextSort),
+    };
+    alumniState.jobs.push(job);
+    addAudit(actor, 'CREATE_ALUMNI_JOB', 'AlumniJob', `${job.title} (${job.company})`);
+    saveDatabase();
+    res.status(201).json(job);
+  });
+
+  app.put('/api/admin/alumni/jobs/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const job = alumniState.jobs.find((j) => j.id === id);
+    if (!job) {
+      res.status(404).json({ error: 'Alumni job not found.' });
+      return;
+    }
+    Object.assign(job, req.body);
+    addAudit(actor, 'UPDATE_ALUMNI_JOB', 'AlumniJob', job.title);
+    saveDatabase();
+    res.json(job);
+  });
+
+  app.put('/api/admin/alumni/jobs/:id/status', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const job = alumniState.jobs.find((j) => j.id === id);
+    if (!job) {
+      res.status(404).json({ error: 'Alumni job not found.' });
+      return;
+    }
+    const { status } = req.body as { status?: AlumniJobStatus };
+    if (!status || !['open', 'closed', 'pending'].includes(status)) {
+      res.status(400).json({ error: 'Invalid job status.' });
+      return;
+    }
+    job.status = status;
+    addAudit(actor, `ALUMNI_JOB_${status.toUpperCase()}`, 'AlumniJob', job.title);
+    saveDatabase();
+    res.json(job);
+  });
+
+  app.delete('/api/admin/alumni/jobs/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const idx = alumniState.jobs.findIndex((j) => j.id === id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'Alumni job not found.' });
+      return;
+    }
+    const [removed] = alumniState.jobs.splice(idx, 1);
+    addAudit(actor, 'DELETE_ALUMNI_JOB', 'AlumniJob', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/alumni/events', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const body = req.body as Partial<AlumniEventChapter>;
+    if (!body.title || !String(body.title).trim()) {
+      res.status(400).json({ error: 'Event title is required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...alumniState.events.map((e) => e.id)) + 1;
+    const nextSort = Math.max(0, ...alumniState.events.map((e) => e.sortOrder)) + 1;
+    const ev: AlumniEventChapter = {
+      id: nextId,
+      title: String(body.title).trim(),
+      chapter: String(body.chapter || 'Pandharpur Home Chapter').trim(),
+      eventDate: String(body.eventDate || new Date().toISOString().slice(0, 10)).trim(),
+      venue: String(body.venue || 'Campus Auditorium').trim(),
+      organizer: String(body.organizer || 'Alumni Association').trim(),
+      description: String(body.description || '').trim(),
+      bannerUrl: String(body.bannerUrl || '/src/assets/images/campus_convocation_1794512597749.jpg').trim(),
+      registrationUrl: body.registrationUrl ? String(body.registrationUrl).trim() : '',
+      rsvpCount: Number(body.rsvpCount ?? 0),
+      isActive: body.isActive !== false,
+      sortOrder: Number(body.sortOrder ?? nextSort),
+    };
+    alumniState.events.push(ev);
+    addAudit(actor, 'CREATE_ALUMNI_EVENT', 'AlumniEvent', ev.title);
+    saveDatabase();
+    res.status(201).json(ev);
+  });
+
+  app.put('/api/admin/alumni/events/reorder', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    alumniState.events = applyReorderIds(alumniState.events, orderedIds);
+    addAudit(actor, 'REORDER_ALUMNI_EVENTS', 'AlumniEvent', `${orderedIds.length} events reordered`);
+    saveDatabase();
+    res.json(alumniState.events);
+  });
+
+  app.put('/api/admin/alumni/events/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const ev = alumniState.events.find((e) => e.id === id);
+    if (!ev) {
+      res.status(404).json({ error: 'Alumni event not found.' });
+      return;
+    }
+    Object.assign(ev, req.body);
+    addAudit(actor, 'UPDATE_ALUMNI_EVENT', 'AlumniEvent', ev.title);
+    saveDatabase();
+    res.json(ev);
+  });
+
+  app.delete('/api/admin/alumni/events/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const id = Number(req.params.id);
+    const idx = alumniState.events.findIndex((e) => e.id === id);
+    if (idx === -1) {
+      res.status(404).json({ error: 'Alumni event not found.' });
+      return;
+    }
+    const [removed] = alumniState.events.splice(idx, 1);
+    addAudit(actor, 'DELETE_ALUMNI_EVENT', 'AlumniEvent', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/alumni/settings', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    alumniState.settings = {
+      ...alumniState.settings,
+      ...(req.body as Partial<AlumniData['settings']>),
+    };
+    addAudit(actor, 'UPDATE_ALUMNI_SETTINGS', 'AlumniSettings', 'Portal Configuration');
+    saveDatabase();
+    res.json(alumniState.settings);
+  });
+
+  // Complete Website Migration Package (.zip: Code + DB + Uploaded Photos/Media)
+  function collectFilesForMigrationZip(
+    rootDir: string,
+    relSubdir: string,
+    archivePrefix: string,
+    excludeDirs: Set<string>,
+    excludeFiles: Set<string>,
+  ): ZipInputEntry[] {
+    const out: ZipInputEntry[] = [];
+    const startDir = relSubdir ? path.join(rootDir, relSubdir) : rootDir;
+    if (!fs.existsSync(startDir)) return out;
+
+    const walk = (absDir: string, currentRel: string) => {
+      const items = fs.readdirSync(absDir, { withFileTypes: true });
+      for (const item of items) {
+        const nextRel = currentRel ? `${currentRel}/${item.name}` : item.name;
+        const absPath = path.join(absDir, item.name);
+        if (item.isDirectory()) {
+          if (excludeDirs.has(item.name) || excludeDirs.has(nextRel)) continue;
+          walk(absPath, nextRel);
+        } else if (item.isFile()) {
+          if (excludeFiles.has(item.name) || excludeFiles.has(nextRel)) continue;
+          if (item.name.startsWith('.env')) continue;
+          const entryName = archivePrefix ? `${archivePrefix}/${nextRel}` : nextRel;
+          out.push({ name: entryName, data: fs.readFileSync(absPath) });
+        }
+      }
+    };
+
+    walk(startDir, '');
+    return out;
+  }
+
+  app.post('/api/admin/backups/export-site', requireAdmin('settings'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const rootDir = process.cwd();
+    const now = new Date();
+    const createdAt = now.toISOString();
+    const stamp = createdAt.replace(/[:.]/g, '-').slice(0, 19);
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000').split(',')[0].trim();
+    const sourceOrigin = `${proto}://${host}`;
+    const sourceBaseUrl = String(req.body?.sourceBaseUrl || sourceOrigin).trim().replace(/\/+$/, '');
+
+    const excludeDirs = new Set([
+      'node_modules',
+      'dist',
+      '.git',
+      '.playwright-cli',
+      '.aistudio',
+      'data',
+      'php-cms/backups',
+      'backups',
+      'public/uploads',
+      'src/assets/images',
+    ]);
+    const excludeFiles = new Set([
+      'php-cms/config/config.local.php',
+      'config.local.php',
+    ]);
+
+    const entries: ZipInputEntry[] = [];
+    // 1. Source Code Directories & Root Configs
+    for (const dir of ['src', 'public', 'php-cms']) {
+      const prefix = `code/${dir}`;
+      entries.push(...collectFilesForMigrationZip(rootDir, dir, prefix, excludeDirs, excludeFiles));
+    }
+    for (const rootFile of ['server.ts', 'package.json', 'tsconfig.json', 'vite.config.ts', 'index.html', 'metadata.json', '.env.example']) {
+      const full = path.join(rootDir, rootFile);
+      if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+        entries.push({ name: `code/${rootFile}`, data: fs.readFileSync(full) });
+      }
+    }
+    const codeFilesCount = entries.length;
+
+    // 2. Uploaded Photos, PDFs & Institutional Media Assets
+    const mediaFiles: string[] = [];
+    if (fs.existsSync(UPLOAD_DIR)) {
+      for (const fn of fs.readdirSync(UPLOAD_DIR)) {
+        const full = path.join(UPLOAD_DIR, fn);
+        if (fs.statSync(full).isFile()) {
+          const entryName = `media/uploads/${fn}`;
+          entries.push({ name: entryName, data: fs.readFileSync(full) });
+          mediaFiles.push(entryName);
+        }
+      }
+    }
+    const assetsImgDir = path.join(rootDir, 'src', 'assets', 'images');
+    if (fs.existsSync(assetsImgDir)) {
+      for (const fn of fs.readdirSync(assetsImgDir)) {
+        const full = path.join(assetsImgDir, fn);
+        if (fs.statSync(full).isFile()) {
+          const entryName = `media/assets/${fn}`;
+          entries.push({ name: entryName, data: fs.readFileSync(full) });
+          mediaFiles.push(entryName);
+        }
+      }
+    }
+
+    // 3. Structured Database Snapshot JSON
+    const snapshotData = extractSnapshotData(db);
+    const dbPkg: BackupPackage = {
+      format: 'svcoer-cms-backup',
+      version: 1,
+      mode: 'full',
+      createdAt,
+      data: snapshotData,
+      uploadManifest: getUploadInventory(),
+    };
+    const rawDbJson = JSON.stringify(dbPkg, null, 2);
+    dbPkg.sha256 = crypto.createHash('sha256').update(rawDbJson).digest('hex');
+    const finalDbJson = JSON.stringify(dbPkg, null, 2);
+    entries.push({ name: 'database-backup.json', data: Buffer.from(finalDbJson, 'utf-8') });
+
+    // 4. Migration Manifest
+    const manifest: SiteMigrationManifest = {
+      format: 'svcoer-full-site-migration',
+      version: 1,
+      createdAt,
+      createdBy: actor.email,
+      sourceOrigin,
+      sourceBaseUrl,
+      databaseSummary: countDatabaseEntities(snapshotData),
+      mediaFiles,
+      codeFilesCount,
+      sha256: dbPkg.sha256,
+    };
+    entries.push({
+      name: 'migration-manifest.json',
+      data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf-8'),
+    });
+
+    const zipBuf = buildZipBuffer(entries);
+    const filename = `svcoer-full-site-${stamp}.zip`;
+    const filePath = path.join(BACKUP_DIR, filename);
+    fs.writeFileSync(filePath, zipBuf);
+
+    const record: BackupRecord = {
+      id: `site-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
+      createdAt,
+      createdBy: actor.email,
+      mode: 'full',
+      destination: 'local',
+      filename,
+      sizeBytes: zipBuf.length,
+      sha256: crypto.createHash('sha256').update(zipBuf).digest('hex'),
+      notes: `Complete Site Migration ZIP (${codeFilesCount} code files + ${mediaFiles.length} media/photos + full DB)`,
+      entityCounts: manifest.databaseSummary,
+      archiveType: 'site-zip',
+      mediaCount: mediaFiles.length,
+      codeCount: codeFilesCount,
+    };
+
+    db.backups = [record, ...(db.backups ?? [])];
+    addAudit(actor, 'EXPORT_COMPLETE_SITE_ZIP', 'Backup', `${filename} (${mediaFiles.length} media, ${codeFilesCount} code files)`);
+    saveDatabase();
+    res.status(201).json({ record, manifest });
+  });
+
+  app.post('/api/admin/backups/inspect-site', requireAdmin('settings'), (req, res) => {
+    const { base64Zip } = req.body as { base64Zip?: string };
+    if (!base64Zip) {
+      res.status(400).json({ error: 'Missing ZIP archive payload.' });
+      return;
+    }
+    try {
+      const cleanB64 = base64Zip.includes(',') ? base64Zip.split(',')[1] : base64Zip;
+      const buf = Buffer.from(cleanB64, 'base64');
+      const entries = parseZipBuffer(buf);
+      const manifestEntry = entries.find((e) => e.name === 'migration-manifest.json');
+      const dbEntry = entries.find(
+        (e) => e.name === 'database-backup.json' || e.name === 'migration-data.json',
+      );
+      if (!dbEntry) {
+        res.status(400).json({ error: 'ZIP archive does not contain database-backup.json or migration-data.json.' });
+        return;
+      }
+      const parsedDb = JSON.parse(dbEntry.data.toString('utf-8')) as unknown;
+      const dbValidation = validateBackupPackage(parsedDb);
+      if (!dbValidation.valid) {
+        res.status(400).json({ error: dbValidation.reason || 'Database snapshot inside ZIP is invalid.' });
+        return;
+      }
+      const manifest = manifestEntry
+        ? (JSON.parse(manifestEntry.data.toString('utf-8')) as Partial<SiteMigrationManifest>)
+        : null;
+      const mediaEntries = entries.filter((e) => validateSafeRestoreAssetPath(e.name).safe);
+      const codeEntries = entries.filter((e) => e.name.startsWith('code/'));
+
+      res.json({
+        ok: true,
+        sourceOrigin: manifest?.sourceOrigin || manifest?.sourceBaseUrl || '',
+        createdAt: manifest?.createdAt || dbValidation.pkg?.createdAt || '',
+        databaseSummary: dbValidation.entityCounts || {},
+        mediaCount: mediaEntries.length,
+        codeFilesCount: codeEntries.length,
+        totalEntries: entries.length,
+      });
+    } catch (err) {
+      res.status(400).json({ error: `Failed to inspect ZIP archive: ${(err as Error).message}` });
+    }
+  });
+
+  app.post('/api/admin/backups/import-site', requireAdmin('settings'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { base64Zip, oldDomainUrl, newDomainUrl, restoreMedia } = req.body as {
+      base64Zip?: string;
+      oldDomainUrl?: string;
+      newDomainUrl?: string;
+      restoreMedia?: boolean;
+    };
+    if (!base64Zip) {
+      res.status(400).json({ error: 'Missing ZIP archive payload.' });
+      return;
+    }
+    try {
+      const cleanB64 = base64Zip.includes(',') ? base64Zip.split(',')[1] : base64Zip;
+      const buf = Buffer.from(cleanB64, 'base64');
+      const entries = parseZipBuffer(buf);
+      const manifestEntry = entries.find((e) => e.name === 'migration-manifest.json');
+      const dbEntry = entries.find(
+        (e) => e.name === 'database-backup.json' || e.name === 'migration-data.json',
+      );
+      if (!dbEntry) {
+        res.status(400).json({ error: 'ZIP archive does not contain database-backup.json.' });
+        return;
+      }
+
+      const manifest = manifestEntry
+        ? (JSON.parse(manifestEntry.data.toString('utf-8')) as Partial<SiteMigrationManifest>)
+        : null;
+      const rawDbPayload = JSON.parse(dbEntry.data.toString('utf-8')) as unknown;
+      const validation = validateBackupPackage(rawDbPayload);
+      if (!validation.valid || !validation.pkg) {
+        res.status(400).json({ error: validation.reason || 'Invalid database payload in ZIP.' });
+        return;
+      }
+
+      // Automatic safety snapshot before cross-domain restore
+      const safetyBackup = await createBackupSnapshot({
+        mode: 'full',
+        destination: 'local',
+        createdBy: actor.email,
+        notes: 'Automatic pre-migration safety snapshot before Full Site ZIP Import',
+      });
+
+      const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+      const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000').split(',')[0].trim();
+      const detectedOldUrl = (oldDomainUrl || manifest?.sourceBaseUrl || manifest?.sourceOrigin || '').trim();
+      const targetNewUrl = (newDomainUrl || `${proto}://${host}`).trim();
+
+      let pkgToRestore = validation.pkg;
+      if (detectedOldUrl && targetNewUrl && detectedOldUrl !== targetNewUrl) {
+        pkgToRestore = {
+          ...validation.pkg,
+          data: rewriteDomainUrlsInValue(validation.pkg.data, detectedOldUrl, targetNewUrl),
+        };
+      }
+
+      let restoredMediaCount = 0;
+      if (restoreMedia !== false) {
+        const assetsImgDir = path.join(process.cwd(), 'src', 'assets', 'images');
+        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+        fs.mkdirSync(assetsImgDir, { recursive: true });
+        for (const entry of entries) {
+          const assetCheck = validateSafeRestoreAssetPath(entry.name);
+          if (!assetCheck.safe || !assetCheck.relativeName || !assetCheck.targetSubdir) continue;
+          const destDir = assetCheck.targetSubdir === 'uploads' ? UPLOAD_DIR : assetsImgDir;
+          fs.writeFileSync(path.join(destDir, path.basename(assetCheck.relativeName)), entry.data);
+          restoredMediaCount += 1;
+        }
+      }
+
+      db = applyBackupRestore(db, pkgToRestore);
+      if (!db.alumni) {
+        db.alumni = createSeedAlumniData();
+      }
+      addAudit(
+        actor,
+        'IMPORT_COMPLETE_SITE_ZIP',
+        'Backup',
+        `Migrated full site (${restoredMediaCount} media files, safety: ${safetyBackup.filename})`,
+      );
+      saveDatabase();
+
+      res.json({
+        ok: true,
+        restoredMediaCount,
+        entityCounts: countDatabaseEntities(pkgToRestore.data),
+        rewrittenFrom: detectedOldUrl || null,
+        rewrittenTo: targetNewUrl || null,
+        safetyFilename: safetyBackup.filename,
+      });
+    } catch (err) {
+      res.status(400).json({ error: `Failed to import site migration ZIP: ${(err as Error).message}` });
+    }
   });
 
   app.delete('/api/admin/backups/:id', requireAdmin('settings'), (req, res) => {

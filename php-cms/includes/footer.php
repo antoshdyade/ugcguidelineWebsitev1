@@ -24,6 +24,7 @@
     <div>
       <h4 style="color:#fff;">Repositories &amp; Contact</h4>
       <p><a href="<?= e(baseUrl('quick-links.php')) ?>" style="color:#cbd5e1;">Downloadable Repository</a></p>
+      <p><a href="<?= e(baseUrl('alumni.php')) ?>" style="color:#cbd5e1;">Alumni Network &amp; Jobs</a></p>
       <p><a href="<?= e(baseUrl('gallery.php')) ?>" style="color:#cbd5e1;">Picture Gallery</a></p>
       <p><a href="<?= e(baseUrl('contact.php')) ?>" style="color:#cbd5e1;">Telephone Directory</a></p>
       <p><a href="<?= e(baseUrl('admin/login.php')) ?>" style="color:#fde68a;">Staff CMS Login</a></p>

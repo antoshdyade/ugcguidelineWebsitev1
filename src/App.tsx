@@ -7,8 +7,10 @@ import { PageViewer } from './components/PageViewer';
 import { DepartmentMicrosite } from './components/DepartmentMicrosite';
 import { QuickLinksRepository } from './components/QuickLinksRepository';
 import { GalleryView, ContactView } from './components/GalleryAndContact';
+import { AlumniPortal } from './components/AlumniPortal';
 import { AdminDashboard } from './components/AdminDashboard';
 import type {
+  AlumniData,
   CampusEvent,
   CmsCategory,
   CmsDocument,
@@ -33,6 +35,7 @@ interface PublicBootstrapData {
   documents: CmsDocument[];
   gallery: GalleryAlbum[];
   telephoneDirectory: TelephoneEntry[];
+  alumni?: AlumniData;
   settings: SiteSettings;
 }
 
@@ -175,6 +178,36 @@ export default function App() {
         <ContactView
           settings={data.settings}
           directory={data.telephoneDirectory}
+        />
+      );
+    }
+
+    if (pathname === '/alumni' || pathname.startsWith('/alumni/')) {
+      const sub = pathname.replace('/alumni', '').replace(/^\//, '');
+      const initialTab =
+        sub === 'register' || sub === 'jobs' || sub === 'events' ? sub : 'directory';
+      return (
+        <AlumniPortal
+          alumni={
+            data.alumni || {
+              settings: {
+                heroTitle: `${data.settings.shortCode} Alumni Association`,
+                heroSubtitle: 'Connect with graduates, mentors, and recruiters.',
+                associationRegNo: 'MH/SOL/ALU',
+                coordinatorName: 'Alumni Cell',
+                coordinatorEmail: data.settings.email,
+                allowSelfRegistration: true,
+                allowPublicJobPosting: true,
+              },
+              profiles: [],
+              jobs: [],
+              events: [],
+            }
+          }
+          departments={data.departments}
+          settings={data.settings}
+          initialTab={initialTab}
+          onAlumniDataChanged={loadBootstrap}
         />
       );
     }

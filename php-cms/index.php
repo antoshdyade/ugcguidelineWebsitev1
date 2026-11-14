@@ -293,7 +293,10 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
         <div style="padding:0.6rem 0.75rem;border:1px solid var(--border-color);border-radius:6px;font-weight:600;font-size:0.88rem;"><?= e($rc) ?></div>
       <?php endforeach; ?>
     </div>
-    <a href="<?= e(baseUrl('gallery.php')) ?>" class="btn-primary" style="margin-top:1rem;">Explore Picture Gallery &rarr;</a>
+    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:1rem;">
+      <a href="<?= e(baseUrl('gallery.php')) ?>" class="btn-primary">Explore Picture Gallery &rarr;</a>
+      <a href="<?= e(baseUrl('alumni.php')) ?>" class="btn-secondary">Alumni Network &amp; Jobs &rarr;</a>
+    </div>
   </div>
 </section>
 <?php endif; ?>

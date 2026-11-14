@@ -16,6 +16,7 @@ export const BACKUP_DATA_KEYS = [
   'documents',
   'gallery',
   'telephoneDirectory',
+  'alumni',
   'users',
   'auditLogs',
   'settings',
@@ -37,6 +38,7 @@ export function extractSnapshotData(
     documents: db.documents,
     gallery: db.gallery,
     telephoneDirectory: db.telephoneDirectory,
+    alumni: db.alumni,
     users: db.users,
     auditLogs: db.auditLogs,
     settings: db.settings,
@@ -52,7 +54,12 @@ export function countDatabaseEntities(
     if (Array.isArray(val)) {
       counts[key] = val.length;
     } else if (val && typeof val === 'object') {
-      counts[key] = 1;
+      if (key === 'alumni' && 'profiles' in val && Array.isArray((val as { profiles?: unknown[] }).profiles)) {
+        const alum = val as { profiles: unknown[]; jobs?: unknown[]; events?: unknown[] };
+        counts[key] = alum.profiles.length + (alum.jobs?.length ?? 0) + (alum.events?.length ?? 0);
+      } else {
+        counts[key] = 1;
+      }
     }
   }
   return counts;
@@ -177,6 +184,95 @@ export function applyBackupRestore(
   return next;
 }
 
+export function rewriteDomainUrlsInValue<T>(
+  value: T,
+  oldBaseUrl: string,
+  newBaseUrl: string,
+): T {
+  const from = (oldBaseUrl || '').trim().replace(/\/+$/, '');
+  const to = (newBaseUrl || '').trim().replace(/\/+$/, '');
+  if (!from || !to || from === to) return value;
+
+  const visit = (node: unknown): unknown => {
+    if (typeof node === 'string') {
+      return node.split(from).join(to);
+    }
+    if (Array.isArray(node)) {
+      return node.map(visit);
+    }
+    if (node && typeof node === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(node)) {
+        out[k] = visit(v);
+      }
+      return out;
+    }
+    return node;
+  };
+
+  return visit(value) as T;
+}
+
+const ALLOWED_RESTORE_UPLOAD_EXTS = new Set([
+  'pdf',
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'docx',
+  'xlsx',
+]);
+
+export function validateSafeRestoreAssetPath(
+  entryPath: string,
+): { safe: boolean; targetSubdir?: 'uploads' | 'assets'; relativeName?: string } {
+  const normalized = (entryPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized || normalized.includes('..') || normalized.includes('\0')) {
+    return { safe: false };
+  }
+
+  let targetSubdir: 'uploads' | 'assets' | undefined;
+  let rel = '';
+
+  if (normalized.startsWith('media/uploads/')) {
+    targetSubdir = 'uploads';
+    rel = normalized.slice('media/uploads/'.length);
+  } else if (normalized.startsWith('public/uploads/')) {
+    targetSubdir = 'uploads';
+    rel = normalized.slice('public/uploads/'.length);
+  } else if (normalized.startsWith('uploads/')) {
+    targetSubdir = 'uploads';
+    rel = normalized.slice('uploads/'.length);
+  } else if (normalized.startsWith('media/assets/')) {
+    targetSubdir = 'assets';
+    rel = normalized.slice('media/assets/'.length);
+  } else if (normalized.startsWith('assets/images/')) {
+    targetSubdir = 'assets';
+    rel = normalized.slice('assets/images/'.length);
+  }
+
+  if (!targetSubdir || !rel || rel.includes('/')) {
+    return { safe: false };
+  }
+
+  const lower = rel.toLowerCase();
+  const parts = lower.split('.');
+  if (parts.length < 2) return { safe: false };
+  const ext = parts[parts.length - 1];
+  if (!ALLOWED_RESTORE_UPLOAD_EXTS.has(ext)) {
+    return { safe: false };
+  }
+  // Block dangerous intermediate extensions like .php.jpg
+  for (let i = 1; i < parts.length - 1; i += 1) {
+    if (['php', 'phtml', 'phar', 'sh', 'exe', 'js', 'html'].includes(parts[i])) {
+      return { safe: false };
+    }
+  }
+
+  return { safe: true, targetSubdir, relativeName: rel };
+}
+
 export function computeNextRunIso(
   frequency: BackupFrequency,
   fromDate = new Date(),
@@ -208,3 +304,4 @@ export function defaultBackupSchedule(): BackupScheduleConfig {
     webhookUrl: '',
   };
 }
+

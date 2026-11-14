@@ -6,31 +6,42 @@ require_once __DIR__ . '/../includes/backup_helper.php';
 
 $user = requireRoleAccess('users');
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 $msg = '';
 $err = '';
 $restorePreview = null;
 
 ensureBackupsStorage();
 
-// Authenticated local download
+// Authenticated local download (.json or .zip)
 if (isset($_GET['download']) && $_GET['download'] !== '') {
     $file = basename((string)$_GET['download']);
     $full = dirname(__DIR__) . '/backups/' . $file;
-    if (preg_match('/^svcoer-[a-z0-9-]+\.json$/i', $file) === 1 && is_file($full)) {
-        header('Content-Type: application/json; charset=utf-8');
+    if (preg_match('/^svcoer-[a-z0-9-]+\.(json|zip)$/i', $file, $m) === 1 && is_file($full)) {
+        $ext = strtolower($m[1]);
+        header('Content-Type: ' . ($ext === 'zip' ? 'application/zip' : 'application/json; charset=utf-8'));
         header('Content-Disposition: attachment; filename="' . $file . '"');
         header('Content-Length: ' . filesize($full));
         readfile($full);
         exit;
     }
-    $err = 'Requested backup file not found.';
+    $err = 'Requested backup archive not found.';
 }
+
+$scheme = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')) ? 'https' : 'http';
+$currentOrigin = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+$currentTargetBase = $currentOrigin . getBaseUrl();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'create_backup') {
+    if ($action === 'export_full_site') {
+        $sourceOrigin = trim((string)($_POST['source_origin'] ?? $currentTargetBase));
+        $rec = createFullSiteMigrationZip($pdo, $user['email'], $sourceOrigin);
+        logAudit($pdo, $user, 'EXPORT_SITE_MIGRATION_ZIP', 'SiteMigration', $rec['fileName']);
+        $msg = 'Complete Website Migration Archive created: ' . $rec['fileName'] . ' (' . (int)$rec['codeCount'] . ' code files, ' . (int)$rec['mediaCount'] . ' media/photos, MySQL DB & SQL dump). Download it from Archive History below.';
+    } elseif ($action === 'create_backup') {
         $mode = ($_POST['mode'] ?? 'full') === 'incremental' ? 'incremental' : 'full';
         $dest = in_array($_POST['destination'] ?? 'local', ['local', 'scp', 'gdrive_webhook'], true)
             ? $_POST['destination']
@@ -85,27 +96,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = 'Backup archive removed: ' . $target;
     } elseif ($action === 'preview_restore') {
         if (!empty($_FILES['backup_file']['tmp_name'])) {
-            $raw = (string)@file_get_contents($_FILES['backup_file']['tmp_name']);
-            $decoded = json_decode($raw, true);
-            $val = validateBackupPackage($decoded);
-            if ($val['valid']) {
-                $pendingName = 'pending-restore-' . bin2hex(random_bytes(6)) . '.json';
-                file_put_contents(dirname(__DIR__) . '/backups/' . $pendingName, $raw);
-                $restorePreview = [
-                    'fileName'    => $_FILES['backup_file']['name'],
-                    'pendingFile' => $pendingName,
-                    'validation'  => $val,
-                ];
-                $msg = 'Backup archive validated. Review counts below and confirm restore.';
+            $origName = (string)($_FILES['backup_file']['name'] ?? '');
+            $isZip = str_ends_with(strtolower($origName), '.zip');
+            if ($isZip) {
+                $pendingName = 'pending-restore-' . bin2hex(random_bytes(6)) . '.zip';
+                $destPath = dirname(__DIR__) . '/backups/' . $pendingName;
+                if (move_uploaded_file($_FILES['backup_file']['tmp_name'], $destPath) || copy($_FILES['backup_file']['tmp_name'], $destPath)) {
+                    $val = inspectSiteMigrationZip($destPath);
+                    if ($val['valid']) {
+                        $restorePreview = [
+                            'type'        => 'zip',
+                            'fileName'    => $origName,
+                            'pendingFile' => $pendingName,
+                            'validation'  => $val,
+                        ];
+                        $msg = 'Site Migration .zip validated (' . (int)$val['mediaCount'] . ' photos/media, ' . (int)$val['codeCount'] . ' code files). Review domain rewrite settings and confirm.';
+                    } else {
+                        @unlink($destPath);
+                        $err = $val['error'];
+                    }
+                } else {
+                    $err = 'Could not stage uploaded .zip package.';
+                }
             } else {
-                $err = $val['error'];
+                $raw = (string)@file_get_contents($_FILES['backup_file']['tmp_name']);
+                $decoded = json_decode($raw, true);
+                $val = validateBackupPackage($decoded);
+                if ($val['valid']) {
+                    $pendingName = 'pending-restore-' . bin2hex(random_bytes(6)) . '.json';
+                    file_put_contents(dirname(__DIR__) . '/backups/' . $pendingName, $raw);
+                    $restorePreview = [
+                        'type'        => 'json',
+                        'fileName'    => $origName,
+                        'pendingFile' => $pendingName,
+                        'validation'  => $val,
+                    ];
+                    $msg = 'Backup JSON archive validated. Review counts below and confirm restore.';
+                } else {
+                    $err = $val['error'];
+                }
             }
         } else {
-            $err = 'Please select a valid .json backup archive file to import.';
+            $err = 'Please select a valid .zip migration package or .json backup archive.';
         }
     } elseif ($action === 'confirm_restore') {
         $pending = !empty($_POST['pending_file']) ? basename((string)$_POST['pending_file']) : '';
         $existingFile = !empty($_POST['existing_backup_file']) ? basename((string)$_POST['existing_backup_file']) : '';
+        $oldDomainUrl = trim((string)($_POST['old_base_url'] ?? ''));
+        $newDomainUrl = trim((string)($_POST['new_base_url'] ?? ''));
+        $restoreMedia = isset($_POST['restore_media']);
         $targetPath = '';
         if ($pending !== '' && is_file(dirname(__DIR__) . '/backups/' . $pending)) {
             $targetPath = dirname(__DIR__) . '/backups/' . $pending;
@@ -115,20 +154,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($targetPath === '') {
             $err = 'Restore source archive could not be located.';
         } else {
-            $decoded = json_decode((string)file_get_contents($targetPath), true);
-            if (!is_array($decoded)) {
-                $err = 'Corrupted backup JSON file.';
+            $isZipTarget = str_ends_with(strtolower($targetPath), '.zip');
+            if ($isZipTarget) {
+                $res = restoreFromSiteMigrationZip($pdo, $targetPath, $user['email'], $oldDomainUrl, $newDomainUrl, $restoreMedia);
             } else {
-                $res = restoreFromBackupPackage($pdo, $decoded, $user['email']);
-                if ($pending !== '' && is_file(dirname(__DIR__) . '/backups/' . $pending)) {
-                    @unlink(dirname(__DIR__) . '/backups/' . $pending);
-                }
-                if ($res['ok']) {
-                    logAudit($pdo, $user, 'RESTORE_BACKUP', 'Database', 'Safety snapshot: ' . $res['safetyBackup']);
-                    $msg = 'Website restored cleanly across ' . count($res['restoredTables']) . ' tables! Pre-restore safety snapshot saved: ' . $res['safetyBackup'];
+                $decoded = json_decode((string)file_get_contents($targetPath), true);
+                if (!is_array($decoded)) {
+                    $res = ['ok' => false, 'error' => 'Corrupted backup JSON file.'];
                 } else {
-                    $err = $res['error'];
+                    if ($oldDomainUrl !== '' && $newDomainUrl !== '') {
+                        $decoded['data'] = rewriteDomainUrlsRecursive($decoded['data'] ?? [], $oldDomainUrl, $newDomainUrl);
+                    }
+                    $res = restoreFromBackupPackage($pdo, $decoded, $user['email']);
                 }
+            }
+            if ($pending !== '' && is_file(dirname(__DIR__) . '/backups/' . $pending)) {
+                @unlink(dirname(__DIR__) . '/backups/' . $pending);
+            }
+            if (!empty($res['ok'])) {
+                $mediaNote = isset($res['restoredMediaCount']) ? ' and restored ' . (int)$res['restoredMediaCount'] . ' uploaded photos/media files' : '';
+                logAudit($pdo, $user, 'RESTORE_BACKUP', 'Database', 'Safety snapshot: ' . $res['safetyBackup']);
+                $msg = 'Website restored cleanly across ' . count($res['restoredTables']) . ' tables' . $mediaNote . '! Pre-restore safety snapshot saved: ' . $res['safetyBackup'];
+            } else {
+                $err = $res['error'] ?? 'Restore failed.';
             }
         }
     }
@@ -139,12 +187,31 @@ if (!is_array($backups)) $backups = [];
 $schedule = getBackupSchedule($pdo);
 $cronPath = realpath(dirname(__DIR__) . '/cron_backup.php') ?: (dirname(__DIR__) . '/cron_backup.php');
 
-$adminPageTitle = 'Website Backup, Incremental Export, SCP/Drive & Restore';
+$adminPageTitle = 'Website Backup, Migration (.zip), SCP/Drive & Restore';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
+  <!-- Complete Website Migration Bundle Card -->
+  <div class="card" style="margin-bottom:1.5rem;border:1px solid #BFDBFE;background:#EFF6FF;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+      <div style="max-width:740px;">
+        <small style="text-transform:uppercase;letter-spacing:0.08em;font-weight:700;color:#1D4ED8;display:block;font-size:0.72rem;">Cross-Domain Site Migration Bundle</small>
+        <h2 style="margin:0.2rem 0 0.35rem;color:#0F294A;">Export Complete Website Package (.zip — Code + Data + Photos/Media)</h2>
+        <p style="margin:0;font-size:0.84rem;color:#334155;">
+          Packages the entire PHP codebase (excluding secrets), all uploaded photographs &amp; documents (<code>uploads/</code>, <code>assets/images/</code>), full MySQL JSON snapshot, SQL dump, and origin manifest so you can migrate seamlessly to a new domain.
+        </p>
+      </div>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="export_full_site">
+        <input type="hidden" name="source_origin" value="<?= e($currentTargetBase) ?>">
+        <button type="submit" class="btn-primary">Export Complete Website (.zip)</button>
+      </form>
+    </div>
+  </div>
+
   <div class="grid-2" style="margin-bottom:1.5rem;align-items:start;">
     <form method="post" class="card">
-      <h2 style="margin-top:0;">Create Backup / Export Snapshot</h2>
+      <h2 style="margin-top:0;">Create Database Backup / Export Snapshot</h2>
       <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0;">
         Generate full database &amp; media manifest snapshots or incremental diffs since your latest baseline, saved locally or exported to Google Drive Webhook / remote SCP server.
       </p>
@@ -170,34 +237,53 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     </form>
 
     <div class="card">
-      <h2 style="margin-top:0;">Import &amp; Restore Corrupted Website</h2>
+      <h2 style="margin-top:0;">Cross-Domain Migration Import &amp; Restore (.zip / .json)</h2>
       <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0;">
-        Upload any exported <code>svcoer-*.json</code> archive to validate checksums &amp; row counts. A pre-restore safety snapshot is automatically saved before restoring.
+        Upload any exported <code>svcoer-site-migration-*.zip</code> or <code>svcoer-*.json</code> archive to restore data, photos, and optionally rewrite URLs from an old domain to this target domain.
       </p>
       <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
         <input type="hidden" name="action" value="preview_restore">
-        <input type="file" name="backup_file" accept=".json,application/json" required style="display:block;margin-bottom:0.75rem;">
-        <button type="submit" class="btn-secondary">Validate &amp; Preview Backup File</button>
+        <input type="file" name="backup_file" accept=".zip,.json,application/zip,application/json" required style="display:block;margin-bottom:0.75rem;">
+        <button type="submit" class="btn-secondary">Inspect &amp; Preview Archive</button>
       </form>
 
-      <?php if ($restorePreview): ?>
-        <div style="margin-top:1rem;padding:0.85rem;border:2px solid var(--secondary-color);border-radius:8px;background:var(--surface-bg);">
+      <?php if ($restorePreview):
+        $val = $restorePreview['validation'];
+        $defaultOld = $val['sourceOrigin'] ?? '';
+      ?>
+        <div style="margin-top:1rem;padding:0.9rem;border:2px solid var(--secondary-color);border-radius:10px;background:var(--surface-bg);">
           <strong>Ready to Restore: <?= e($restorePreview['fileName']) ?></strong>
           <div style="font-size:0.8rem;color:var(--text-muted);margin:0.35rem 0;">
-            Mode: <?= e($restorePreview['validation']['mode']) ?> · Created: <?= e($restorePreview['validation']['createdAt']) ?>
+            Type: <?= strtoupper(e($restorePreview['type'])) ?> · Mode: <?= e($val['mode']) ?> · Created: <?= e($val['createdAt']) ?>
+            <?php if ($restorePreview['type'] === 'zip'): ?>
+              <br>Packaged Media/Photos: <strong><?= (int)$val['mediaCount'] ?></strong> · Code Files: <strong><?= (int)$val['codeCount'] ?></strong>
+            <?php endif; ?>
           </div>
-          <div style="font-size:0.78rem;margin-bottom:0.65rem;">
-            <?php foreach ($restorePreview['validation']['counts'] as $tbl => $cnt): ?>
+          <div style="font-size:0.78rem;margin-bottom:0.75rem;">
+            <?php foreach ($val['counts'] as $tbl => $cnt): ?>
               <span style="display:inline-block;margin:2px 6px 2px 0;padding:1px 6px;background:#fff;border:1px solid var(--border-color);border-radius:4px;"><?= e($tbl) ?>: <?= (int)$cnt ?></span>
             <?php endforeach; ?>
           </div>
-          <form method="post" style="display:flex;gap:0.5rem;">
+          <form method="post" style="display:grid;gap:0.65rem;">
             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
             <input type="hidden" name="action" value="confirm_restore">
             <input type="hidden" name="pending_file" value="<?= e($restorePreview['pendingFile']) ?>">
-            <button type="submit" class="btn-primary">Confirm Atomic Restore</button>
-            <a href="manage_backups.php" class="btn-secondary">Cancel</a>
+            <div class="grid-2" style="gap:0.5rem;">
+              <label>Old Domain URL (Rewrite From)
+                <input type="text" name="old_base_url" value="<?= e($defaultOld) ?>" placeholder="https://old-college.edu.in" style="width:100%;">
+              </label>
+              <label>New Target Domain URL (Rewrite To)
+                <input type="text" name="new_base_url" value="<?= e($currentTargetBase) ?>" placeholder="https://new-college.edu.in" style="width:100%;">
+              </label>
+            </div>
+            <?php if ($restorePreview['type'] === 'zip'): ?>
+              <label style="font-size:0.82rem;"><input type="checkbox" name="restore_media" checked> Extract &amp; restore uploaded photographs &amp; documents safely into <code>uploads/</code> &amp; <code>assets/images/</code></label>
+            <?php endif; ?>
+            <div style="display:flex;gap:0.5rem;">
+              <button type="submit" class="btn-primary">Confirm Atomic Migration Restore</button>
+              <a href="manage_backups.php" class="btn-outline">Cancel</a>
+            </div>
           </form>
         </div>
       <?php endif; ?>
@@ -285,39 +371,49 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
   </form>
 
   <div class="card">
-    <h2 style="margin-top:0;">Backup Archive History (<?= count($backups) ?>)</h2>
+    <h2 style="margin-top:0;">Backup &amp; Migration Archive History (<?= count($backups) ?>)</h2>
     <table class="data-table">
-      <thead><tr><th>Archive File</th><th>Mode</th><th>Target &amp; Status</th><th>Size</th><th>Created</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Archive File</th><th>Type / Mode</th><th>Target &amp; Status</th><th>Size</th><th>Created</th><th>Actions</th></tr></thead>
       <tbody>
-        <?php foreach ($backups as $b): ?>
+        <?php foreach ($backups as $b):
+          $isSiteZip = ($b['archiveType'] ?? '') === 'full_site_migration' || str_ends_with(strtolower((string)($b['fileName'] ?? '')), '.zip');
+        ?>
           <tr>
             <td>
               <strong><?= e($b['fileName']) ?></strong>
+              <?php if ($isSiteZip): ?>
+                <span class="badge badge-ok" style="margin-left:4px;">SITE ZIP</span>
+              <?php endif; ?>
               <br><small style="color:var(--text-muted);">SHA-256: <code><?= e(substr((string)($b['checksum'] ?? ''), 0, 14)) ?>...</code></small>
             </td>
-            <td><?= e(strtoupper((string)($b['mode'] ?? 'full'))) ?></td>
+            <td>
+              <?= $isSiteZip ? 'COMPLETE SITE' : e(strtoupper((string)($b['mode'] ?? 'full'))) ?>
+              <?php if ($isSiteZip): ?>
+                <br><small style="color:var(--text-muted);"><?= (int)($b['mediaCount'] ?? 0) ?> media · <?= (int)($b['codeCount'] ?? 0) ?> code</small>
+              <?php endif; ?>
+            </td>
             <td><?= e((string)($b['destination'] ?? 'local')) ?><br><small style="color:var(--text-muted);"><?= e((string)($b['transferStatus'] ?? '')) ?></small></td>
             <td><?= e(formatBytes((int)($b['sizeBytes'] ?? 0))) ?></td>
             <td><?= e((string)($b['createdAt'] ?? '')) ?></td>
             <td style="white-space:nowrap;">
-              <a href="?download=<?= urlencode((string)$b['fileName']) ?>" class="btn-primary" style="padding:0.3rem 0.6rem;font-size:0.78rem;">Download</a>
-              <form method="post" style="display:inline;" onsubmit="return confirm('Restore database from this archive? A safety snapshot will be created first.');">
+              <a href="?download=<?= urlencode((string)$b['fileName']) ?>" class="btn-primary btn-sm">Download</a>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Restore website from this archive? A safety snapshot will be created first.');">
                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                 <input type="hidden" name="action" value="confirm_restore">
                 <input type="hidden" name="existing_backup_file" value="<?= e($b['fileName']) ?>">
-                <button type="submit" class="btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.78rem;">Restore</button>
+                <button type="submit" class="btn-outline btn-sm">Restore</button>
               </form>
               <form method="post" style="display:inline;" onsubmit="return confirm('Delete this archive?');">
                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                 <input type="hidden" name="action" value="delete_backup">
                 <input type="hidden" name="file_name" value="<?= e($b['fileName']) ?>">
-                <button type="submit" class="btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.78rem;">Delete</button>
+                <button type="submit" class="btn-danger btn-sm">Delete</button>
               </form>
             </td>
           </tr>
         <?php endforeach; ?>
         <?php if (empty($backups)): ?>
-          <tr><td colspan="6" style="color:var(--text-muted);">No backups created yet. Click <strong>Run Backup &amp; Export Now</strong> above to create your first snapshot.</td></tr>
+          <tr><td colspan="6" style="color:var(--text-muted);">No backups created yet. Click <strong>Export Complete Website (.zip)</strong> or <strong>Run Backup &amp; Export Now</strong> above.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>

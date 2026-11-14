@@ -68,6 +68,13 @@ export function PublicFooter({ settings, onNavigate }: PublicFooterProps) {
           <div className="flex items-center gap-4">
             <button
               type="button"
+              onClick={() => onNavigate('/alumni')}
+              className="hover:text-white"
+            >
+              Alumni Network
+            </button>
+            <button
+              type="button"
               onClick={() => onNavigate('/page/rti-disclosure')}
               className="hover:text-white"
             >

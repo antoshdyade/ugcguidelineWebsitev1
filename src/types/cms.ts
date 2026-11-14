@@ -380,6 +380,9 @@ export interface BackupRecord {
   entityCounts: Record<string, number>;
   changedKeys?: string[];
   remoteStatus?: string;
+  archiveType?: 'json' | 'site-zip';
+  mediaCount?: number;
+  codeCount?: number;
 }
 
 export interface BackupPackage {
@@ -393,6 +396,99 @@ export interface BackupPackage {
   uploadManifest?: { filename: string; sizeBytes: number; mtimeMs: number }[];
 }
 
+export interface SiteMigrationManifest {
+  format: 'svcoer-full-site-migration';
+  version: number;
+  createdAt: string;
+  createdBy: string;
+  sourceOrigin: string;
+  sourceBaseUrl: string;
+  databaseSummary: Record<string, number>;
+  mediaFiles: string[];
+  codeFilesCount: number;
+  sha256: string;
+}
+
+export type AlumniApprovalStatus = 'approved' | 'pending' | 'rejected';
+
+export interface AlumniProfile {
+  id: number;
+  fullName: string;
+  email: string;
+  phone?: string;
+  graduationYear: number;
+  departmentCode: string;
+  departmentName: string;
+  degree: string;
+  currentCompany: string;
+  designation: string;
+  location: string;
+  chapter: string;
+  linkedinUrl?: string;
+  websiteUrl?: string;
+  photoUrl: string;
+  bio: string;
+  openToMentorship: boolean;
+  isFeatured: boolean;
+  status: AlumniApprovalStatus;
+  sortOrder: number;
+  registeredAt: string;
+}
+
+export type AlumniJobType = 'Full-Time' | 'Internship' | 'Referral' | 'Consultancy';
+export type AlumniJobStatus = 'open' | 'closed' | 'pending';
+
+export interface AlumniJob {
+  id: number;
+  title: string;
+  company: string;
+  location: string;
+  jobType: AlumniJobType;
+  departmentFocus: string;
+  experienceRange: string;
+  compensation: string;
+  description: string;
+  applyUrlOrEmail: string;
+  postedByAlumniName: string;
+  postedByBatch: string;
+  deadlineDate: string;
+  status: AlumniJobStatus;
+  postedAt: string;
+  sortOrder: number;
+}
+
+export interface AlumniEventChapter {
+  id: number;
+  title: string;
+  chapter: string;
+  eventDate: string;
+  venue: string;
+  organizer: string;
+  description: string;
+  bannerUrl: string;
+  registrationUrl?: string;
+  rsvpCount: number;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface AlumniSettings {
+  heroTitle: string;
+  heroSubtitle: string;
+  associationRegNo: string;
+  coordinatorName: string;
+  coordinatorEmail: string;
+  allowSelfRegistration: boolean;
+  allowPublicJobPosting: boolean;
+}
+
+export interface AlumniData {
+  settings: AlumniSettings;
+  profiles: AlumniProfile[];
+  jobs: AlumniJob[];
+  events: AlumniEventChapter[];
+}
+
 export interface CmsDatabase {
   categories: CmsCategory[];
   pages: CmsPage[];
@@ -404,6 +500,7 @@ export interface CmsDatabase {
   documents: CmsDocument[];
   gallery: GalleryAlbum[];
   telephoneDirectory: TelephoneEntry[];
+  alumni?: AlumniData;
   users: (CmsUser & { passwordHash: string })[];
   auditLogs: AuditLogEntry[];
   settings: SiteSettings;
@@ -413,9 +510,10 @@ export interface CmsDatabase {
 
 export interface SearchResultItem {
   id: string;
-  type: 'page' | 'department' | 'faculty' | 'document' | 'notice';
+  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni';
   title: string;
   subtitle: string;
   url: string;
   meta: string;
 }
+

@@ -11,11 +11,12 @@ if (currentUser()) {
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
-    $email = trim($_POST['email'] ?? '');
-    $pass  = $_POST['password'] ?? '';
+    $email = trim((string)($_POST['email'] ?? ''));
+    $pass  = (string)($_POST['password'] ?? '');
 
     $pdo = getDB();
     try {
+        ensureCmsSchemaUpgraded($pdo);
         $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
         $stmt->execute([$email]);
         $user = $stmt->fetch();
@@ -46,13 +47,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Invalid credentials or inactive account. If deploying for the first time, run setup.php to verify DB & passwords.';
     }
 }
+
+$demoAccounts = [
+    ['label' => 'Super Admin', 'email' => 'admin@svcoer.edu.in', 'pass' => 'Admin@123'],
+    ['label' => 'Content Editor / PRO', 'email' => 'pro@svcoer.edu.in', 'pass' => 'Editor@123'],
+    ['label' => 'CSE Dept Admin', 'email' => 'hod.cse@svcoer.edu.in', 'pass' => 'Dept@123'],
+    ['label' => 'IQAC Officer', 'email' => 'iqac@svcoer.edu.in', 'pass' => 'Iqac@123'],
+    ['label' => 'Controller of Examinations (CoE)', 'email' => 'coe@coe.sveri.ac.in', 'pass' => 'Exam@123'],
+];
 ?>
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CMS Admin Login</title>
+  <title>Staff &amp; Admin Portal — Enterprise RBAC CMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <link id="svcoer-login-css" rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
   <script>
     (function () {
@@ -75,38 +86,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     })();
   </script>
 </head>
-<body style="display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem;">
-  <form method="post" class="card" style="width:100%;max-width:440px;">
-    <h1 style="margin-top:0;">SVCOER CMS Admin Login</h1>
-    <?php if ($error): ?>
-      <div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:0.65rem;border-radius:6px;font-size:0.85rem;margin-bottom:0.75rem;">
-        <?= e($error) ?>
+<body class="login-shell">
+  <div class="login-card">
+    <div class="login-head">
+      <div>
+        <p class="login-eyebrow">Enterprise RBAC CMS</p>
+        <h1 class="login-title">Staff &amp; Admin Portal</h1>
       </div>
-    <?php endif; ?>
-    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-    <label style="display:block;margin-bottom:0.75rem;">
-      <span style="display:block;font-size:0.8rem;font-weight:600;">Email</span>
-      <input type="email" name="email" required placeholder="admin@svcoer.edu.in" style="width:100%;padding:0.5rem;border:1px solid var(--border-color);border-radius:6px;">
-    </label>
-    <label style="display:block;margin-bottom:1rem;">
-      <span style="display:block;font-size:0.8rem;font-weight:600;">Password</span>
-      <input type="password" name="password" required placeholder="••••••••" style="width:100%;padding:0.5rem;border:1px solid var(--border-color);border-radius:6px;">
-    </label>
-    <button type="submit" class="btn-primary" style="width:100%;justify-content:center;">Sign In</button>
-    <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border-color);font-size:0.78rem;color:var(--text-muted);">
-      <strong>Default Accounts:</strong><br>
-      Super Admin: <code>admin@svcoer.edu.in</code> / <code>Admin@123</code><br>
-      PRO Editor: <code>pro@svcoer.edu.in</code> / <code>Editor@123</code><br>
-      CSE Dept: <code>hod.cse@svcoer.edu.in</code> / <code>Dept@123</code><br>
-      IQAC Officer: <code>iqac@svcoer.edu.in</code> / <code>Iqac@123</code><br>
-      CoE (Exam Cell): <code>coe@coe.sveri.ac.in</code> / <code>Exam@123</code>
+      <a href="<?= e(baseUrl('index.php')) ?>" class="login-exit">&larr; Public Site</a>
     </div>
-    <p style="margin-top:0.75rem;font-size:0.8rem;display:flex;justify-content:space-between;">
-      <a href="<?= e(baseUrl('index.php')) ?>">&larr; Back to Public Website</a>
+
+    <?php if ($error): ?>
+      <div role="alert" class="alert-err" style="font-size:0.78rem;padding:0.65rem 0.85rem;"><?= e($error) ?></div>
+    <?php endif; ?>
+
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <label class="login-field" for="login-email">
+        <span class="login-label">Institutional Email</span>
+        <input id="login-email" class="login-input" type="email" name="email" required value="<?= e($_POST['email'] ?? '') ?>" placeholder="admin@svcoer.edu.in">
+      </label>
+      <label class="login-field" for="login-password">
+        <span class="login-label">Password</span>
+        <input id="login-password" class="login-input" type="password" name="password" required placeholder="••••••••">
+      </label>
+      <button type="submit" class="login-submit">Sign In to Dashboard</button>
+    </form>
+
+    <div class="login-demo-box">
+      <p class="login-demo-title">RBAC Demo Accounts (Click to Fill):</p>
+      <div class="login-demo-grid">
+        <?php foreach ($demoAccounts as $idx => $acc): ?>
+          <button
+            type="button"
+            class="login-demo-btn<?= $idx === 4 ? ' is-span-2' : '' ?>"
+            data-email="<?= e($acc['email']) ?>"
+            data-pass="<?= e($acc['pass']) ?>"
+          >
+            <span class="login-demo-role"><?= e($acc['label']) ?></span>
+            <span class="login-demo-email"><?= e($acc['email']) ?></span>
+          </button>
+        <?php endforeach; ?>
+      </div>
       <?php if (file_exists(__DIR__ . '/../setup.php')): ?>
-        <a href="<?= e(baseUrl('setup.php')) ?>">First-Time Setup Check &rarr;</a>
+        <p style="margin:0.85rem 0 0;font-size:0.74rem;text-align:right;">
+          <a href="<?= e(baseUrl('setup.php')) ?>" style="color:#57534E;text-decoration:none;">First-Time Setup Check &rarr;</a>
+        </p>
       <?php endif; ?>
-    </p>
-  </form>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var btns = document.querySelectorAll('.login-demo-btn');
+      var emailEl = document.getElementById('login-email');
+      var passEl = document.getElementById('login-password');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].addEventListener('click', function () {
+          if (emailEl) emailEl.value = this.getAttribute('data-email') || '';
+          if (passEl) passEl.value = this.getAttribute('data-pass') || '';
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

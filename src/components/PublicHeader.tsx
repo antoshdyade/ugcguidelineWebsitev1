@@ -105,8 +105,8 @@ export function PublicHeader({
     .filter((c) => c.showInMenu !== false)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const primaryMenuCategories = visibleMenuCategories.slice(0, 7);
-  const overflowMenuCategories = visibleMenuCategories.slice(7);
+  const primaryMenuCategories = visibleMenuCategories.slice(0, 6);
+  const overflowMenuCategories = visibleMenuCategories.slice(6);
 
   const dteDisplay = (settings.dteCode || 'EN-6220').replace(/^EN-/i, '');
 
@@ -462,7 +462,7 @@ export function PublicHeader({
       >
         <div className="max-w-[1380px] mx-auto px-4">
           {/* Desktop Single-Row Nav */}
-          <ul className="hidden lg:flex items-center gap-0.5 py-1">
+          <ul className="hidden lg:flex flex-wrap items-center gap-0.5 py-1">
             <li>
               <button
                 type="button"
@@ -517,6 +517,18 @@ export function PublicHeader({
                           <span>{cat.name}</span>
                           <span>Portal &rarr;</span>
                         </button>
+                        {cat.slug === 'alumni' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenDropdown(null);
+                              onNavigate('/alumni');
+                            }}
+                            className="w-full text-left px-2.5 py-2 text-xs font-bold rounded bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 mb-1"
+                          >
+                            Interactive Alumni Network, Jobs &amp; Registration &rarr;
+                          </button>
+                        )}
                         <ul className="space-y-0.5 max-h-80 overflow-y-auto">
                           {catPages.map((pg) => (
                             <li key={pg.id}>
@@ -624,6 +636,17 @@ export function PublicHeader({
             <li>
               <button
                 type="button"
+                onClick={() => onNavigate('/alumni')}
+                className={`px-2.5 py-2 text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                  currentPath.startsWith('/alumni') ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
+                }`}
+              >
+                Alumni
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
                 onClick={() => onNavigate('/gallery')}
                 className={`px-2.5 py-2 text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
                   currentPath === '/gallery' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
@@ -663,6 +686,16 @@ export function PublicHeader({
                   type="button"
                   onClick={() => {
                     setMobileMenuOpen(false);
+                    onNavigate('/alumni');
+                  }}
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-amber-300 text-slate-950 font-semibold"
+                >
+                  Alumni Network
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
                     onNavigate('/quick-links');
                   }}
                   className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
@@ -685,7 +718,7 @@ export function PublicHeader({
                     setMobileMenuOpen(false);
                     onNavigate('/contact');
                   }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900 col-span-2"
                 >
                   {t('contact')}
                 </button>

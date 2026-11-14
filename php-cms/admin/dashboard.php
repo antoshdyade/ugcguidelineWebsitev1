@@ -99,6 +99,12 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <p style="font-size:0.82rem;color:#57534E;margin:0;">Manage Statutory Officers, Principal, CoE, custom groups &amp; order.</p>
     </a>
   <?php endif; ?>
+  <?php if (canAccessResource($user, 'alumni')): ?>
+    <a href="<?= e(baseUrl('admin/manage_alumni.php')) ?>" class="admin-stat-card">
+      <h3 style="margin:0 0 0.3rem;">Alumni Network &amp; Jobs</h3>
+      <p style="font-size:0.82rem;color:#57534E;margin:0;">Verify alumni registrations, moderate job referrals &amp; manage chapter meets.</p>
+    </a>
+  <?php endif; ?>
   <?php if (canAccessResource($user, 'gallery')): ?>
     <a href="<?= e(baseUrl('admin/manage_gallery.php')) ?>" class="admin-stat-card">
       <h3 style="margin:0 0 0.3rem;">Picture Gallery</h3>

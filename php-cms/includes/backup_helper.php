@@ -24,6 +24,9 @@ function backupTablesList(): array
         'gallery_photos',
         'telephone_directory',
         'custom_home_components',
+        'alumni_profiles',
+        'alumni_jobs',
+        'alumni_events',
     ];
 }
 
@@ -453,3 +456,518 @@ function runScheduledBackupIfDue(PDO $pdo, string $actorEmail = 'scheduler@svcoe
     kvSet($pdo, 'backup_schedule', $schedule);
     return ['ran' => true, 'record' => $rec, 'schedule' => $schedule];
 }
+
+/**
+ * Pure-PHP ZIP Writer/Reader fallback when ext-zip (ZipArchive) is not enabled on Webmin.
+ */
+final class SvcoerMiniZip
+{
+    public static function writeFile(string $destPath, array $entries): bool
+    {
+        $fh = @fopen($destPath, 'wb');
+        if (!$fh) {
+            return false;
+        }
+        $centralDir = '';
+        $offset = 0;
+        $count = 0;
+        foreach ($entries as $name => $rawData) {
+            $name = ltrim(str_replace('\\', '/', (string)$name), '/');
+            if ($name === '' || str_contains($name, '..')) {
+                continue;
+            }
+            $data = (string)$rawData;
+            $uncompressedLen = strlen($data);
+            $crc = crc32($data);
+            $method = 0;
+            $compressed = $data;
+            if ($uncompressedLen > 64 && function_exists('gzdeflate')) {
+                $def = @gzdeflate($data, 6);
+                if ($def !== false && strlen($def) < $uncompressedLen) {
+                    $method = 8;
+                    $compressed = $def;
+                }
+            }
+            $compLen = strlen($compressed);
+            $nameLen = strlen($name);
+            $dosTime = 0x0000;
+            $dosDate = 0x5421;
+
+            $localHeader = pack(
+                'VvvvvvVVVvv',
+                0x04034b50,
+                20,
+                0x0800,
+                $method,
+                $dosTime,
+                $dosDate,
+                $crc,
+                $compLen,
+                $uncompressedLen,
+                $nameLen,
+                0
+            ) . $name . $compressed;
+
+            fwrite($fh, $localHeader);
+
+            $centralHeader = pack(
+                'VvvvvvvVVVvvvvvVV',
+                0x02014b50,
+                20,
+                20,
+                0x0800,
+                $method,
+                $dosTime,
+                $dosDate,
+                $crc,
+                $compLen,
+                $uncompressedLen,
+                $nameLen,
+                0,
+                0,
+                0,
+                0,
+                0,
+                $offset
+            ) . $name;
+
+            $centralDir .= $centralHeader;
+            $offset += strlen($localHeader);
+            $count++;
+        }
+
+        $eocd = pack(
+            'VvvvvVVv',
+            0x06054b50,
+            0,
+            0,
+            $count,
+            $count,
+            strlen($centralDir),
+            $offset,
+            0
+        );
+        fwrite($fh, $centralDir . $eocd);
+        fclose($fh);
+        return true;
+    }
+
+    public static function readEntries(string $zipPath): array
+    {
+        $bin = @file_get_contents($zipPath);
+        if ($bin === false || strlen($bin) < 22) {
+            return [];
+        }
+        $eocdPos = strrpos($bin, "\x50\x4b\x05\x06");
+        if ($eocdPos === false || $eocdPos + 22 > strlen($bin)) {
+            return [];
+        }
+        $eocd = unpack('Vsig/vdisk/vcdDisk/vdiskEntries/vtotalEntries/VcdSize/VcdOffset/vcommentLen', substr($bin, $eocdPos, 22));
+        if (!$eocd) {
+            return [];
+        }
+        $pos = (int)$eocd['cdOffset'];
+        $total = (int)$eocd['totalEntries'];
+        $out = [];
+        for ($i = 0; $i < $total; $i++) {
+            if ($pos + 46 > strlen($bin)) {
+                break;
+            }
+            $hdr = unpack(
+                'Vsig/vverMade/vverNeed/vflags/vmethod/vmtime/vmdate/Vcrc/VcompSize/VuncompSize/vnameLen/vextraLen/vcommentLen/vdiskStart/vintAttr/VextAttr/VlocalOffset',
+                substr($bin, $pos, 46)
+            );
+            if (!$hdr || $hdr['sig'] !== 0x02014b50) {
+                break;
+            }
+            $name = substr($bin, $pos + 46, (int)$hdr['nameLen']);
+            $pos += 46 + (int)$hdr['nameLen'] + (int)$hdr['extraLen'] + (int)$hdr['commentLen'];
+
+            $lOffset = (int)$hdr['localOffset'];
+            if ($lOffset + 30 > strlen($bin)) {
+                continue;
+            }
+            $lh = unpack('Vsig/vver/vflags/vmethod/vmtime/vmdate/Vcrc/VcompSize/VuncompSize/vnameLen/vextraLen', substr($bin, $lOffset, 30));
+            if (!$lh || $lh['sig'] !== 0x04034b50) {
+                continue;
+            }
+            $dataOffset = $lOffset + 30 + (int)$lh['nameLen'] + (int)$lh['extraLen'];
+            $compSize = (int)$hdr['compSize'];
+            if ($dataOffset + $compSize > strlen($bin)) {
+                continue;
+            }
+            $payload = substr($bin, $dataOffset, $compSize);
+            if ((int)$hdr['method'] === 8 && function_exists('gzinflate')) {
+                $dec = @gzinflate($payload);
+                if ($dec !== false) {
+                    $out[$name] = $dec;
+                }
+            } elseif ((int)$hdr['method'] === 0) {
+                $out[$name] = $payload;
+            }
+        }
+        return $out;
+    }
+}
+
+function isSafeMigrationRestoreAsset(string $entryName): ?string
+{
+    $norm = ltrim(str_replace('\\', '/', $entryName), '/');
+    if ($norm === '' || str_contains($norm, "\0") || str_contains($norm, '..')) {
+        return null;
+    }
+    if (str_starts_with($norm, 'code/')) {
+        $norm = substr($norm, 5);
+    }
+    $isUpload = str_starts_with($norm, 'uploads/');
+    $isAssetImg = str_starts_with($norm, 'assets/images/');
+    if (!$isUpload && !$isAssetImg) {
+        return null;
+    }
+    $base = basename($norm);
+    if ($base === '' || str_starts_with($base, '.')) {
+        return null;
+    }
+    $parts = explode('.', strtolower($base));
+    if (count($parts) < 2) {
+        return null;
+    }
+    $blocked = ['php', 'phtml', 'php3', 'php4', 'php5', 'phar', 'exe', 'sh', 'bat', 'js', 'html', 'htm', 'svg', 'py', 'pl'];
+    foreach (array_slice($parts, 1) as $seg) {
+        if (in_array($seg, $blocked, true)) {
+            return null;
+        }
+    }
+    $ext = end($parts);
+    if (!in_array($ext, ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'docx', 'xlsx'], true)) {
+        return null;
+    }
+    return $norm;
+}
+
+function rewriteDomainUrlsRecursive(mixed $value, string $oldUrl, string $newUrl): mixed
+{
+    $oldNorm = rtrim(trim($oldUrl), '/');
+    $newNorm = rtrim(trim($newUrl), '/');
+    if ($oldNorm === '' || $newNorm === '' || $oldNorm === $newNorm) {
+        return $value;
+    }
+    if (is_string($value)) {
+        $res = str_replace($oldNorm, $newNorm, $value);
+        $oldHost = parse_url($oldNorm, PHP_URL_HOST);
+        $newHost = parse_url($newNorm, PHP_URL_HOST);
+        if ($oldHost && $newHost && $oldHost !== $newHost) {
+            $res = str_replace('https://' . $oldHost, $newNorm, $res);
+            $res = str_replace('http://' . $oldHost, $newNorm, $res);
+        }
+        return $res;
+    }
+    if (is_array($value)) {
+        $out = [];
+        foreach ($value as $k => $v) {
+            if ($k === 'password_hash') {
+                $out[$k] = $v;
+                continue;
+            }
+            $out[$k] = rewriteDomainUrlsRecursive($v, $oldNorm, $newNorm);
+        }
+        return $out;
+    }
+    return $value;
+}
+
+function buildMigrationSqlDump(PDO $pdo, array $snapshot): string
+{
+    $lines = [
+        '-- SVCOER CMS Full Site Migration SQL Dump',
+        '-- Generated: ' . gmdate('Y-m-d\TH:i:s\Z'),
+        'SET FOREIGN_KEY_CHECKS = 0;',
+        '',
+    ];
+    foreach (backupTablesList() as $tbl) {
+        $rows = $snapshot[$tbl] ?? [];
+        $lines[] = "DELETE FROM `$tbl`;";
+        if (!is_array($rows)) {
+            continue;
+        }
+        foreach ($rows as $row) {
+            if (!is_array($row) || empty($row)) {
+                continue;
+            }
+            $cols = [];
+            $vals = [];
+            foreach ($row as $k => $v) {
+                if (preg_match('/^[a-zA-Z0-9_]+$/', (string)$k) !== 1) {
+                    continue;
+                }
+                $cols[] = "`$k`";
+                $vals[] = $v === null ? 'NULL' : $pdo->quote((string)$v);
+            }
+            if (!empty($cols)) {
+                $lines[] = sprintf('INSERT INTO `%s` (%s) VALUES (%s);', $tbl, implode(', ', $cols), implode(', ', $vals));
+            }
+        }
+        $lines[] = '';
+    }
+    $lines[] = 'SET FOREIGN_KEY_CHECKS = 1;';
+    return implode("\n", $lines);
+}
+
+function collectPhpCmsFilesForMigration(): array
+{
+    $root = realpath(dirname(__DIR__));
+    if (!$root) {
+        return ['code' => [], 'media' => []];
+    }
+    $codeEntries = [];
+    $mediaEntries = [];
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)
+    );
+    foreach ($it as $file) {
+        if (!$file->isFile()) {
+            continue;
+        }
+        $full = str_replace('\\', '/', $file->getPathname());
+        $rootNorm = str_replace('\\', '/', $root);
+        $rel = ltrim(substr($full, strlen($rootNorm)), '/');
+
+        if (
+            str_starts_with($rel, 'backups/')
+            || str_starts_with($rel, 'uploads/.sessions')
+            || str_starts_with($rel, '.git/')
+            || $rel === 'config/config.local.php'
+        ) {
+            continue;
+        }
+        $data = @file_get_contents($full);
+        if ($data === false) {
+            continue;
+        }
+        if (str_starts_with($rel, 'uploads/') || str_starts_with($rel, 'assets/images/')) {
+            $mediaEntries[$rel] = $data;
+        } else {
+            $codeEntries['code/' . $rel] = $data;
+        }
+    }
+    return ['code' => $codeEntries, 'media' => $mediaEntries];
+}
+
+function createFullSiteMigrationZip(PDO $pdo, string $actorEmail, string $sourceOrigin = ''): array
+{
+    $dir = ensureBackupsStorage();
+    $snapshot = captureCmsSnapshot($pdo);
+    $kvExtras = [
+        'alumni_settings' => kvGet($pdo, 'alumni_settings', defaultAlumniSettings()),
+        'upload_policy'   => kvGet($pdo, 'upload_policy', null),
+    ];
+
+    $id = 'mig-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(3));
+    $fileName = 'svcoer-site-migration-' . gmdate('Ymd-His') . '.zip';
+    $createdAt = gmdate('Y-m-d\TH:i:s\Z');
+    $dataPayload = [
+        'format'       => 'svcoer-cms-backup',
+        'version'      => 2,
+        'id'           => $id,
+        'mode'         => 'full',
+        'archiveType'  => 'full_site_migration',
+        'createdAt'    => $createdAt,
+        'createdBy'    => $actorEmail,
+        'entityCounts' => countSnapshotEntities($snapshot),
+        'kvSettings'   => $kvExtras,
+        'data'         => $snapshot,
+    ];
+    $dataJson = json_encode($dataPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $checksum = hash('sha256', (string)$dataJson);
+
+    $files = collectPhpCmsFilesForMigration();
+    $manifest = [
+        'format'        => 'svcoer-site-migration',
+        'version'       => 1,
+        'platform'      => 'php-mysql',
+        'createdAt'     => $createdAt,
+        'createdBy'     => $actorEmail,
+        'sourceOrigin'  => $sourceOrigin,
+        'sourceBaseUrl' => getBaseUrl(),
+        'dataChecksum'  => $checksum,
+        'mediaCount'    => count($files['media']),
+        'codeCount'     => count($files['code']),
+        'entityCounts'  => $dataPayload['entityCounts'],
+    ];
+
+    $allEntries = array_merge($files['code'], $files['media'], [
+        'migration-manifest.json' => json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'migration-data.json'     => $dataJson,
+        'database-dump.sql'       => buildMigrationSqlDump($pdo, $snapshot),
+    ]);
+
+    $filePath = $dir . '/' . $fileName;
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
+            foreach ($allEntries as $entryName => $entryContent) {
+                $zip->addFromString($entryName, (string)$entryContent);
+            }
+            $zip->close();
+        } else {
+            SvcoerMiniZip::writeFile($filePath, $allEntries);
+        }
+    } else {
+        SvcoerMiniZip::writeFile($filePath, $allEntries);
+    }
+
+    $record = [
+        'id'             => $id,
+        'fileName'       => $fileName,
+        'mode'           => 'full',
+        'archiveType'    => 'full_site_migration',
+        'destination'    => 'local',
+        'createdAt'      => $createdAt,
+        'createdBy'      => $actorEmail,
+        'sizeBytes'      => (int)@filesize($filePath),
+        'checksum'       => $checksum,
+        'mediaCount'     => count($files['media']),
+        'codeCount'      => count($files['code']),
+        'entityCounts'   => $dataPayload['entityCounts'],
+        'transferStatus' => 'Full Site Migration Package (Code + Data + Media)',
+        'transferOk'     => true,
+    ];
+
+    $index = kvGet($pdo, 'backup_index', []);
+    if (!is_array($index)) {
+        $index = [];
+    }
+    array_unshift($index, $record);
+    kvSet($pdo, 'backup_index', $index);
+
+    return $record;
+}
+
+function readZipMigrationEntries(string $zipPath): array
+{
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath) === true) {
+            $entries = [];
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = $zip->getNameIndex($i);
+                if ($name !== false && !str_ends_with($name, '/')) {
+                    $content = $zip->getFromIndex($i);
+                    if ($content !== false) {
+                        $entries[$name] = $content;
+                    }
+                }
+            }
+            $zip->close();
+            return $entries;
+        }
+    }
+    return SvcoerMiniZip::readEntries($zipPath);
+}
+
+function inspectSiteMigrationZip(string $zipPath): array
+{
+    $entries = readZipMigrationEntries($zipPath);
+    if (empty($entries)) {
+        return ['valid' => false, 'error' => 'Unable to read .zip archive or archive is empty.'];
+    }
+    $dataRaw = $entries['migration-data.json'] ?? ($entries['database-backup.json'] ?? null);
+    if ($dataRaw === null) {
+        return ['valid' => false, 'error' => 'Archive does not contain migration-data.json or database-backup.json.'];
+    }
+    $pkg = json_decode((string)$dataRaw, true);
+    $val = validateBackupPackage($pkg);
+    if (!$val['valid']) {
+        return $val;
+    }
+    $manifest = [];
+    if (!empty($entries['migration-manifest.json'])) {
+        $decMan = json_decode((string)$entries['migration-manifest.json'], true);
+        if (is_array($decMan)) {
+            $manifest = $decMan;
+        }
+    }
+    $mediaFiles = [];
+    $codeFiles = 0;
+    foreach ($entries as $name => $_content) {
+        if (isSafeMigrationRestoreAsset($name) !== null) {
+            $mediaFiles[] = $name;
+        } elseif (str_starts_with($name, 'code/')) {
+            $codeFiles++;
+        }
+    }
+    return [
+        'valid'         => true,
+        'mode'          => $val['mode'],
+        'createdAt'     => $val['createdAt'],
+        'checksum'      => $val['checksum'],
+        'counts'        => $val['counts'],
+        'sourceOrigin'  => (string)($manifest['sourceOrigin'] ?? ''),
+        'sourceBaseUrl' => (string)($manifest['sourceBaseUrl'] ?? ''),
+        'mediaCount'    => count($mediaFiles),
+        'codeCount'     => $codeFiles,
+    ];
+}
+
+function restoreFromSiteMigrationZip(
+    PDO $pdo,
+    string $zipPath,
+    string $actorEmail,
+    string $oldBaseUrl = '',
+    string $newBaseUrl = '',
+    bool $restoreMedia = true
+): array {
+    $entries = readZipMigrationEntries($zipPath);
+    $dataRaw = $entries['migration-data.json'] ?? ($entries['database-backup.json'] ?? null);
+    if ($dataRaw === null) {
+        return ['ok' => false, 'error' => 'Migration ZIP missing database payload JSON.'];
+    }
+    $pkg = json_decode((string)$dataRaw, true);
+    if (!is_array($pkg)) {
+        return ['ok' => false, 'error' => 'Invalid JSON payload inside migration ZIP.'];
+    }
+
+    if ($oldBaseUrl !== '' && $newBaseUrl !== '') {
+        $pkg['data'] = rewriteDomainUrlsRecursive($pkg['data'] ?? [], $oldBaseUrl, $newBaseUrl);
+        if (!empty($pkg['kvSettings']) && is_array($pkg['kvSettings'])) {
+            $pkg['kvSettings'] = rewriteDomainUrlsRecursive($pkg['kvSettings'], $oldBaseUrl, $newBaseUrl);
+        }
+    }
+
+    $res = restoreFromBackupPackage($pdo, $pkg, $actorEmail);
+    if (!$res['ok']) {
+        return $res;
+    }
+
+    if (!empty($pkg['kvSettings']) && is_array($pkg['kvSettings'])) {
+        if (!empty($pkg['kvSettings']['alumni_settings']) && is_array($pkg['kvSettings']['alumni_settings'])) {
+            kvSet($pdo, 'alumni_settings', $pkg['kvSettings']['alumni_settings']);
+        }
+        if (!empty($pkg['kvSettings']['upload_policy']) && is_array($pkg['kvSettings']['upload_policy'])) {
+            kvSet($pdo, 'upload_policy', $pkg['kvSettings']['upload_policy']);
+        }
+    }
+
+    $restoredFilesCount = 0;
+    if ($restoreMedia) {
+        $root = dirname(__DIR__);
+        foreach ($entries as $entryName => $rawBytes) {
+            $safeRel = isSafeMigrationRestoreAsset($entryName);
+            if ($safeRel === null) {
+                continue;
+            }
+            $dest = $root . '/' . $safeRel;
+            $destDir = dirname($dest);
+            if (!is_dir($destDir)) {
+                @mkdir($destDir, 0755, true);
+            }
+            if (@file_put_contents($dest, $rawBytes) !== false) {
+                $restoredFilesCount++;
+            }
+        }
+    }
+
+    $res['restoredMediaCount'] = $restoredFilesCount;
+    return $res;
+}
+

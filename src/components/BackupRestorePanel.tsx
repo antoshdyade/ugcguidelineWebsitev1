@@ -4,6 +4,8 @@ import {
   Clock,
   Download,
   FileUp,
+  FolderArchive,
+  Globe,
   HardDrive,
   RefreshCw,
   RotateCcw,
@@ -44,13 +46,23 @@ export function BackupRestorePanel({
   const [createDest, setCreateDest] = useState<BackupDestination>('local');
   const [createNotes, setCreateNotes] = useState('');
 
-  // Import & Restore state
+  // Import & Restore state (.json OR full-site .zip)
   const [restoreFileName, setRestoreFileName] = useState('');
+  const [restoreKind, setRestoreKind] = useState<'json' | 'zip' | null>(null);
   const [restorePayload, setRestorePayload] = useState<unknown>(null);
+  const [restoreZipBase64, setRestoreZipBase64] = useState<string>('');
+  const [oldDomainUrl, setOldDomainUrl] = useState<string>('');
+  const [newDomainUrl, setNewDomainUrl] = useState<string>(() =>
+    typeof window !== 'undefined' ? window.location.origin : '',
+  );
+  const [restoreMediaFiles, setRestoreMediaFiles] = useState<boolean>(true);
   const [restorePreview, setRestorePreview] = useState<{
     mode: string;
     createdAt: string;
     counts: Record<string, number>;
+    mediaCount?: number;
+    codeFilesCount?: number;
+    sourceOrigin?: string;
   } | null>(null);
   const [confirmRestoreServerId, setConfirmRestoreServerId] = useState<string | null>(null);
 
@@ -106,21 +118,75 @@ export function BackupRestorePanel({
     }
   };
 
+  const resetRestoreSelection = () => {
+    setRestoreKind(null);
+    setRestorePayload(null);
+    setRestoreZipBase64('');
+    setRestorePreview(null);
+    setRestoreFileName('');
+  };
+
   const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     setRestoreFileName(file.name);
+
+    const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
     const reader = new FileReader();
+
+    if (isZip) {
+      reader.onload = async () => {
+        const b64 = String(reader.result || '');
+        setBusyAction(true);
+        try {
+          const preview = await adminFetch<{
+            sourceOrigin: string;
+            createdAt: string;
+            databaseSummary: Record<string, number>;
+            mediaCount: number;
+            codeFilesCount: number;
+          }>('/api/admin/backups/inspect-site', 'POST', { base64Zip: b64 });
+
+          setRestoreKind('zip');
+          setRestoreZipBase64(b64);
+          setRestorePayload(null);
+          setOldDomainUrl(preview.sourceOrigin || '');
+          setNewDomainUrl(typeof window !== 'undefined' ? window.location.origin : '');
+          setRestorePreview({
+            mode: 'complete-site-zip',
+            createdAt: preview.createdAt || new Date().toISOString(),
+            counts: preview.databaseSummary || {},
+            mediaCount: preview.mediaCount,
+            codeFilesCount: preview.codeFilesCount,
+            sourceOrigin: preview.sourceOrigin,
+          });
+          notify(
+            'ok',
+            `Verified Site Migration ZIP (${preview.mediaCount} photos/media, ${preview.codeFilesCount} code files). Ready to migrate!`,
+          );
+        } catch (err) {
+          resetRestoreSelection();
+          notify('err', (err as Error).message);
+        } finally {
+          setBusyAction(false);
+        }
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result || ''));
         const check = validateBackupPackage(parsed);
         if (!check.valid || !check.pkg) {
-          setRestorePayload(null);
-          setRestorePreview(null);
+          resetRestoreSelection();
           notify('err', check.reason || 'Invalid backup file format.');
           return;
         }
+        setRestoreKind('json');
+        setRestoreZipBase64('');
         setRestorePayload(parsed);
         setRestorePreview({
           mode: check.pkg.mode,
@@ -129,8 +195,7 @@ export function BackupRestorePanel({
         });
         notify('ok', `Validated "${file.name}" (${check.pkg.mode.toUpperCase()} archive). Ready to restore.`);
       } catch {
-        setRestorePayload(null);
-        setRestorePreview(null);
+        resetRestoreSelection();
         notify('err', 'Could not parse JSON from uploaded backup file.');
       }
     };
@@ -138,20 +203,60 @@ export function BackupRestorePanel({
   };
 
   const handleRestoreUploaded = async () => {
-    if (!restorePayload) return;
     setBusyAction(true);
     try {
-      const res = await adminFetch<{ restoredMode: string; safetyFilename: string }>(
-        '/api/admin/backups/restore',
-        'POST',
-        { packageData: restorePayload },
-      );
-      setRestorePayload(null);
-      setRestorePreview(null);
-      setRestoreFileName('');
+      if (restoreKind === 'zip' && restoreZipBase64) {
+        const res = await adminFetch<{
+          restoredMediaCount: number;
+          safetyFilename: string;
+          rewrittenFrom: string | null;
+          rewrittenTo: string | null;
+        }>('/api/admin/backups/import-site', 'POST', {
+          base64Zip: restoreZipBase64,
+          oldDomainUrl,
+          newDomainUrl,
+          restoreMedia: restoreMediaFiles,
+        });
+        resetRestoreSelection();
+        await loadBackups();
+        await onRestored();
+        notify(
+          'ok',
+          `Full site migrated! Restored DB + ${res.restoredMediaCount} media/photos${
+            res.rewrittenFrom && res.rewrittenTo ? ` (${res.rewrittenFrom} -> ${res.rewrittenTo})` : ''
+          }. Safety snapshot: ${res.safetyFilename}.`,
+        );
+      } else if (restorePayload) {
+        const res = await adminFetch<{ restoredMode: string; safetyFilename: string }>(
+          '/api/admin/backups/restore',
+          'POST',
+          { packageData: restorePayload },
+        );
+        resetRestoreSelection();
+        await loadBackups();
+        await onRestored();
+        notify('ok', `Restored ${res.restoredMode} archive! Safety backup saved as ${res.safetyFilename}.`);
+      }
+    } catch (err) {
+      notify('err', (err as Error).message);
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleCreateCompleteSiteZip = async () => {
+    setBusyAction(true);
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await adminFetch<{ record: BackupRecord }>('/api/admin/backups/export-site', 'POST', {
+        sourceBaseUrl: origin,
+      });
       await loadBackups();
-      await onRestored();
-      notify('ok', `Restored ${res.restoredMode} archive! Safety backup saved as ${res.safetyFilename}.`);
+      notify(
+        'ok',
+        `Complete Site Migration ZIP ready: ${res.record.filename} (${res.record.mediaCount ?? 0} media files, ${res.record.codeCount ?? 0} code files).`,
+      );
+      await downloadAuthenticatedFile(`/api/admin/backups/${res.record.id}/download`, res.record.filename);
     } catch (err) {
       notify('err', (err as Error).message);
     } finally {
@@ -180,6 +285,29 @@ export function BackupRestorePanel({
 
   return (
     <div className="space-y-6">
+      {/* Complete Website Migration Package (.zip: Code + DB + All Uploaded Photos/Media) */}
+      <div className="rounded-xl border border-amber-300 dark:border-amber-800/70 bg-amber-50/40 dark:bg-amber-950/20 p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-base font-bold flex items-center gap-2 text-stone-900 dark:text-white">
+            <FolderArchive className="w-4 h-4 text-amber-600" />
+            <span>Complete Website Migration Package (.zip — Code + Data + All Photos/Media)</span>
+          </h2>
+          <p className="text-xs text-stone-600 dark:text-slate-300 max-w-3xl">
+            Bundles full application code (React + PHP/Webmin source), structured database snapshot (including Alumni Network, pages &amp; departments), and every uploaded photograph &amp; PDF into a single portable <code>.zip</code> archive for effortless cross-domain migration. Secrets and credentials are automatically excluded.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={busyAction}
+          onClick={handleCreateCompleteSiteZip}
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold text-white shrink-0 disabled:opacity-50"
+          style={{ backgroundColor: 'var(--primary-color)' }}
+        >
+          <FolderArchive className="w-4 h-4" />
+          <span>{busyAction ? 'Packaging Site ZIP...' : 'Export Complete Website (.zip)'}</span>
+        </button>
+      </div>
+
       {/* Top Action Row: Create Full / Incremental Backup + Instant Export */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <form
@@ -213,7 +341,7 @@ export function BackupRestorePanel({
                 <span>Create Backup &amp; Incremental Snapshot</span>
               </h2>
               <p className="text-xs text-stone-500">
-                Includes all CMS pages, departments, leadership, RBAC users, settings &amp; {uploadsCount} uploaded media files manifest.
+                Includes all CMS pages, departments, leadership, alumni, RBAC users, settings &amp; {uploadsCount} uploaded media files manifest.
               </p>
             </div>
           </div>
@@ -281,15 +409,15 @@ export function BackupRestorePanel({
           </div>
         </form>
 
-        {/* Import & Disaster Recovery Restore */}
+        {/* Cross-Domain Migration Import & Disaster Recovery Restore */}
         <div className="lg:col-span-6 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
           <div>
             <h2 className="text-base font-bold flex items-center gap-2">
               <RotateCcw className="w-4 h-4 text-amber-600" />
-              <span>Import &amp; Restore Corrupted Website</span>
+              <span>Cross-Domain Import (.zip) &amp; Snapshot Restore (.json)</span>
             </h2>
             <p className="text-xs text-stone-500">
-              Upload any previously exported or downloaded <code>.json</code> full or incremental backup file. An automatic pre-restore safety backup is created before applying changes.
+              Upload a <code>.zip</code> Complete Website Migration package (restores database + all uploaded photos/media + rewrites old domain URLs) or any <code>.json</code> snapshot. A safety snapshot is always created automatically first.
             </p>
           </div>
 
@@ -298,29 +426,73 @@ export function BackupRestorePanel({
               <FileUp className="w-5 h-5 text-amber-600 shrink-0" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-stone-800 dark:text-slate-100 truncate">
-                  {restoreFileName || 'Choose .json backup package from local computer...'}
+                  {restoreFileName || 'Choose .zip Site Migration Package or .json Backup...'}
                 </p>
-                <p className="text-[11px] text-stone-500">Supports full snapshots &amp; incremental diff packages</p>
+                <p className="text-[11px] text-stone-500">Supports full .zip migration archives (Code + Data + Media) &amp; .json snapshots</p>
               </div>
             </div>
             <input
               type="file"
-              accept=".json,application/json"
+              accept=".zip,.json,application/zip,application/x-zip-compressed,application/json"
               onChange={handleImportFileChange}
               className="sr-only"
             />
           </label>
 
           {restorePreview && (
-            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 p-3.5 space-y-2.5">
+            <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 p-3.5 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span className="font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                  Verified {restorePreview.mode} Archive
+                  Verified {restoreKind === 'zip' ? 'Complete Site Migration ZIP' : `${restorePreview.mode} JSON Archive`}
                 </span>
                 <span className="text-stone-600 dark:text-slate-300 tabular-nums">
                   {restorePreview.createdAt.slice(0, 19).replace('T', ' ')}
                 </span>
               </div>
+
+              {restoreKind === 'zip' && (
+                <div className="space-y-2.5 text-xs border-t border-amber-200 dark:border-amber-800/60 pt-2.5">
+                  <div className="flex flex-wrap gap-3 font-semibold text-stone-700 dark:text-slate-200">
+                    <span>Photos &amp; Media: {restorePreview.mediaCount ?? 0} files</span>
+                    <span>Bundled Code Files: {restorePreview.codeFilesCount ?? 0} files</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold mb-0.5 flex items-center gap-1">
+                        <Globe className="w-3 h-3" /> Source Old Domain URL
+                      </label>
+                      <input
+                        type="text"
+                        value={oldDomainUrl}
+                        onChange={(e) => setOldDomainUrl(e.target.value)}
+                        placeholder="https://old-domain.edu.in"
+                        className="w-full px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold mb-0.5 flex items-center gap-1">
+                        <Globe className="w-3 h-3" /> Target New Domain URL
+                      </label>
+                      <input
+                        type="text"
+                        value={newDomainUrl}
+                        onChange={(e) => setNewDomainUrl(e.target.value)}
+                        placeholder="https://new-domain.ac.in"
+                        className="w-full px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                      />
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={restoreMediaFiles}
+                      onChange={(e) => setRestoreMediaFiles(e.target.checked)}
+                    />
+                    <span>Extract &amp; restore all uploaded photos, logos &amp; PDFs into /uploads/</span>
+                  </label>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-1.5 text-[11px]">
                 {Object.entries(restorePreview.counts).map(([key, count]) => (
                   <span
@@ -338,15 +510,11 @@ export function BackupRestorePanel({
                   onClick={handleRestoreUploaded}
                   className="px-3.5 py-1.5 rounded text-xs font-semibold bg-rose-700 text-white hover:bg-rose-800 disabled:opacity-50"
                 >
-                  Confirm &amp; Restore Website Now
+                  {busyAction ? 'Importing...' : restoreKind === 'zip' ? 'Import Site & Rewrite Domain URLs' : 'Confirm & Restore Website Now'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setRestorePayload(null);
-                    setRestorePreview(null);
-                    setRestoreFileName('');
-                  }}
+                  onClick={resetRestoreSelection}
                   className="px-3 py-1.5 rounded text-xs border border-stone-300 dark:border-slate-700"
                 >
                   Cancel
@@ -701,32 +869,34 @@ export function BackupRestorePanel({
                   >
                     Push Drive/Hook
                   </button>
-                  {confirmRestoreServerId === bk.id ? (
-                    <span className="inline-flex items-center gap-1">
+                  {bk.archiveType !== 'site-zip' && (
+                    confirmRestoreServerId === bk.id ? (
+                      <span className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={busyAction}
+                          onClick={() => handleRestoreServerBackup(bk.id)}
+                          className="px-2.5 py-1 rounded bg-rose-700 text-white font-semibold"
+                        >
+                          Confirm Restore
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRestoreServerId(null)}
+                          className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                        >
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
                       <button
                         type="button"
-                        disabled={busyAction}
-                        onClick={() => handleRestoreServerBackup(bk.id)}
-                        className="px-2.5 py-1 rounded bg-rose-700 text-white font-semibold"
+                        onClick={() => setConfirmRestoreServerId(bk.id)}
+                        className="px-2.5 py-1 rounded border border-amber-400 text-amber-800 dark:text-amber-300 font-semibold hover:bg-amber-50 dark:hover:bg-amber-950/30"
                       >
-                        Confirm Restore
+                        Restore
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmRestoreServerId(null)}
-                        className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
-                      >
-                        Cancel
-                      </button>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmRestoreServerId(bk.id)}
-                      className="px-2.5 py-1 rounded border border-amber-400 text-amber-800 dark:text-amber-300 font-semibold hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                    >
-                      Restore
-                    </button>
+                    )
                   )}
                   <button
                     type="button"
