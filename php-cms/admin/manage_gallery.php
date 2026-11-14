@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_album') {
         $coverUrl = 'assets/images/hero_campus.jpg';
         if (!empty($_FILES['cover_image']['name'])) {
-            $up = handleSecureUpload($_FILES['cover_image'], __DIR__ . '/../uploads');
+            $up = handleCmsUpload($pdo, $_FILES['cover_image'], __DIR__ . '/../uploads', 'photo');
             if ($up['ok']) $coverUrl = $up['file_url'];
             else $err = $up['error'];
         }
@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'add_photo') {
         $imgUrl = '';
         if (!empty($_FILES['photo']['name'])) {
-            $up = handleSecureUpload($_FILES['photo'], __DIR__ . '/../uploads');
+            $up = handleCmsUpload($pdo, $_FILES['photo'], __DIR__ . '/../uploads', 'photo');
             if ($up['ok']) $imgUrl = $up['file_url'];
             else $err = $up['error'];
         }

@@ -2269,6 +2269,9 @@ export function createSeedDatabase(): CmsDatabase {
         twitter: 'https://x.com',
       },
       mapEmbedQuery: 'Pandharpur,Maharashtra,India',
+      maxPhotoUploadMb: 2,
+      maxDocumentUploadMb: 10,
+      autoCropImages: true,
       homeSections: {
         showTicker: true,
         showSlider: true,

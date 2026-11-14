@@ -251,7 +251,7 @@ function handleSecureUpload(array $file, string $uploadDir, int $maxBytes = 1048
         return ['ok' => false, 'error' => 'Upload error code: ' . ($file['error'] ?? 'unknown')];
     }
     if ($file['size'] <= 0 || $file['size'] > $maxBytes) {
-        return ['ok' => false, 'error' => 'File exceeds allowed 10 MB limit.'];
+        return ['ok' => false, 'error' => 'File exceeds configured ' . formatBytes($maxBytes) . ' upload limit.'];
     }
 
     $original = basename($file['name']);
@@ -302,3 +302,30 @@ function handleSecureUpload(array $file, string $uploadDir, int $maxBytes = 1048
         'size'      => (int)$file['size'],
     ];
 }
+
+/**
+ * Policy-aware upload wrapper reading configured Max Photo (MB) & Max Document (MB) limits.
+ * $kind: 'photo' | 'document' | 'auto'
+ */
+function handleCmsUpload(PDO $pdo, array $file, string $uploadDir, string $kind = 'auto'): array
+{
+    $limits = function_exists('getUploadLimits')
+        ? getUploadLimits($pdo)
+        : ['max_photo_bytes' => 2097152, 'max_doc_bytes' => 10485760];
+
+    $ext = strtolower(pathinfo((string)($file['name'] ?? ''), PATHINFO_EXTENSION));
+    $resolvedKind = $kind;
+    if ($resolvedKind === 'auto') {
+        $resolvedKind = in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true) ? 'photo' : 'document';
+    }
+    if ($resolvedKind === 'photo' && !in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+        return ['ok' => false, 'error' => 'Only JPG, PNG, or WEBP image files are permitted for photo uploads.'];
+    }
+
+    $maxBytes = ($resolvedKind === 'photo')
+        ? (int)($limits['max_photo_bytes'] ?? 2097152)
+        : (int)($limits['max_doc_bytes'] ?? 10485760);
+
+    return handleSecureUpload($file, $uploadDir, $maxBytes);
+}
+

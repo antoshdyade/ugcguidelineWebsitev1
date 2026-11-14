@@ -70,6 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       var mainLk = document.getElementById('svcoer-login-css');
       if (mainLk) mainLk.addEventListener('error', ensureCss);
       window.addEventListener('DOMContentLoaded', ensureCss);
+      window.addEventListener('load', ensureCss);
+      setTimeout(ensureCss, 350);
     })();
   </script>
 </head>

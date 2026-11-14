@@ -25,13 +25,13 @@ if (empty($_FILES['file'])) {
     exit;
 }
 
-$res = handleSecureUpload($_FILES['file'], __DIR__ . '/../uploads');
+$pdo = getDB();
+$res = handleCmsUpload($pdo, $_FILES['file'], __DIR__ . '/../uploads', 'auto');
 if (!$res['ok']) {
     http_response_code(400);
     echo json_encode($res);
     exit;
 }
 
-$pdo = getDB();
 logAudit($pdo, $user, 'UPLOAD_MEDIA', 'Upload', $res['file_name']);
 echo json_encode($res);

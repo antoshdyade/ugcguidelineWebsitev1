@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add' || $action === 'update') {
         $photoUrl = trim($_POST['existing_photo'] ?? 'assets/images/principal.jpg');
         if (!empty($_FILES['photo']['name'])) {
-            $up = handleSecureUpload($_FILES['photo'], __DIR__ . '/../uploads');
+            $up = handleCmsUpload($pdo, $_FILES['photo'], __DIR__ . '/../uploads', 'photo');
             if ($up['ok']) $photoUrl = $up['file_url'];
             else $err = $up['error'];
         }

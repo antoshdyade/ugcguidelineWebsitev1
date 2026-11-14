@@ -1,7 +1,11 @@
 <?php
 declare(strict_types=1);
 $settings = getSiteSettings($pdo);
-$navCats = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_in_menu, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+try {
+    $navCats = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_in_menu, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+} catch (Throwable $exNav) {
+    $navCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
+}
 $navDepts = $pdo->query('SELECT id, slug, code, name FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $navPagesStmt = $pdo->query('SELECT id, category_id, slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC');
 $pagesByCat = [];
@@ -20,11 +24,13 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= e($pageTitle ?? $settings['institution_name']) ?></title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <link id="svcoer-public-css" rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
   <script>
+    window.SVCOER_BASE_URL = <?= json_encode(getBaseUrl(), JSON_UNESCAPED_SLASHES) ?>;
     (function () {
       var fallbackHref = <?= json_encode(baseUrl('admin/asset_proxy.php?f=css'), JSON_UNESCAPED_SLASHES) ?>;
+      var proxyImgBase = <?= json_encode(baseUrl('admin/asset_proxy.php?img='), JSON_UNESCAPED_SLASHES) ?>;
       function ensureCss() {
         var ready = getComputedStyle(document.documentElement).getPropertyValue('--svcoer-css-ready').trim();
         if (ready !== '1' && !document.getElementById('svcoer-proxy-css')) {
@@ -38,6 +44,22 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
       var mainLk = document.getElementById('svcoer-public-css');
       if (mainLk) mainLk.addEventListener('error', ensureCss);
       window.addEventListener('DOMContentLoaded', ensureCss);
+      window.addEventListener('load', ensureCss);
+      setTimeout(ensureCss, 350);
+
+      // Webmin resilience: auto-recover any 403/failed local image via PHP asset_proxy
+      document.addEventListener('error', function (ev) {
+        var t = ev && ev.target;
+        if (!t || t.tagName !== 'IMG' || t.dataset.proxyTried === '1') return;
+        var src = t.getAttribute('src') || '';
+        var idxAssets = src.indexOf('assets/images/');
+        var idxUploads = src.indexOf('uploads/');
+        var rel = idxAssets >= 0 ? src.slice(idxAssets) : (idxUploads >= 0 ? src.slice(idxUploads) : '');
+        if (!rel) return;
+        rel = rel.split('?')[0];
+        t.dataset.proxyTried = '1';
+        t.src = proxyImgBase + encodeURIComponent(rel);
+      }, true);
     })();
   </script>
   <style>
@@ -46,9 +68,6 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
       --secondary-color: <?= e($settings['secondary_color']) ?>;
     }
   </style>
-  <script>
-    window.SVCOER_BASE_URL = <?= json_encode(getBaseUrl(), JSON_UNESCAPED_SLASHES) ?>;
-  </script>
 </head>
 <body>
 <a href="#main-content" class="btn-primary sr-only-focus">Skip to main content</a>

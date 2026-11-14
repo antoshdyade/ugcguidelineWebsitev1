@@ -736,7 +736,7 @@
     });
     toolbar.appendChild(linkBtn);
 
-    // Inline Photo Uploader
+    // Inline Photo Uploader (with Auto-Crop & Max Photo Size Policy)
     var imgLabel = document.createElement('label');
     imgLabel.className = 'rte-tool-btn is-outlined';
     imgLabel.innerHTML = ICONS.image + ' <span>Upload Photo</span>';
@@ -745,19 +745,26 @@
     imgInput.type = 'file';
     imgInput.accept = 'image/jpeg,image/png,image/webp';
     imgInput.style.display = 'none';
-    imgInput.addEventListener('change', function () {
-      var file = imgInput.files && imgInput.files[0];
-      if (!file) return;
+
+    function uploadEditorImageFile(targetFile) {
+      var policy = window.SVCOER_UPLOAD_POLICY || {};
+      var maxPhotoMb = parseFloat(policy.maxPhotoMb) || 2;
+      var maxBytes = Math.round(maxPhotoMb * 1024 * 1024);
+      if (targetFile.size > maxBytes) {
+        showNotice('Photo "' + targetFile.name + '" exceeds configured ' + maxPhotoMb + ' MB upload limit.', true);
+        imgInput.value = '';
+        return;
+      }
       var fd = new FormData();
       fd.append('csrf_token', csrf);
-      fd.append('file', file);
+      fd.append('file', targetFile);
       var uploadUrl = textarea.getAttribute('data-upload-url') || resolveUrl('admin/upload_handler.php');
       fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data && data.ok && data.file_url) {
             var srcUrl = resolveUrl(data.file_url);
-            insertHtmlAtFocus('<figure class="cms-block" data-block="image" style="margin:1rem 0;"><img src="' + srcUrl + '" alt="' + file.name + '" style="max-width:100%;border-radius:10px;"><figcaption style="font-size:0.8rem;color:#57534E;margin-top:4px;">' + file.name + '</figcaption></figure><p><br></p>');
+            insertHtmlAtFocus('<figure class="cms-block" data-block="image" style="margin:1rem 0;"><img src="' + srcUrl + '" alt="' + targetFile.name + '" style="max-width:100%;border-radius:10px;"><figcaption style="font-size:0.8rem;color:#57534E;margin-top:4px;">' + targetFile.name + '</figcaption></figure><p><br></p>');
             showNotice('Photo uploaded & inserted: ' + data.file_url, false);
           } else {
             showNotice((data && data.error) || 'Image upload failed.', true);
@@ -765,6 +772,24 @@
         })
         .catch(function () { showNotice('Upload failed. Check uploads/ folder permissions.', true); })
         .finally(function () { imgInput.value = ''; });
+    }
+
+    imgInput.addEventListener('change', function () {
+      var file = imgInput.files && imgInput.files[0];
+      if (!file) return;
+      var policy = window.SVCOER_UPLOAD_POLICY || {};
+      var maxPhotoMb = parseFloat(policy.maxPhotoMb) || 2;
+      var autoCrop = policy.autoCrop !== false;
+      if (autoCrop && typeof window.svcoerOpenCropModal === 'function') {
+        window.svcoerOpenCropModal(
+          file,
+          { aspectRatio: '4:3', maxPhotoMb: maxPhotoMb },
+          function (croppedFile) { uploadEditorImageFile(croppedFile); },
+          function () { imgInput.value = ''; }
+        );
+      } else {
+        uploadEditorImageFile(file);
+      }
     });
     imgLabel.appendChild(imgInput);
     toolbar.appendChild(imgLabel);

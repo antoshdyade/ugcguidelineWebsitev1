@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdfUrl = trim($_POST['attached_pdf_url'] ?? '');
             $pdfLabel = trim($_POST['attached_pdf_label'] ?? '');
             if (!empty($_FILES['pdf_file']['name'])) {
-                $up = handleSecureUpload($_FILES['pdf_file'], __DIR__ . '/../uploads');
+                $up = handleCmsUpload($pdo, $_FILES['pdf_file'], __DIR__ . '/../uploads', 'document');
                 if ($up['ok']) {
                     $pdfUrl = $up['file_url'];
                     if ($pdfLabel === '') {

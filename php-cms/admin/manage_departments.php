@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_department' && $isFullDeptAdmin) {
         $heroUrl = 'assets/images/hero_robotics.jpg';
         if (!empty($_FILES['hero_image']['name'])) {
-            $up = handleSecureUpload($_FILES['hero_image'], __DIR__ . '/../uploads');
+            $up = handleCmsUpload($pdo, $_FILES['hero_image'], __DIR__ . '/../uploads', 'photo');
             if ($up['ok']) $heroUrl = $up['file_url'];
             else $err = $up['error'];
         }
@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'update_department') {
             $heroUrl = trim($_POST['existing_hero_image'] ?? 'assets/images/hero_robotics.jpg');
             if (!empty($_FILES['hero_image']['name'])) {
-                $up = handleSecureUpload($_FILES['hero_image'], __DIR__ . '/../uploads');
+                $up = handleCmsUpload($pdo, $_FILES['hero_image'], __DIR__ . '/../uploads', 'photo');
                 if ($up['ok']) $heroUrl = $up['file_url'];
                 else $err = $up['error'];
             }
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'update_library_schema') {
             $libPhoto = trim($_POST['existing_library_photo'] ?? 'assets/images/hero_library.jpg');
             if (!empty($_FILES['library_photo']['name'])) {
-                $up = handleSecureUpload($_FILES['library_photo'], __DIR__ . '/../uploads');
+                $up = handleCmsUpload($pdo, $_FILES['library_photo'], __DIR__ . '/../uploads', 'photo');
                 if ($up['ok']) $libPhoto = $up['file_url'];
                 else $err = $up['error'];
             }
@@ -148,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute([$spId, $deptId]);
             $row = $st->fetch();
             if ($row && !empty($_FILES['gallery_photo']['name'])) {
-                $up = handleSecureUpload($_FILES['gallery_photo'], __DIR__ . '/../uploads');
+                $up = handleCmsUpload($pdo, $_FILES['gallery_photo'], __DIR__ . '/../uploads', 'photo');
                 if ($up['ok']) {
                     $photos = !empty($row['photos_json']) ? json_decode((string)$row['photos_json'], true) : [];
                     if (!is_array($photos)) $photos = [];
@@ -185,13 +185,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($row) {
                 $itemPhoto = '';
                 if (!empty($_FILES['item_photo']['name'])) {
-                    $up = handleSecureUpload($_FILES['item_photo'], __DIR__ . '/../uploads');
+                    $up = handleCmsUpload($pdo, $_FILES['item_photo'], __DIR__ . '/../uploads', 'photo');
                     if ($up['ok']) $itemPhoto = $up['file_url'];
                     else $err = $up['error'];
                 }
                 $itemLink = trim($_POST['item_link_url'] ?? '');
                 if ($err === '' && !empty($_FILES['item_file']['name'])) {
-                    $upDoc = handleSecureUpload($_FILES['item_file'], __DIR__ . '/../uploads');
+                    $upDoc = handleCmsUpload($pdo, $_FILES['item_file'], __DIR__ . '/../uploads', 'document');
                     if ($upDoc['ok']) $itemLink = $upDoc['file_url'];
                     else $err = $upDoc['error'];
                 } elseif ($err === '' && $itemLink !== '' && strpos($itemLink, 'uploads/') !== 0 && !validateExternalUrl($itemLink)) {
@@ -236,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'add_faculty' || $action === 'update_faculty') {
             $photoUrl = trim($_POST['existing_photo'] ?? 'assets/images/principal.jpg');
             if (!empty($_FILES['photo']['name'])) {
-                $up = handleSecureUpload($_FILES['photo'], __DIR__ . '/../uploads');
+                $up = handleCmsUpload($pdo, $_FILES['photo'], __DIR__ . '/../uploads', 'photo');
                 if ($up['ok']) $photoUrl = $up['file_url'];
                 else $err = $up['error'];
             }
@@ -314,7 +314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $labPhoto = trim($_POST['existing_lab_photo'] ?? '');
             $labOrder = max(1, (int)($_POST['sort_order'] ?? 1));
             if (!empty($_FILES['lab_photo']['name'])) {
-                $up = handleSecureUpload($_FILES['lab_photo'], __DIR__ . '/../uploads');
+                $up = handleCmsUpload($pdo, $_FILES['lab_photo'], __DIR__ . '/../uploads', 'photo');
                 if ($up['ok']) $labPhoto = $up['file_url'];
                 else $err = $up['error'];
             }

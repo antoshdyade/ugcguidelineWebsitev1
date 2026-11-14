@@ -23,6 +23,9 @@ $icons = [
     'arrowleft' => $navSvg('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
     'logout'    => $navSvg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>'),
 ];
+$uploadPolicy = isset($pdo)
+    ? getUploadLimits($pdo)
+    : ['max_photo_mb' => 2.0, 'max_doc_mb' => 10.0, 'auto_crop_enabled' => 1];
 ?>
 <!doctype html>
 <html lang="en">
@@ -31,12 +34,20 @@ $icons = [
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= e($adminTitle) ?> — SVCOER Admin Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <link id="svcoer-main-css" rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
   <script>
     window.SVCOER_BASE_URL = <?= json_encode(getBaseUrl(), JSON_UNESCAPED_SLASHES) ?>;
+    window.SVCOER_UPLOAD_POLICY = <?= json_encode([
+        'maxPhotoMb' => (float)$uploadPolicy['max_photo_mb'],
+        'maxDocMb'   => (float)$uploadPolicy['max_doc_mb'],
+        'autoCrop'   => !empty($uploadPolicy['auto_crop_enabled']),
+        'csrfToken'  => csrfToken(),
+        'uploadUrl'  => baseUrl('admin/upload_handler.php'),
+    ], JSON_UNESCAPED_SLASHES) ?>;
     (function () {
       var fallbackHref = <?= json_encode(baseUrl('admin/asset_proxy.php?f=css'), JSON_UNESCAPED_SLASHES) ?>;
+      var proxyImgBase = <?= json_encode(baseUrl('admin/asset_proxy.php?img='), JSON_UNESCAPED_SLASHES) ?>;
       function ensureCss() {
         var ready = getComputedStyle(document.documentElement).getPropertyValue('--svcoer-css-ready').trim();
         if (ready !== '1' && !document.getElementById('svcoer-proxy-css')) {
@@ -50,6 +61,21 @@ $icons = [
       var mainLk = document.getElementById('svcoer-main-css');
       if (mainLk) mainLk.addEventListener('error', ensureCss);
       window.addEventListener('DOMContentLoaded', ensureCss);
+      window.addEventListener('load', ensureCss);
+      setTimeout(ensureCss, 350);
+
+      document.addEventListener('error', function (ev) {
+        var t = ev && ev.target;
+        if (!t || t.tagName !== 'IMG' || t.dataset.proxyTried === '1') return;
+        var src = t.getAttribute('src') || '';
+        var idxAssets = src.indexOf('assets/images/');
+        var idxUploads = src.indexOf('uploads/');
+        var rel = idxAssets >= 0 ? src.slice(idxAssets) : (idxUploads >= 0 ? src.slice(idxUploads) : '');
+        if (!rel) return;
+        rel = rel.split('?')[0];
+        t.dataset.proxyTried = '1';
+        t.src = proxyImgBase + encodeURIComponent(rel);
+      }, true);
     })();
   </script>
   <?php if (!empty($siteSettings)): ?>

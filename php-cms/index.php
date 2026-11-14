@@ -9,7 +9,11 @@ $ticker     = $pdo->query('SELECT * FROM ticker_items WHERE is_active = 1 ORDER 
 $depts      = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $events     = $pdo->query('SELECT * FROM campus_events ORDER BY sort_order ASC, event_date DESC, id DESC LIMIT 5')->fetchAll();
 $docs       = $pdo->query('SELECT * FROM documents WHERE is_quick_link = 1 ORDER BY sort_order ASC, uploaded_at DESC, id DESC LIMIT 6')->fetchAll();
-$cats       = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_on_home, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+try {
+    $cats = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_on_home, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+} catch (Throwable $exCats) {
+    $cats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
+}
 $leadership = $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order ASC, id ASC LIMIT 4')->fetchAll();
 $examPages  = $pdo->query("SELECT p.slug, p.title, p.subtitle FROM pages p JOIN categories c ON p.category_id = c.id WHERE c.slug = 'examination' AND p.is_published = 1 ORDER BY p.sort_order ASC")->fetchAll();
 $allCatPages = [];
@@ -270,10 +274,15 @@ $recruiterLines = array_filter(array_map('trim', explode("\n", (string)($setting
   <div class="card">
     <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Latest Circulars, Events &amp; Achievements</h2>
     <?php foreach ($events as $ev): ?>
-      <div style="padding:0.6rem 0;border-bottom:1px solid var(--border-color);">
-        <small style="color:var(--secondary-color);font-weight:600;"><?= e($ev['category']) ?> · <?= e($ev['event_date']) ?></small>
-        <div style="font-weight:600;"><?= e($ev['title']) ?></div>
-        <p style="margin:0.2rem 0 0;font-size:0.85rem;color:var(--text-muted);"><?= e($ev['summary']) ?></p>
+      <div style="padding:0.65rem 0;border-bottom:1px solid var(--border-color);display:flex;gap:0.75rem;align-items:flex-start;">
+        <?php if (!empty($ev['image_url'])): ?>
+          <img src="<?= e(mediaUrl($ev['image_url'])) ?>" alt="<?= e($ev['title']) ?>" style="width:84px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+        <?php endif; ?>
+        <div style="flex:1;min-width:0;">
+          <small style="color:var(--secondary-color);font-weight:600;"><?= e($ev['category']) ?> · <?= e($ev['event_date']) ?></small>
+          <div style="font-weight:600;"><?= e($ev['title']) ?></div>
+          <p style="margin:0.2rem 0 0;font-size:0.85rem;color:var(--text-muted);"><?= e($ev['summary']) ?></p>
+        </div>
       </div>
     <?php endforeach; ?>
   </div>

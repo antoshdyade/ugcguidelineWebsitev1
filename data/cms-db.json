@@ -379,11 +379,11 @@
       "slug": "results-revaluation",
       "title": "Results, Answer-Book Photocopy & Revaluation Grievances",
       "subtitle": "15-Day Result Declaration · Transparent Photocopy & Challenge Valuation SOP",
-      "contentHtml": "\n          <h2>Results &amp; Student Examination Grievance Redressal</h2>\n          <p>Students may apply online within 5 working days of result declaration for scanned answer-book inspection (Photocopy) and subsequent Revaluation or Moderation review by an independent subject expert panel.</p>\n          <ul>\n            <li><strong>Step 1 (Photocopy Request):</strong> Online application within 5 days of result publication.</li>\n            <li><strong>Step 2 (Redressal / Revaluation):</strong> Submit reasoned question-wise appeal within 3 days of receiving scanned booklet.</li>\n            <li><strong>Step 3 (Final Revised Grade Card):</strong> Discrepancies exceeding ±5% marks trigger automatic fee refund and revised grade card issuance.</li>\n          </ul>\n        ",
+      "contentHtml": "\n          <p></p><h2>Results &amp; Student Examination Grievance Redressal</h2>\n          <p>Students may apply online within 5 working days of result declaration for scanned answer-book inspection (Photocopy) and subsequent Revaluation or Moderation review by an independent subject expert panel.</p>\n          <ul>\n            <li><strong>Step 1 (Photocopy Request):</strong> Online application within 5 days of result publication.</li>\n            <li><strong>Step 2 (Redressal / Revaluation):</strong> Submit reasoned question-wise appeal within 3 days of receiving scanned booklet.</li>\n            <li><strong>Step 3 (Final Revised Grade Card):</strong> Discrepancies exceeding ±5% marks trigger automatic fee refund and revised grade card issuance.</li>\n          </ul><div><br></div>\n        ",
       "isPublished": true,
       "sortOrder": 4,
-      "updatedAt": "2026-10-28",
-      "updatedBy": "IQAC Officer"
+      "updatedAt": "2026-11-14",
+      "updatedBy": "Dr. Vikramaditya Kulkarni"
     },
     {
       "id": 905,
@@ -1655,7 +1655,7 @@
       "assignedDepartmentId": null,
       "isActive": true,
       "passwordHash": "335e6ddf4ddc588b85ec23d250a58c44:a1263e80eb984bde57f804847c0500aa53f1d36ca07d151f067608e3878949b9917b20ba5b0bc8b143a8d992c737a5944c3aceb5dfa45a39b61f4e97481e3dce",
-      "lastLoginAt": "2026-11-14 08:32"
+      "lastLoginAt": "2026-11-14 11:44"
     },
     {
       "id": 2,
@@ -1675,7 +1675,7 @@
       "assignedDepartmentId": 1,
       "isActive": true,
       "passwordHash": "3d9e784c7672ca10f45f9ff411fa9e5b:ab2aeb55e1add428ec2d10af2351f1c1fae4ca1d78c6d3c39b86ecb071fd378f3ebedbe40f4f7a5cfd0ed0a5dd6a24335d5b3ea2bea631eddddee739f6dec726",
-      "lastLoginAt": "2026-11-10 11:05"
+      "lastLoginAt": "2026-11-14 11:33"
     },
     {
       "id": 4,
@@ -1705,6 +1705,141 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": 33,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPLOAD_MEDIA",
+      "entityType": "Upload",
+      "entityTitle": "test-sample-1794656656741.png",
+      "timestamp": "2026-11-14 11:44:16"
+    },
+    {
+      "id": 32,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPDATE_SITE_SETTINGS",
+      "entityType": "Settings",
+      "entityTitle": "SVERI's College of Engineering, Pandharpur (Autonomous)",
+      "timestamp": "2026-11-14 11:44:10"
+    },
+    {
+      "id": 31,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-14 11:44:09"
+    },
+    {
+      "id": 30,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPLOAD_MEDIA",
+      "entityType": "Upload",
+      "entityTitle": "test-sample-1794656599975.png",
+      "timestamp": "2026-11-14 11:43:19"
+    },
+    {
+      "id": 29,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-14 11:43:14"
+    },
+    {
+      "id": 28,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPLOAD_MEDIA",
+      "entityType": "Upload",
+      "entityTitle": "test-sample-1794656537968.png",
+      "timestamp": "2026-11-14 11:42:17"
+    },
+    {
+      "id": 27,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPDATE_SITE_SETTINGS",
+      "entityType": "Settings",
+      "entityTitle": "SVERI's College of Engineering, Pandharpur (Autonomous)",
+      "timestamp": "2026-11-14 11:42:09"
+    },
+    {
+      "id": 26,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-14 11:42:06"
+    },
+    {
+      "id": 25,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-14 11:41:05"
+    },
+    {
+      "id": 24,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPDATE_PAGE",
+      "entityType": "Page",
+      "entityTitle": "Results, Answer-Book Photocopy & Revaluation Grievances",
+      "timestamp": "2026-11-14 11:37:24"
+    },
+    {
+      "id": 23,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPDATE_PAGE",
+      "entityType": "Page",
+      "entityTitle": "Results, Answer-Book Photocopy & Revaluation Grievances",
+      "timestamp": "2026-11-14 11:37:24"
+    },
+    {
+      "id": 22,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UPDATE_PAGE",
+      "entityType": "Page",
+      "entityTitle": "Results, Answer-Book Photocopy & Revaluation Grievances",
+      "timestamp": "2026-11-14 11:35:51"
+    },
+    {
+      "id": 21,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-14 11:34:20"
+    },
+    {
+      "id": 20,
+      "actorEmail": "hod.cse@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "hod.cse@svcoer.edu.in",
+      "timestamp": "2026-11-14 11:33:47"
+    },
+    {
+      "id": 19,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-14 11:32:51"
+    },
     {
       "id": 18,
       "actorEmail": "admin@svcoer.edu.in",
@@ -2057,6 +2192,9 @@
       "twitter": "https://x.com"
     },
     "mapEmbedQuery": "Pandharpur,Maharashtra,India",
+    "maxPhotoUploadMb": 2,
+    "maxDocumentUploadMb": 10,
+    "autoCropImages": true,
     "homeSections": {
       "showTicker": true,
       "showSlider": true,

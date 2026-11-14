@@ -35,6 +35,11 @@ import {
   validateExternalDocumentUrl,
   validateUploadMeta,
 } from '../lib/cmsLogic';
+import {
+  getUploadSizeLimitBytes,
+  getUploadSizeLimitMb,
+  isImageFileMeta,
+} from '../lib/imageCrop';
 import { BackupRestorePanel } from './BackupRestorePanel';
 import { ImageUploader } from './ImageUploader';
 import { PerPageRbacSelector } from './PerPageRbacSelector';
@@ -613,8 +618,15 @@ export function AdminDashboard({
     }
   };
 
+  const activeSettings = settingsDraft ?? state?.settings;
+  const maxPhotoMb = getUploadSizeLimitMb(activeSettings, 'photo');
+  const maxDocumentMb = getUploadSizeLimitMb(activeSettings, 'document');
+  const autoCropEnabled = activeSettings?.autoCropImages !== false;
+
   const uploadBinaryFile = async (file: File): Promise<string> => {
-    const check = validateUploadMeta(file.name, file.type || 'application/octet-stream', file.size);
+    const isImg = isImageFileMeta(file.name, file.type);
+    const maxBytes = getUploadSizeLimitBytes(activeSettings, isImg ? 'photo' : 'document');
+    const check = validateUploadMeta(file.name, file.type || 'application/octet-stream', file.size, maxBytes);
     if (!check.valid) {
       throw new Error(check.reason || 'File blocked by security policy.');
     }
@@ -1692,6 +1704,8 @@ export function AdminDashboard({
                 value={pageHtml}
                 onChange={setPageHtml}
                 uploadBinary={uploadBinaryFile}
+                maxPhotoMb={maxPhotoMb}
+                autoCropEnabled={autoCropEnabled}
                 minHeight={230}
               />
 
@@ -1723,7 +1737,7 @@ export function AdminDashboard({
                   </div>
                 </div>
                 {pagePdfMode === 'upload' && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <label
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-white cursor-pointer"
                       style={{ backgroundColor: 'var(--secondary-color)' }}
@@ -1736,6 +1750,7 @@ export function AdminDashboard({
                         className="sr-only"
                         onChange={async (e) => {
                           const f = e.target.files?.[0];
+                          e.target.value = '';
                           if (!f) return;
                           try {
                             const url = await uploadBinaryFile(f);
@@ -1748,7 +1763,9 @@ export function AdminDashboard({
                         }}
                       />
                     </label>
-                    <span className="text-[11px] text-stone-500">Or switch to External URL for Google Drive links</span>
+                    <span className="text-[11px] text-stone-500">
+                      Max Document Size: {maxDocumentMb} MB · Or switch to External URL for Google Drive
+                    </span>
                   </div>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2038,6 +2055,9 @@ export function AdminDashboard({
                   value={newDeptHero}
                   onChange={setNewDeptHero}
                   uploadBinary={uploadBinaryFile}
+                  aspectRatio="16:9"
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCropEnabled}
                 />
                 <button
                   type="submit"
@@ -2240,6 +2260,8 @@ export function AdminDashboard({
                         value={subHtml}
                         onChange={setSubHtml}
                         uploadBinary={uploadBinaryFile}
+                        maxPhotoMb={maxPhotoMb}
+                        autoCropEnabled={autoCropEnabled}
                         minHeight={200}
                       />
 
@@ -2256,6 +2278,9 @@ export function AdminDashboard({
                           value={newSubPhotoUrl}
                           onChange={setNewSubPhotoUrl}
                           uploadBinary={uploadBinaryFile}
+                          aspectRatio="4:3"
+                          maxPhotoMb={maxPhotoMb}
+                          autoCropEnabled={autoCropEnabled}
                         />
                         <div className="flex flex-col sm:flex-row gap-2">
                           <input
@@ -2353,6 +2378,9 @@ export function AdminDashboard({
                           value={newItemImage}
                           onChange={setNewItemImage}
                           uploadBinary={uploadBinaryFile}
+                          aspectRatio="4:3"
+                          maxPhotoMb={maxPhotoMb}
+                          autoCropEnabled={autoCropEnabled}
                         />
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="inline-flex rounded border border-stone-300 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 text-[11px] font-semibold">
@@ -2377,15 +2405,17 @@ export function AdminDashboard({
                             <label
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold text-white cursor-pointer"
                               style={{ backgroundColor: 'var(--secondary-color)' }}
+                              title={`Max Document Size: ${maxDocumentMb} MB`}
                             >
                               <Upload className="w-3 h-3" />
-                              <span>Choose File</span>
+                              <span>Choose File (Max {maxDocumentMb} MB)</span>
                               <input
                                 type="file"
                                 accept=".pdf,.docx,.xlsx,.jpg,.png"
                                 className="sr-only"
                                 onChange={async (e) => {
                                   const f = e.target.files?.[0];
+                                  e.target.value = '';
                                   if (!f) return;
                                   try {
                                     const u = await uploadBinaryFile(f);
@@ -2746,6 +2776,9 @@ export function AdminDashboard({
                         value={facPhoto}
                         onChange={setFacPhoto}
                         uploadBinary={uploadBinaryFile}
+                        aspectRatio="1:1"
+                        maxPhotoMb={maxPhotoMb}
+                        autoCropEnabled={autoCropEnabled}
                       />
 
                       {/* Dynamic Customizable Faculty Fields */}
@@ -3042,6 +3075,9 @@ export function AdminDashboard({
                         value={labPhotoUrl}
                         onChange={setLabPhotoUrl}
                         uploadBinary={uploadBinaryFile}
+                        aspectRatio="4:3"
+                        maxPhotoMb={maxPhotoMb}
+                        autoCropEnabled={autoCropEnabled}
                       />
                       <button
                         type="submit"
@@ -3232,6 +3268,9 @@ export function AdminDashboard({
                           value={lib.photoUrl ?? ''}
                           onChange={(url) => setDeptDraft({ ...deptDraft, library: { ...lib, photoUrl: url } })}
                           uploadBinary={uploadBinaryFile}
+                          aspectRatio="4:3"
+                          maxPhotoMb={maxPhotoMb}
+                          autoCropEnabled={autoCropEnabled}
                         />
                         <button
                           type="submit"
@@ -3394,6 +3433,9 @@ export function AdminDashboard({
                       value={deptDraft.heroImageUrl ?? currentDept.heroImageUrl ?? ''}
                       onChange={(url) => setDeptDraft({ ...deptDraft, heroImageUrl: url })}
                       uploadBinary={uploadBinaryFile}
+                      aspectRatio="16:9"
+                      maxPhotoMb={maxPhotoMb}
+                      autoCropEnabled={autoCropEnabled}
                     />
                     <button
                       type="submit"
@@ -3531,6 +3573,8 @@ export function AdminDashboard({
                   value={homeCompHtml}
                   onChange={setHomeCompHtml}
                   uploadBinary={uploadBinaryFile}
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCropEnabled}
                   minHeight={220}
                 />
                 <div className="flex items-center justify-between">
@@ -4010,6 +4054,9 @@ export function AdminDashboard({
                   value={slideImage}
                   onChange={setSlideImage}
                   uploadBinary={uploadBinaryFile}
+                  aspectRatio="16:9"
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCropEnabled}
                 />
                 <input
                   type="text"
@@ -4265,6 +4312,9 @@ export function AdminDashboard({
                   value={eventImage}
                   onChange={setEventImage}
                   uploadBinary={uploadBinaryFile}
+                  aspectRatio="3:2"
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCropEnabled}
                 />
                 <button
                   type="submit"
@@ -4444,6 +4494,9 @@ export function AdminDashboard({
                 value={leadPhoto}
                 onChange={setLeadPhoto}
                 uploadBinary={uploadBinaryFile}
+                aspectRatio="1:1"
+                maxPhotoMb={maxPhotoMb}
+                autoCropEnabled={autoCropEnabled}
               />
               <button
                 type="submit"
@@ -4578,6 +4631,9 @@ export function AdminDashboard({
                   value={albumCover}
                   onChange={setAlbumCover}
                   uploadBinary={uploadBinaryFile}
+                  aspectRatio="4:3"
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCropEnabled}
                 />
                 <button
                   type="submit"
@@ -4612,6 +4668,9 @@ export function AdminDashboard({
                     value={photoUrl}
                     onChange={setPhotoUrl}
                     uploadBinary={uploadBinaryFile}
+                    aspectRatio="4:3"
+                    maxPhotoMb={maxPhotoMb}
+                    autoCropEnabled={autoCropEnabled}
                   />
                   <input
                     type="text"
@@ -4734,7 +4793,11 @@ export function AdminDashboard({
                   const mimeType = docFile ? docFile.type || 'application/pdf' : 'application/pdf';
                   const fileSizeBytes = docFile ? docFile.size : 245760;
 
-                  const check = validateUploadMeta(fileName, mimeType, fileSizeBytes);
+                  const docLimitBytes = getUploadSizeLimitBytes(
+                    activeSettings,
+                    isImageFileMeta(fileName, mimeType) ? 'photo' : 'document',
+                  );
+                  const check = validateUploadMeta(fileName, mimeType, fileSizeBytes, docLimitBytes);
                   if (!check.valid) {
                     notify('err', check.reason || 'File blocked by security policy.');
                     return;
@@ -4825,11 +4888,33 @@ export function AdminDashboard({
               </div>
               {docSourceType === 'upload' ? (
                 <div>
-                  <label className="block text-xs font-semibold mb-1">Select PDF / Document File</label>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <label className="block text-xs font-semibold">Select PDF / Document File</label>
+                    <span className="text-[10px] font-semibold text-stone-500 dark:text-slate-400">
+                      Max Document: {maxDocumentMb} MB · Max Photo: {maxPhotoMb} MB
+                    </span>
+                  </div>
                   <input
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx"
-                    onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      if (f) {
+                        const isImg = isImageFileMeta(f.name, f.type);
+                        const limBytes = getUploadSizeLimitBytes(activeSettings, isImg ? 'photo' : 'document');
+                        const limMb = isImg ? maxPhotoMb : maxDocumentMb;
+                        if (f.size > limBytes) {
+                          notify(
+                            'err',
+                            `${f.name} (${formatBytes(f.size)}) exceeds the configured Max ${isImg ? 'Photo' : 'Document'} limit of ${limMb} MB.`,
+                          );
+                          e.target.value = '';
+                          setDocFile(null);
+                          return;
+                        }
+                      }
+                      setDocFile(f);
+                    }}
                     className="w-full text-xs text-stone-600 dark:text-slate-300"
                   />
                 </div>
@@ -5130,13 +5215,89 @@ export function AdminDashboard({
                       value={settingsDraft.logoUrl || ''}
                       onChange={(url) => setSettingsDraft({ ...settingsDraft, logoUrl: url })}
                       uploadBinary={uploadBinaryFile}
+                      aspectRatio="1:1"
+                      maxPhotoMb={maxPhotoMb}
+                      autoCropEnabled={autoCropEnabled}
                     />
                     <ImageUploader
                       label="About Campus Showcase Photo"
                       value={settingsDraft.aboutImageUrl || ''}
                       onChange={(url) => setSettingsDraft({ ...settingsDraft, aboutImageUrl: url })}
                       uploadBinary={uploadBinaryFile}
+                      aspectRatio="4:3"
+                      maxPhotoMb={maxPhotoMb}
+                      autoCropEnabled={autoCropEnabled}
                     />
+                  </div>
+
+                  {/* Upload Size Restrictions & Auto-Crop Policy */}
+                  <div className="p-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-xs font-bold text-stone-900 dark:text-slate-100">
+                          Upload Size Controls &amp; Auto-Crop Policy
+                        </h3>
+                        <p className="text-[11px] text-stone-500 dark:text-slate-400">
+                          Enforced across all photo uploaders, rich editor images, department pages, and document uploads.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="settings-max-photo-mb" className="block text-xs font-semibold mb-1">
+                          Max Photo Upload Size (MB)
+                        </label>
+                        <input
+                          id="settings-max-photo-mb"
+                          type="number"
+                          step="0.25"
+                          min={0.25}
+                          max={25}
+                          value={settingsDraft.maxPhotoUploadMb ?? 2}
+                          onChange={(e) =>
+                            setSettingsDraft({
+                              ...settingsDraft,
+                              maxPhotoUploadMb: Number(e.target.value) || 2,
+                            })
+                          }
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="settings-max-doc-mb" className="block text-xs font-semibold mb-1">
+                          Max Document Upload Size (MB)
+                        </label>
+                        <input
+                          id="settings-max-doc-mb"
+                          type="number"
+                          step="0.5"
+                          min={0.5}
+                          max={50}
+                          value={settingsDraft.maxDocumentUploadMb ?? 10}
+                          onChange={(e) =>
+                            setSettingsDraft({
+                              ...settingsDraft,
+                              maxDocumentUploadMb: Number(e.target.value) || 10,
+                            })
+                          }
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                    </div>
+                    <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                      <input
+                        id="settings-auto-crop-toggle"
+                        type="checkbox"
+                        checked={settingsDraft.autoCropImages !== false}
+                        onChange={(e) =>
+                          setSettingsDraft({
+                            ...settingsDraft,
+                            autoCropImages: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Enable Auto-Crop &amp; Aspect Ratio Lock on all photo uploads</span>
+                    </label>
                   </div>
 
                   <div>

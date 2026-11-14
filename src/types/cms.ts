@@ -333,6 +333,9 @@ export interface SiteSettings {
     twitter: string;
   };
   mapEmbedQuery: string;
+  maxPhotoUploadMb?: number;
+  maxDocumentUploadMb?: number;
+  autoCropImages?: boolean;
   homeSections?: HomeSectionsConfig;
   customHomeComponents?: CustomHomeComponent[];
 }

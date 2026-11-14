@@ -1,4 +1,4 @@
-# Block execution of any script/executable inside /uploads/
+# Block execution of any script/executable inside /uploads/ (Apache 2.2/2.4 + PHP-FPM safe)
 <FilesMatch "\.(php|phtml|php3|php4|php5|phar|pl|py|jsp|asp|sh|cgi)$">
   <IfModule mod_authz_core.c>
     Require all denied
@@ -8,10 +8,3 @@
     Deny from all
   </IfModule>
 </FilesMatch>
-
-<IfModule mod_php.c>
-  php_flag engine off
-</IfModule>
-<IfModule mod_php8.c>
-  php_flag engine off
-</IfModule>

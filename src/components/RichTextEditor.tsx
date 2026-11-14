@@ -34,6 +34,8 @@ import {
   Undo2,
 } from 'lucide-react';
 import { validateUploadMeta } from '../lib/cmsLogic';
+import { DEFAULT_MAX_PHOTO_UPLOAD_MB } from '../lib/imageCrop';
+import { ImageCropModal } from './ImageCropModal';
 import {
   buildStyledTableHtml,
   EDITOR_COMPONENT_BLOCKS,
@@ -52,6 +54,8 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   uploadBinary?: (file: File) => Promise<string>;
   minHeight?: number;
+  maxPhotoMb?: number;
+  autoCropEnabled?: boolean;
 }
 
 export function RichTextEditor({
@@ -60,11 +64,14 @@ export function RichTextEditor({
   onChange,
   uploadBinary,
   minHeight = 320,
+  maxPhotoMb = DEFAULT_MAX_PHOTO_UPLOAD_MB,
+  autoCropEnabled = true,
 }: RichTextEditorProps) {
   const [mode, setMode] = useState<'visual' | 'html'>('visual');
   const [showBlocks, setShowBlocks] = useState(true);
   const [blockCategory, setBlockCategory] = useState<string>('All');
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('https://');
   const [linkText, setLinkText] = useState('');
@@ -229,27 +236,47 @@ export function RichTextEditor({
     insertHtml(htmlToInsert);
   };
 
-  const handleInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadBinary) return;
+  const uploadAndInsertImage = async (fileToUpload: File) => {
+    if (!uploadBinary) return;
     setEditorErr('');
-    const check = validateUploadMeta(file.name, file.type || 'image/jpeg', file.size);
-    if (!check.valid || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    const maxBytes = Math.round(Math.max(0.25, maxPhotoMb) * 1024 * 1024);
+    const check = validateUploadMeta(
+      fileToUpload.name,
+      fileToUpload.type || 'image/jpeg',
+      fileToUpload.size,
+      maxBytes,
+    );
+    if (!check.valid || !['image/jpeg', 'image/png', 'image/webp'].includes(fileToUpload.type)) {
       setEditorErr(check.reason || 'Only JPG, PNG, and WEBP images can be inserted.');
       return;
     }
     setUploadingImg(true);
     try {
-      const url = await uploadBinary(file);
+      const url = await uploadBinary(fileToUpload);
       insertHtml(
-        `<figure class="cms-block" data-block="image" style="margin:1rem 0;"><img src="${url}" alt="${file.name.replace(/"/g, '')}" style="max-width:100%;border-radius:10px;" /><figcaption style="font-size:0.8rem;color:#57534E;margin-top:0.35rem;">${file.name.replace(/</g, '&lt;')}</figcaption></figure><p></p>`,
+        `<figure class="cms-block" data-block="image" style="margin:1rem 0;"><img src="${url}" alt="${fileToUpload.name.replace(/"/g, '')}" style="max-width:100%;border-radius:10px;" /><figcaption style="font-size:0.8rem;color:#57534E;margin-top:0.35rem;">${fileToUpload.name.replace(/</g, '&lt;')}</figcaption></figure><p></p>`,
       );
     } catch (err) {
       setEditorErr((err as Error).message || 'Image upload failed.');
     } finally {
       setUploadingImg(false);
-      e.target.value = '';
     }
+  };
+
+  const handleInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !uploadBinary) return;
+    setEditorErr('');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setEditorErr('Only JPG, PNG, and WEBP images can be inserted.');
+      return;
+    }
+    if (autoCropEnabled) {
+      setPendingCropFile(file);
+      return;
+    }
+    await uploadAndInsertImage(file);
   };
 
   const modifyActiveTable = (action: 'add-row' | 'add-col' | 'del-row' | 'del-col', nextTheme?: TableThemeId) => {
@@ -974,6 +1001,20 @@ export function RichTextEditor({
           </div>
         </div>
       </div>
+
+      {pendingCropFile && (
+        <ImageCropModal
+          file={pendingCropFile}
+          initialAspect="4:3"
+          maxPhotoMb={maxPhotoMb}
+          title="Auto-Crop Inline Editor Photo"
+          onCancel={() => setPendingCropFile(null)}
+          onConfirm={async (cropped) => {
+            setPendingCropFile(null);
+            await uploadAndInsertImage(cropped);
+          }}
+        />
+      )}
     </div>
   );
 }

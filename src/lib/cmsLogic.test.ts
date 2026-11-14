@@ -215,3 +215,55 @@ test('filterDocuments filters by category and search query', () => {
   assert.equal(filterDocuments(docs, 'NAAC / NBA / NIRF', '').length, 1);
   assert.equal(filterDocuments(docs, 'All', 'calendar').length, 1);
 });
+
+import {
+  computeAutoCropRect,
+  computeOutputDimensions,
+  getUploadSizeLimitBytes,
+  getUploadSizeLimitMb,
+  isImageFileMeta,
+} from './imageCrop';
+
+test('computeAutoCropRect maintains exact aspect ratio and bounds pan/zoom', () => {
+  // 2000x1500 (4:3) cropped to 16:9 centered at zoom 1 -> 2000x1125
+  const r169 = computeAutoCropRect(2000, 1500, 16 / 9, 1, 0, 0);
+  assert.equal(r169.sw, 2000);
+  assert.equal(r169.sh, 1125);
+  assert.equal(r169.sx, 0);
+  assert.equal(r169.sy, 188);
+  assert.ok(Math.abs(r169.sw / r169.sh - 16 / 9) < 0.01);
+
+  // 2000x1000 cropped to 1:1 centered at zoom 1 -> 1000x1000 at sx=500, sy=0
+  const r11 = computeAutoCropRect(2000, 1000, 1, 1, 0, 0);
+  assert.equal(r11.sw, 1000);
+  assert.equal(r11.sh, 1000);
+  assert.equal(r11.sx, 500);
+  assert.equal(r11.sy, 0);
+
+  // Zoomed 2x + panned bottom-right stays strictly within source bounds
+  const zoomed = computeAutoCropRect(2000, 1000, 1, 2, 1.5, 1.5);
+  assert.equal(zoomed.sw, 500);
+  assert.equal(zoomed.sh, 500);
+  assert.ok(zoomed.sx + zoomed.sw <= 2000);
+  assert.ok(zoomed.sy + zoomed.sh <= 1000);
+});
+
+test('computeOutputDimensions downscales oversized crops while preserving ratio', () => {
+  const scaled = computeOutputDimensions(3200, 1800, 1600);
+  assert.deepEqual(scaled, { width: 1600, height: 900 });
+
+  const untouched = computeOutputDimensions(800, 600, 1200);
+  assert.deepEqual(untouched, { width: 800, height: 600 });
+});
+
+test('getUploadSizeLimitMb, getUploadSizeLimitBytes, and isImageFileMeta enforce separate photo vs document controls', () => {
+  assert.equal(getUploadSizeLimitMb(undefined, 'photo'), 2);
+  assert.equal(getUploadSizeLimitMb(undefined, 'document'), 10);
+
+  const custom = { maxPhotoUploadMb: 3.5, maxDocumentUploadMb: 15 };
+  assert.equal(getUploadSizeLimitBytes(custom, 'photo'), Math.round(3.5 * 1024 * 1024));
+  assert.equal(getUploadSizeLimitBytes(custom, 'document'), 15 * 1024 * 1024);
+
+  assert.equal(isImageFileMeta('slide.jpg', 'image/jpeg'), true);
+  assert.equal(isImageFileMeta('brochure.pdf', 'application/pdf'), false);
+});

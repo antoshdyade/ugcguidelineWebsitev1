@@ -24,6 +24,11 @@ import {
   extractSnapshotData,
   validateBackupPackage,
 } from './src/lib/backupLogic';
+import {
+  clampUploadLimitMb,
+  getUploadSizeLimitBytes,
+  isImageFileMeta,
+} from './src/lib/imageCrop';
 import type {
   BackupDestination,
   BackupMode,
@@ -224,7 +229,7 @@ function sanitizeUser(u: CmsDatabase['users'][number]): CmsUser {
 async function startServer() {
   const app = express();
   app.set('trust proxy', true);
-  app.use(express.json({ limit: '15mb' }));
+  app.use(express.json({ limit: '60mb' }));
 
   // Serve uploaded safe assets statically
   app.use('/uploads', express.static(UPLOAD_DIR));
@@ -1114,10 +1119,13 @@ async function startServer() {
       res.status(400).json({ error: 'Filename and file content are required.' });
       return;
     }
+    const isImg = isImageFileMeta(String(fileName), String(mimeType || 'image/jpeg'));
+    const maxBytes = getUploadSizeLimitBytes(db.settings, isImg ? 'photo' : 'document');
     const validation = validateUploadMeta(
       String(fileName),
       String(mimeType || 'image/jpeg'),
       Number(fileSizeBytes || 1024),
+      maxBytes,
     );
     if (!validation.valid || !validation.safeFilename) {
       res.status(400).json({ error: validation.reason || 'File blocked by upload security validator.' });
@@ -1125,6 +1133,12 @@ async function startServer() {
     }
     const cleanBase64 = base64Content.includes(',') ? base64Content.split(',')[1] : base64Content;
     const buf = Buffer.from(cleanBase64, 'base64');
+    if (buf.length <= 0 || buf.length > maxBytes) {
+      res.status(400).json({
+        error: `Uploaded ${isImg ? 'photo' : 'file'} exceeds configured limit (${isImg ? db.settings.maxPhotoUploadMb ?? 2 : db.settings.maxDocumentUploadMb ?? 10} MB).`,
+      });
+      return;
+    }
     fs.writeFileSync(path.join(UPLOAD_DIR, validation.safeFilename), buf);
     const fileUrl = `/uploads/${validation.safeFilename}`;
     addAudit(actor, 'UPLOAD_MEDIA', 'Upload', validation.safeFilename);
@@ -1625,10 +1639,13 @@ async function startServer() {
       res.status(400).json({ error: 'File name is required for uploaded documents.' });
       return;
     }
+    const isImgDoc = isImageFileMeta(String(fileName), String(mimeType || 'application/pdf'));
+    const docMaxBytes = getUploadSizeLimitBytes(db.settings, isImgDoc ? 'photo' : 'document');
     const validation = validateUploadMeta(
       String(fileName),
       String(mimeType || 'application/pdf'),
       Number(fileSizeBytes || 1024),
+      docMaxBytes,
     );
     if (!validation.valid || !validation.safeFilename) {
       res.status(400).json({ error: validation.reason || 'Invalid file upload.' });
@@ -1640,6 +1657,12 @@ async function startServer() {
     if (base64Content && typeof base64Content === 'string') {
       const cleanBase64 = base64Content.includes(',') ? base64Content.split(',')[1] : base64Content;
       const buf = Buffer.from(cleanBase64, 'base64');
+      if (buf.length > docMaxBytes) {
+        res.status(400).json({
+          error: `Document exceeds configured ${db.settings.maxDocumentUploadMb ?? 10} MB upload limit.`,
+        });
+        return;
+      }
       fs.writeFileSync(path.join(UPLOAD_DIR, validation.safeFilename), buf);
       fileUrl = `/uploads/${validation.safeFilename}`;
     }
@@ -1888,7 +1911,29 @@ async function startServer() {
   // Site Settings (Super Admin only)
   app.put('/api/admin/settings', requireAdmin('settings'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
-    db.settings = { ...db.settings, ...req.body };
+    const incoming = req.body || {};
+    const nextPhotoMb = clampUploadLimitMb(
+      incoming.maxPhotoUploadMb,
+      db.settings.maxPhotoUploadMb ?? 2,
+      0.25,
+      25,
+    );
+    const nextDocMb = clampUploadLimitMb(
+      incoming.maxDocumentUploadMb,
+      db.settings.maxDocumentUploadMb ?? 10,
+      0.5,
+      50,
+    );
+    db.settings = {
+      ...db.settings,
+      ...incoming,
+      maxPhotoUploadMb: nextPhotoMb,
+      maxDocumentUploadMb: nextDocMb,
+      autoCropImages:
+        typeof incoming.autoCropImages === 'boolean'
+          ? incoming.autoCropImages
+          : (db.settings.autoCropImages ?? true),
+    };
     addAudit(actor, 'UPDATE_SITE_SETTINGS', 'Settings', db.settings.institutionName);
     saveDatabase();
     res.json(db.settings);

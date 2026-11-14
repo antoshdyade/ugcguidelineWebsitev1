@@ -13,13 +13,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $logoUrl = $s['logo_url'] ?? '';
     if (!empty($_FILES['logo_file']['name'])) {
-        $up = handleSecureUpload($_FILES['logo_file'], __DIR__ . '/../uploads');
+        $up = handleCmsUpload($pdo, $_FILES['logo_file'], __DIR__ . '/../uploads', 'photo');
         if ($up['ok']) $logoUrl = $up['file_url'];
         else $err = $up['error'];
     }
     $aboutImg = $s['about_image_url'] ?? 'assets/images/hero_campus.jpg';
     if (!empty($_FILES['about_image_file']['name'])) {
-        $up = handleSecureUpload($_FILES['about_image_file'], __DIR__ . '/../uploads');
+        $up = handleCmsUpload($pdo, $_FILES['about_image_file'], __DIR__ . '/../uploads', 'photo');
         if ($up['ok']) $aboutImg = $up['file_url'];
         else $err = $up['error'];
     }
@@ -77,8 +77,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             json_encode($homeSections, JSON_UNESCAPED_UNICODE),
             json_encode($statsRows, JSON_UNESCAPED_UNICODE),
         ]);
+        $maxPhotoMb = max(0.25, min(25.0, (float)($_POST['max_photo_mb'] ?? ($s['max_photo_mb'] ?? 2.0))));
+        $maxDocMb   = max(0.5, min(50.0, (float)($_POST['max_doc_mb'] ?? ($s['max_doc_mb'] ?? 10.0))));
+        $autoCrop   = isset($_POST['auto_crop_enabled']) ? 1 : 0;
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS cms_kv_store (key_name VARCHAR(64) PRIMARY KEY, val_json LONGTEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)');
+            $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('upload_policy', ?)")
+                ->execute([json_encode(['max_photo_mb' => $maxPhotoMb, 'max_doc_mb' => $maxDocMb, 'auto_crop_enabled' => $autoCrop])]);
+        } catch (Throwable $ignoredKv) {}
+
         logAudit($pdo, $user, 'UPDATE_SETTINGS', 'Settings', $_POST['institution_name']);
-        $msg = 'Site settings & homepage layout saved.';
+        $msg = 'Site settings, upload limits & homepage layout saved.';
         $s = getSiteSettings($pdo);
     }
 }
@@ -160,6 +169,24 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <input type="text" name="stat_label[]" value="<?= e($stRow['label'] ?? '') ?>" placeholder="Metric Label" style="flex:1;padding:0.4rem;">
         </div>
       <?php endfor; ?>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--border-color);margin:1.25rem 0;">
+    <h2 style="margin-top:0;">Upload Size Controls &amp; Image Auto-Crop Policy</h2>
+    <p style="font-size:0.84rem;color:var(--text-muted);margin-top:-0.35rem;margin-bottom:0.85rem;">
+      Applies globally across all Admin photo uploaders (sliders, gallery, faculty, leadership, labs, library, editor) and document repositories.
+    </p>
+    <div class="grid-3" style="margin-bottom:1rem;">
+      <label style="font-size:0.88rem;font-weight:600;">Max Photo Upload Size (MB)
+        <input type="number" step="0.25" min="0.25" max="25" name="max_photo_mb" value="<?= e((string)($s['max_photo_mb'] ?? 2.0)) ?>" style="width:100%;padding:0.45rem;margin-top:4px;">
+      </label>
+      <label style="font-size:0.88rem;font-weight:600;">Max Document Upload Size (MB)
+        <input type="number" step="0.5" min="0.5" max="50" name="max_doc_mb" value="<?= e((string)($s['max_doc_mb'] ?? 10.0)) ?>" style="width:100%;padding:0.45rem;margin-top:4px;">
+      </label>
+      <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.88rem;font-weight:600;padding-top:1.1rem;">
+        <input type="checkbox" name="auto_crop_enabled" <?= !empty($s['auto_crop_enabled']) ? 'checked' : '' ?>>
+        Enable Auto-Crop &amp; Aspect Ratio Lock
+      </label>
     </div>
 
     <button type="submit" class="btn-primary">Save Complete Settings &amp; Homepage Layout</button>

@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'External download link published: ' . $extUrl;
             }
         } elseif (!empty($_FILES['doc_file']['name'])) {
-            $res = handleSecureUpload($_FILES['doc_file'], __DIR__ . '/../uploads');
+            $res = handleCmsUpload($pdo, $_FILES['doc_file'], __DIR__ . '/../uploads', 'document');
             if ($res['ok']) {
                 $stmt = $pdo->prepare('INSERT INTO documents (title, category, source_type, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by, is_quick_link) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?)');
                 $stmt->execute([

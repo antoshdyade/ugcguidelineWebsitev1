@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_slide') {
         $imgUrl = trim($_POST['image_url'] ?? 'assets/images/hero_campus.jpg');
         if (!empty($_FILES['slide_image']['name'])) {
-            $up = handleSecureUpload($_FILES['slide_image'], __DIR__ . '/../uploads');
+            $up = handleCmsUpload($pdo, $_FILES['slide_image'], __DIR__ . '/../uploads', 'photo');
             if ($up['ok']) $imgUrl = $up['file_url'];
             else $err = $up['error'];
         }
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'add_event') {
         $imgUrl = '';
         if (!empty($_FILES['event_image']['name'])) {
-            $up = handleSecureUpload($_FILES['event_image'], __DIR__ . '/../uploads');
+            $up = handleCmsUpload($pdo, $_FILES['event_image'], __DIR__ . '/../uploads', 'photo');
             if ($up['ok']) $imgUrl = $up['file_url'];
             else $err = $up['error'];
         }

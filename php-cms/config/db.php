@@ -210,10 +210,14 @@ function getSiteSettings(PDO $pdo): array
             ['name' => 'NAAC A+ Grade', 'subtitle' => 'CGPA 3.46 / 4.00', 'href' => 'page.php?slug=accreditation-ranking'],
             ['name' => 'PAHSUS Solapur', 'subtitle' => 'Affiliating University', 'href' => 'page.php?slug=about-overview'],
         ],
+        'max_photo_mb' => 2.0,
+        'max_doc_mb' => 10.0,
+        'auto_crop_enabled' => 1,
     ];
     try {
         $stmt = $pdo->query('SELECT * FROM site_settings WHERE id = 1 LIMIT 1');
         $row = $stmt->fetch();
+        $merged = $defaults;
         if ($row) {
             $merged = array_merge($defaults, array_filter($row, static fn($v) => $v !== null && $v !== ''));
             if (!empty($row['home_sections_json'])) {
@@ -234,10 +238,45 @@ function getSiteSettings(PDO $pdo): array
                     $merged['approved_bodies'] = $decoded;
                 }
             }
-            return $merged;
         }
+        try {
+            $kvStmt = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'upload_policy' LIMIT 1");
+            $kvStmt->execute();
+            $kvRaw = $kvStmt->fetchColumn();
+            if ($kvRaw) {
+                $policy = json_decode((string)$kvRaw, true);
+                if (is_array($policy)) {
+                    if (isset($policy['max_photo_mb']) && is_numeric($policy['max_photo_mb'])) {
+                        $merged['max_photo_mb'] = max(0.25, min(25.0, (float)$policy['max_photo_mb']));
+                    }
+                    if (isset($policy['max_doc_mb']) && is_numeric($policy['max_doc_mb'])) {
+                        $merged['max_doc_mb'] = max(0.5, min(50.0, (float)$policy['max_doc_mb']));
+                    }
+                    if (isset($policy['auto_crop_enabled'])) {
+                        $merged['auto_crop_enabled'] = !empty($policy['auto_crop_enabled']) ? 1 : 0;
+                    }
+                }
+            }
+        } catch (Throwable $ignoredKv) {
+            // cms_kv_store optional on older schemas
+        }
+        return $merged;
     } catch (Throwable $ignored) {
         // Fallback below if schema has not been imported yet
     }
     return $defaults;
+}
+
+function getUploadLimits(PDO $pdo): array
+{
+    $s = getSiteSettings($pdo);
+    $photoMb = max(0.25, min(25.0, (float)($s['max_photo_mb'] ?? 2.0)));
+    $docMb   = max(0.5, min(50.0, (float)($s['max_doc_mb'] ?? 10.0)));
+    return [
+        'max_photo_mb'      => $photoMb,
+        'max_doc_mb'        => $docMb,
+        'auto_crop_enabled' => !empty($s['auto_crop_enabled']) ? 1 : 0,
+        'max_photo_bytes'   => (int)round($photoMb * 1024 * 1024),
+        'max_doc_bytes'     => (int)round($docMb * 1024 * 1024),
+    ];
 }
