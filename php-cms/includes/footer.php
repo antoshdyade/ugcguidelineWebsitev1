@@ -35,5 +35,15 @@
   </div>
 </footer>
 <script src="<?= e(assetUrl('assets/js/accessibility.js')) ?>"></script>
+<script>
+  if (typeof window.svcoerFont !== 'function') {
+    <?php
+    $__a11yJsFile = __DIR__ . '/../assets/js/accessibility.js';
+    if (is_readable($__a11yJsFile)) {
+        echo str_ireplace('</script>', '<\/script>', (string)file_get_contents($__a11yJsFile));
+    }
+    ?>
+  }
+</script>
 </body>
 </html>

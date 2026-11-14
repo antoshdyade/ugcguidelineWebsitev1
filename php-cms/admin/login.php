@@ -53,7 +53,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CMS Admin Login</title>
-  <link rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
+  <link id="svcoer-login-css" rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
+  <script>
+    (function () {
+      var fallbackHref = <?= json_encode(baseUrl('admin/asset_proxy.php?f=css'), JSON_UNESCAPED_SLASHES) ?>;
+      function ensureCss() {
+        var ready = getComputedStyle(document.documentElement).getPropertyValue('--svcoer-css-ready').trim();
+        if (ready !== '1' && !document.getElementById('svcoer-proxy-css')) {
+          var lk = document.createElement('link');
+          lk.id = 'svcoer-proxy-css';
+          lk.rel = 'stylesheet';
+          lk.href = fallbackHref;
+          document.head.appendChild(lk);
+        }
+      }
+      var mainLk = document.getElementById('svcoer-login-css');
+      if (mainLk) mainLk.addEventListener('error', ensureCss);
+      window.addEventListener('DOMContentLoaded', ensureCss);
+    })();
+  </script>
 </head>
 <body style="display:flex;min-height:100vh;align-items:center;justify-content:center;padding:1rem;">
   <form method="post" class="card" style="width:100%;max-width:440px;">

@@ -44,26 +44,40 @@ function getBaseUrl(): string
         return $cached;
     }
 
-    // Auto-detect subfolder relative to DOCUMENT_ROOT (cross-platform Windows & Linux)
+    // 1. Prefer SCRIPT_NAME when executing inside /admin/ or root .php entrypoints (reliable under Apache Alias & symlinks)
+    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if ($scriptName !== '' && $scriptName[0] === '/') {
+        $dir = rtrim(dirname($scriptName), '/');
+        if ($dir === '/admin' || substr($dir, -6) === '/admin') {
+            $dir = substr($dir, 0, -6);
+            $cached = ($dir === '' || $dir === '/' || $dir === '.') ? '' : $dir;
+            return $cached;
+        }
+        // Root-level scripts (index.php, page.php, setup.php, etc.)
+        $scriptBase = basename($scriptName);
+        if (file_exists(__DIR__ . '/../' . $scriptBase)) {
+            $cached = ($dir === '/' || $dir === '.') ? '' : $dir;
+            return $cached;
+        }
+    }
+
+    // 2. Fallback: compare app directory against DOCUMENT_ROOT (case-insensitive on Windows XAMPP)
     $appRoot = realpath(__DIR__ . '/..');
     $docRoot = !empty($_SERVER['DOCUMENT_ROOT']) ? realpath((string)$_SERVER['DOCUMENT_ROOT']) : false;
     if ($appRoot !== false && $docRoot !== false) {
         $normApp = str_replace('\\', '/', $appRoot);
         $normDoc = rtrim(str_replace('\\', '/', $docRoot), '/');
-        if ($normDoc !== '' && strpos($normApp, $normDoc) === 0) {
+        $isMatch = (DIRECTORY_SEPARATOR === '\\')
+            ? ($normDoc !== '' && stripos($normApp, $normDoc) === 0)
+            : ($normDoc !== '' && strpos($normApp, $normDoc) === 0);
+        if ($isMatch) {
             $rel = substr($normApp, strlen($normDoc));
-            $cached = $rel === '/' ? '' : rtrim($rel, '/');
+            $cached = ($rel === '' || $rel === '/') ? '' : rtrim($rel, '/');
             return $cached;
         }
     }
 
-    // Fallback using SCRIPT_NAME (handles Apache Alias/symlink setups)
-    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-    $dir = rtrim(dirname($scriptName), '/');
-    if (substr($dir, -6) === '/admin') {
-        $dir = substr($dir, 0, -6);
-    }
-    $cached = ($dir === '/' || $dir === '.') ? '' : $dir;
+    $cached = '';
     return $cached;
 }
 

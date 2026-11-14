@@ -21,7 +21,25 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
   <title><?= e($pageTitle ?? $settings['institution_name']) ?></title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
+  <link id="svcoer-public-css" rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
+  <script>
+    (function () {
+      var fallbackHref = <?= json_encode(baseUrl('admin/asset_proxy.php?f=css'), JSON_UNESCAPED_SLASHES) ?>;
+      function ensureCss() {
+        var ready = getComputedStyle(document.documentElement).getPropertyValue('--svcoer-css-ready').trim();
+        if (ready !== '1' && !document.getElementById('svcoer-proxy-css')) {
+          var lk = document.createElement('link');
+          lk.id = 'svcoer-proxy-css';
+          lk.rel = 'stylesheet';
+          lk.href = fallbackHref;
+          document.head.appendChild(lk);
+        }
+      }
+      var mainLk = document.getElementById('svcoer-public-css');
+      if (mainLk) mainLk.addEventListener('error', ensureCss);
+      window.addEventListener('DOMContentLoaded', ensureCss);
+    })();
+  </script>
   <style>
     :root {
       --primary-color: <?= e($settings['primary_color']) ?>;
