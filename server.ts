@@ -43,13 +43,24 @@ import {
   createCaptchaChallenge,
   verifyCaptchaChallenge,
 } from './src/lib/captchaLogic';
+import {
+  generateReferenceCode,
+  migrateDatabaseInPlace,
+  validateAlumniPledgeInput,
+  validateConferenceRegistrationInput,
+  validateConferenceSubmissionInput,
+  validateGrievanceInput,
+} from './src/lib/collegeFeaturesLogic';
 import { buildZipBuffer, parseZipBuffer, type ZipInputEntry } from './src/lib/zipArchive';
 import type {
+  AdminModuleKey,
+  AlumniAchiever,
   AlumniApprovalStatus,
   AlumniData,
   AlumniDiscussionComment,
   AlumniDiscussionPost,
   AlumniDiscussionTopic,
+  AlumniEndowmentPledge,
   AlumniEventChapter,
   AlumniJob,
   AlumniJobStatus,
@@ -62,8 +73,16 @@ import type {
   CmsCategory,
   CmsDatabase,
   CmsUser,
+  Conference,
+  ConferencePaperStatus,
+  ConferenceRegistration,
+  ConferenceSubmission,
   CustomHomeComponent,
+  GrievanceStatus,
+  GrievanceTicket,
   HomeComponentPlacement,
+  PlacementStory,
+  PlacementYearStat,
   ScpConfig,
   SiteMigrationManifest,
   UserRole,
@@ -168,36 +187,38 @@ function loadDatabase(): CmsDatabase {
         needsSave = true;
       }
 
-      const merged: CmsDatabase = {
-        ...seed,
-        ...parsed,
-        categories,
-        pages,
-        users,
-        alumni,
-        backups: Array.isArray(parsed.backups) ? parsed.backups : [],
-        backupSchedule: {
-          ...defaultBackupSchedule(),
-          ...(parsed.backupSchedule || {}),
-          scpConfig: {
-            ...defaultBackupSchedule().scpConfig!,
-            ...(parsed.backupSchedule?.scpConfig || {}),
+      const migrated = migrateDatabaseInPlace(
+        {
+          ...parsed,
+          categories,
+          pages,
+          users,
+          alumni,
+          backups: Array.isArray(parsed.backups) ? parsed.backups : [],
+          backupSchedule: {
+            ...defaultBackupSchedule(),
+            ...(parsed.backupSchedule || {}),
+            scpConfig: {
+              ...defaultBackupSchedule().scpConfig!,
+              ...(parsed.backupSchedule?.scpConfig || {}),
+            },
+          },
+          settings: {
+            ...seed.settings,
+            ...(parsed.settings || {}),
+            homeSections: {
+              ...seed.settings.homeSections!,
+              ...(parsed.settings?.homeSections || {}),
+            },
+            customHomeComponents,
           },
         },
-        settings: {
-          ...seed.settings,
-          ...(parsed.settings || {}),
-          homeSections: {
-            ...seed.settings.homeSections!,
-            ...(parsed.settings?.homeSections || {}),
-          },
-          customHomeComponents,
-        },
-      };
-      if (needsSave) {
-        fs.writeFileSync(DB_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+        seed,
+      );
+      if (needsSave || migrated.upgraded) {
+        fs.writeFileSync(DB_FILE, JSON.stringify(migrated.db, null, 2), 'utf-8');
       }
-      return merged;
+      return migrated.db;
     } catch {
       // Fallback to fresh seed if file is corrupted
     }
@@ -397,8 +418,248 @@ async function startServer() {
         profiles: stripAlumniCredentials(sortByOrder(alumniState.profiles.filter((p) => p.status === 'approved'))),
         jobs: sortByOrder(alumniState.jobs.filter((j) => j.status === 'open')),
         events: sortByOrder(alumniState.events.filter((e) => e.isActive)),
+        achievers: sortByOrder(alumniState.achievers ?? []),
       },
+      conferences: sortByOrder((db.conferences ?? []).filter((c) => c.isPublished)),
+      placements: db.placements ?? createSeedDatabase().placements,
       settings: db.settings,
+    });
+  });
+
+  // Public Conferences: Paper Submission & Registration (CAPTCHA protected)
+  app.post('/api/public/conferences/upload-manuscript', (req, res) => {
+    const { filename, mimeType, base64Data } = req.body as {
+      filename?: string;
+      mimeType?: string;
+      base64Data?: string;
+    };
+    if (!filename || !mimeType || !base64Data) {
+      res.status(400).json({ error: 'Missing manuscript filename, MIME type, or file data.' });
+      return;
+    }
+    const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const maxBytes = getUploadSizeLimitBytes(db.settings, 'document');
+    const check = validateUploadMeta(filename, mimeType, buffer.length, maxBytes);
+    if (!check.valid || !check.safeFilename) {
+      res.status(400).json({ error: check.reason || 'Manuscript upload rejected.' });
+      return;
+    }
+    const safeName = `conf-paper-${check.safeFilename}`;
+    fs.writeFileSync(path.join(UPLOAD_DIR, safeName), buffer);
+    res.json({ url: `/uploads/${safeName}`, filename: safeName, sizeBytes: buffer.length });
+  });
+
+  app.post('/api/public/conferences/submit-paper', (req, res) => {
+    const body = req.body as Partial<ConferenceSubmission> & {
+      captchaId?: string;
+      captchaAnswer?: string;
+    };
+    const captchaCheck = verifyCaptchaChallenge(body.captchaId, body.captchaAnswer);
+    if (!captchaCheck.valid) {
+      res.status(400).json({ error: captchaCheck.reason || 'Invalid CAPTCHA verification.' });
+      return;
+    }
+    const validation = validateConferenceSubmissionInput(body);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    const conf = (db.conferences ?? []).find((c) => c.id === Number(body.conferenceId) && c.isPublished);
+    if (!conf) {
+      res.status(404).json({ error: 'Target conference not found or closed.' });
+      return;
+    }
+    if (body.manuscriptUrl && body.manuscriptUrl.trim()) {
+      const uCheck = validateExternalDocumentUrl(body.manuscriptUrl);
+      if (!uCheck.valid) {
+        res.status(400).json({ error: uCheck.reason || 'Invalid manuscript URL.' });
+        return;
+      }
+    }
+    db.conferenceSubmissions = db.conferenceSubmissions ?? [];
+    const nextId = Math.max(0, ...db.conferenceSubmissions.map((s) => s.id)) + 1;
+    const trackingCode = generateReferenceCode('CONF', nextId);
+    const submission: ConferenceSubmission = {
+      id: nextId,
+      conferenceId: conf.id,
+      trackingCode,
+      paperTitle: String(body.paperTitle).trim(),
+      trackTitle: String(body.trackTitle).trim(),
+      authorName: String(body.authorName).trim(),
+      authorEmail: String(body.authorEmail).trim().toLowerCase(),
+      authorPhone: String(body.authorPhone || '').trim(),
+      affiliation: String(body.affiliation).trim(),
+      coAuthors: body.coAuthors ? String(body.coAuthors).trim() : '',
+      abstractText: String(body.abstractText).trim(),
+      manuscriptUrl: body.manuscriptUrl ? String(body.manuscriptUrl).trim() : undefined,
+      status: 'submitted',
+      submittedAt: new Date().toISOString().slice(0, 10),
+    };
+    db.conferenceSubmissions.unshift(submission);
+    saveDatabase();
+    res.status(201).json({
+      ok: true,
+      trackingCode,
+      submission,
+      message: `Manuscript submitted successfully! Your tracking ID is ${trackingCode}.`,
+    });
+  });
+
+  app.post('/api/public/conferences/register', (req, res) => {
+    const body = req.body as Partial<ConferenceRegistration> & {
+      captchaId?: string;
+      captchaAnswer?: string;
+    };
+    const captchaCheck = verifyCaptchaChallenge(body.captchaId, body.captchaAnswer);
+    if (!captchaCheck.valid) {
+      res.status(400).json({ error: captchaCheck.reason || 'Invalid CAPTCHA verification.' });
+      return;
+    }
+    const validation = validateConferenceRegistrationInput(body);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    const conf = (db.conferences ?? []).find((c) => c.id === Number(body.conferenceId) && c.isPublished);
+    if (!conf) {
+      res.status(404).json({ error: 'Selected conference not found or registration closed.' });
+      return;
+    }
+    db.conferenceRegistrations = db.conferenceRegistrations ?? [];
+    const nextId = Math.max(0, ...db.conferenceRegistrations.map((r) => r.id)) + 1;
+    const regCode = generateReferenceCode('REG', nextId);
+    const reg: ConferenceRegistration = {
+      id: nextId,
+      conferenceId: conf.id,
+      regCode,
+      attendeeName: String(body.attendeeName).trim(),
+      email: String(body.email).trim().toLowerCase(),
+      phone: String(body.phone || '').trim(),
+      affiliation: String(body.affiliation).trim(),
+      designation: String(body.designation || 'Delegate').trim(),
+      feeCategory: String(body.feeCategory).trim(),
+      participationMode: String(body.participationMode || conf.mode).trim(),
+      paperTrackingCode: body.paperTrackingCode ? String(body.paperTrackingCode).trim() : '',
+      paymentRef: body.paymentRef ? String(body.paymentRef).trim() : '',
+      status: 'registered',
+      registeredAt: new Date().toISOString().slice(0, 10),
+    };
+    db.conferenceRegistrations.unshift(reg);
+    saveDatabase();
+    res.status(201).json({
+      ok: true,
+      regCode,
+      registration: reg,
+      message: `Conference registration confirmed! Your delegate ID is ${regCode}.`,
+    });
+  });
+
+  // Public Grievance Redressal & Status Tracking
+  app.get('/api/public/grievances/status', (req, res) => {
+    const code = String(req.query.code || '').trim().toUpperCase();
+    if (!code) {
+      res.status(400).json({ error: 'Please enter a valid Ticket Code (e.g. GRV-2026-0001).' });
+      return;
+    }
+    const ticket = (db.grievances ?? []).find((g) => g.ticketCode.toUpperCase() === code);
+    if (!ticket) {
+      res.status(404).json({ error: `No grievance ticket found matching "${code}".` });
+      return;
+    }
+    res.json({
+      ticketCode: ticket.ticketCode,
+      category: ticket.category,
+      subject: ticket.subject,
+      departmentOrCell: ticket.departmentOrCell,
+      status: ticket.status,
+      resolutionNote: ticket.resolutionNote || 'Under review by the Institutional Grievance Committee.',
+      submittedAt: ticket.submittedAt,
+      updatedAt: ticket.updatedAt,
+    });
+  });
+
+  app.post('/api/public/grievances', (req, res) => {
+    const body = req.body as Partial<GrievanceTicket> & {
+      captchaId?: string;
+      captchaAnswer?: string;
+    };
+    const captchaCheck = verifyCaptchaChallenge(body.captchaId, body.captchaAnswer);
+    if (!captchaCheck.valid) {
+      res.status(400).json({ error: captchaCheck.reason || 'Invalid CAPTCHA verification.' });
+      return;
+    }
+    const validation = validateGrievanceInput(body);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    db.grievances = db.grievances ?? [];
+    const nextId = Math.max(0, ...db.grievances.map((g) => g.id)) + 1;
+    const ticketCode = generateReferenceCode('GRV', nextId);
+    const today = new Date().toISOString().slice(0, 10);
+    const ticket: GrievanceTicket = {
+      id: nextId,
+      ticketCode,
+      complainantName: String(body.complainantName).trim(),
+      complainantRole: String(body.complainantRole || 'Student (UG / PG / Ph.D.)').trim(),
+      email: String(body.email).trim().toLowerCase(),
+      phone: String(body.phone || '').trim(),
+      departmentOrCell: String(body.departmentOrCell || 'General Administration').trim(),
+      category: String(body.category).trim(),
+      subject: String(body.subject).trim(),
+      description: String(body.description).trim(),
+      status: 'submitted',
+      submittedAt: today,
+      updatedAt: today,
+    };
+    db.grievances.unshift(ticket);
+    saveDatabase();
+    res.status(201).json({
+      ok: true,
+      ticketCode,
+      message: `Grievance registered securely! Use tracking ID ${ticketCode} to check resolution status.`,
+    });
+  });
+
+  // Public Alumni Endowment / Support Pledge
+  app.post('/api/public/alumni/pledge', (req, res) => {
+    const alumniState = ensureAlumniState();
+    const body = req.body as Partial<AlumniEndowmentPledge> & {
+      captchaId?: string;
+      captchaAnswer?: string;
+    };
+    const captchaCheck = verifyCaptchaChallenge(body.captchaId, body.captchaAnswer);
+    if (!captchaCheck.valid) {
+      res.status(400).json({ error: captchaCheck.reason || 'Invalid CAPTCHA verification.' });
+      return;
+    }
+    const validation = validateAlumniPledgeInput(body);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    alumniState.pledges = alumniState.pledges ?? [];
+    const nextId = Math.max(0, ...alumniState.pledges.map((p) => p.id)) + 1;
+    const created: AlumniEndowmentPledge = {
+      id: nextId,
+      fullName: String(body.fullName).trim(),
+      email: String(body.email).trim().toLowerCase(),
+      phone: String(body.phone || '').trim(),
+      batchYear: Number(body.batchYear || new Date().getFullYear()),
+      departmentCode: String(body.departmentCode || 'All Branches').trim(),
+      pledgeType: String(body.pledgeType).trim(),
+      amountOrSupport: String(body.amountOrSupport).trim(),
+      message: String(body.message || '').trim(),
+      status: 'pending',
+      submittedAt: new Date().toISOString().slice(0, 10),
+    };
+    alumniState.pledges.unshift(created);
+    saveDatabase();
+    res.status(201).json({
+      ok: true,
+      pledge: created,
+      message: 'Thank you! Your alumni mentorship/endowment pledge has been recorded for coordinator follow-up.',
     });
   });
 
@@ -496,6 +757,7 @@ async function startServer() {
       websiteUrl: body.websiteUrl ? String(body.websiteUrl).trim() : '',
       photoUrl: body.photoUrl ? String(body.photoUrl).trim() : '/src/assets/images/leadership_principal_1794512597061.jpg',
       bio: String(body.bio || '').trim(),
+      mentorshipAreas: Array.isArray(body.mentorshipAreas) ? body.mentorshipAreas.map((s) => String(s).trim()).filter(Boolean) : [],
       openToMentorship: Boolean(body.openToMentorship),
       isFeatured: false,
       status: 'pending',
@@ -929,7 +1191,14 @@ async function startServer() {
         events: sortByOrder(alumniState.events),
         discussionTopics: sortByOrder(alumniState.discussionTopics ?? []),
         discussions: alumniState.discussions ?? [],
+        achievers: sortByOrder(alumniState.achievers ?? []),
+        pledges: alumniState.pledges ?? [],
       },
+      conferences: sortByOrder(db.conferences ?? []),
+      conferenceSubmissions: db.conferenceSubmissions ?? [],
+      conferenceRegistrations: db.conferenceRegistrations ?? [],
+      placements: db.placements ?? createSeedDatabase().placements,
+      grievances: db.grievances ?? [],
       settings: db.settings,
       users: canUserAccessResource(currentUser, 'users') ? db.users.map(sanitizeUser) : [],
       auditLogs: canUserAccessResource(currentUser, 'audit_logs') ? db.auditLogs : [],
@@ -2384,6 +2653,8 @@ async function startServer() {
       assignedDepartmentId,
       allowedCategories,
       allowedPageIds,
+      allowedModules,
+      allowedDepartmentIds,
     } = req.body as {
       fullName?: string;
       email?: string;
@@ -2392,6 +2663,8 @@ async function startServer() {
       assignedDepartmentId?: number | null;
       allowedCategories?: string[];
       allowedPageIds?: number[];
+      allowedModules?: AdminModuleKey[];
+      allowedDepartmentIds?: number[];
     };
     if (!fullName || !email || !password || !role) {
       res.status(400).json({ error: 'Name, email, password, and role are required.' });
@@ -2401,21 +2674,37 @@ async function startServer() {
       res.status(409).json({ error: 'User with this email already exists.' });
       return;
     }
+    const cleanCats = Array.isArray(allowedCategories)
+      ? allowedCategories.map(String)
+      : role === 'exam_controller'
+      ? ['examination']
+      : [];
+    const cleanPageIds = Array.isArray(allowedPageIds) ? allowedPageIds.map(Number).filter(Number.isFinite) : [];
+    const cleanModules = Array.isArray(allowedModules) ? allowedModules.map(String) as AdminModuleKey[] : [];
+    const cleanDeptIds = Array.isArray(allowedDepartmentIds) ? allowedDepartmentIds.map(Number).filter(Number.isFinite) : [];
+    if (
+      role === 'specific_page_editor' &&
+      cleanCats.length === 0 &&
+      cleanPageIds.length === 0 &&
+      cleanModules.length === 0 &&
+      cleanDeptIds.length === 0
+    ) {
+      res.status(400).json({
+        error: 'Assign at least one Page, Category, Admin Module, or Department for a Specific Page / Portal User.',
+      });
+      return;
+    }
     const nextId = Math.max(1, ...db.users.map((u) => u.id)) + 1;
-    const defaultCats =
-      Array.isArray(allowedCategories)
-        ? allowedCategories
-        : role === 'exam_controller'
-        ? ['examination']
-        : [];
     const newUser = {
       id: nextId,
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
       role,
-      assignedDepartmentId: role === 'department_admin' ? Number(assignedDepartmentId || 1) : null,
-      allowedCategories: defaultCats,
-      allowedPageIds: Array.isArray(allowedPageIds) ? allowedPageIds.map(Number) : [],
+      assignedDepartmentId: role === 'department_admin' ? Number(assignedDepartmentId || cleanDeptIds[0] || 1) : null,
+      allowedCategories: cleanCats,
+      allowedPageIds: cleanPageIds,
+      allowedModules: cleanModules,
+      allowedDepartmentIds: cleanDeptIds,
       isActive: true,
       passwordHash: hashPassword(password),
     };
@@ -2432,11 +2721,13 @@ async function startServer() {
       res.status(404).json({ error: 'User not found.' });
       return;
     }
-    const { role, assignedDepartmentId, allowedCategories, allowedPageIds } = req.body as {
+    const { role, assignedDepartmentId, allowedCategories, allowedPageIds, allowedModules, allowedDepartmentIds } = req.body as {
       role?: UserRole;
       assignedDepartmentId?: number | null;
       allowedCategories?: string[];
       allowedPageIds?: number[];
+      allowedModules?: AdminModuleKey[];
+      allowedDepartmentIds?: number[];
     };
     if (role !== undefined && target.id !== actor.id) {
       target.role = role;
@@ -2451,11 +2742,17 @@ async function startServer() {
     if (Array.isArray(allowedPageIds)) {
       target.allowedPageIds = allowedPageIds.map(Number).filter(Number.isFinite);
     }
+    if (Array.isArray(allowedModules)) {
+      target.allowedModules = allowedModules.map(String) as AdminModuleKey[];
+    }
+    if (Array.isArray(allowedDepartmentIds)) {
+      target.allowedDepartmentIds = allowedDepartmentIds.map(Number).filter(Number.isFinite);
+    }
     addAudit(
       actor,
       'UPDATE_USER_PERMISSIONS',
       'User',
-      `${target.email} (${(target.allowedCategories ?? []).length} cats, ${(target.allowedPageIds ?? []).length} pages)`,
+      `${target.email} (${(target.allowedModules ?? []).length} modules, ${(target.allowedCategories ?? []).length} cats, ${(target.allowedPageIds ?? []).length} pages)`,
     );
     saveDatabase();
     res.json(sanitizeUser(target));
@@ -3235,6 +3532,401 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  // Alumni Distinguished Achievers & Endowment Pledges Admin CRUD
+  app.post('/api/admin/alumni/achievers', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const b = req.body as Partial<AlumniAchiever>;
+    if (!b.fullName || !b.awardTitle) {
+      res.status(400).json({ error: 'Achiever full name and award title are required.' });
+      return;
+    }
+    alumniState.achievers = alumniState.achievers ?? [];
+    const nextId = Math.max(0, ...alumniState.achievers.map((a) => a.id)) + 1;
+    const nextSort = Math.max(0, ...alumniState.achievers.map((a) => a.sortOrder)) + 1;
+    const created: AlumniAchiever = {
+      id: nextId,
+      fullName: String(b.fullName).trim(),
+      batchYear: Number(b.batchYear || 2015),
+      departmentCode: String(b.departmentCode || 'CSE').trim(),
+      designation: String(b.designation || 'Alumni Leader').trim(),
+      organization: String(b.organization || 'Industry Partner').trim(),
+      awardTitle: String(b.awardTitle).trim(),
+      citation: String(b.citation || '').trim(),
+      photoUrl: String(b.photoUrl || '/src/assets/images/leadership_principal_1794512597061.jpg').trim(),
+      linkedinUrl: b.linkedinUrl ? String(b.linkedinUrl).trim() : '',
+      sortOrder: Number(b.sortOrder ?? nextSort),
+    };
+    alumniState.achievers.push(created);
+    addAudit(actor, 'CREATE_ALUMNI_ACHIEVER', 'AlumniAchiever', created.fullName);
+    saveDatabase();
+    res.status(201).json(created);
+  });
+
+  app.put('/api/admin/alumni/achievers/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const item = (alumniState.achievers ?? []).find((a) => a.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Alumni achiever not found.' });
+      return;
+    }
+    Object.assign(item, req.body);
+    addAudit(actor, 'UPDATE_ALUMNI_ACHIEVER', 'AlumniAchiever', item.fullName);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/alumni/achievers/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const list = alumniState.achievers ?? [];
+    const idx = list.findIndex((a) => a.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Alumni achiever not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    addAudit(actor, 'DELETE_ALUMNI_ACHIEVER', 'AlumniAchiever', removed.fullName);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/alumni/pledges/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const pledge = (alumniState.pledges ?? []).find((p) => p.id === Number(req.params.id));
+    if (!pledge) {
+      res.status(404).json({ error: 'Endowment pledge not found.' });
+      return;
+    }
+    if (req.body.status && ['pending', 'acknowledged', 'fulfilled'].includes(String(req.body.status))) {
+      pledge.status = req.body.status;
+    }
+    addAudit(actor, 'UPDATE_ALUMNI_PLEDGE', 'AlumniPledge', `${pledge.fullName} (${pledge.status})`);
+    saveDatabase();
+    res.json(pledge);
+  });
+
+  app.delete('/api/admin/alumni/pledges/:id', requireAdmin('alumni'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const alumniState = ensureAlumniState();
+    const list = alumniState.pledges ?? [];
+    const idx = list.findIndex((p) => p.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Endowment pledge not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    addAudit(actor, 'DELETE_ALUMNI_PLEDGE', 'AlumniPledge', removed.fullName);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // ============================================================================
+  // INTERNATIONAL & NATIONAL CONFERENCES ADMIN CRUD + REVIEW WORKFLOW
+  // ============================================================================
+  app.post('/api/admin/conferences', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const b = req.body as Partial<Conference>;
+    if (!b.title || !b.shortName) {
+      res.status(400).json({ error: 'Conference title and short name are required.' });
+      return;
+    }
+    db.conferences = db.conferences ?? [];
+    const cleanSlug = (b.slug && String(b.slug).trim() ? String(b.slug) : String(b.shortName))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || `conf-${Date.now()}`;
+    if (db.conferences.some((c) => c.slug === cleanSlug)) {
+      res.status(409).json({ error: `Conference slug "${cleanSlug}" already exists.` });
+      return;
+    }
+    const nextId = Math.max(0, ...db.conferences.map((c) => c.id)) + 1;
+    const nextSort = Math.max(0, ...db.conferences.map((c) => c.sortOrder)) + 1;
+    const created: Conference = {
+      id: nextId,
+      slug: cleanSlug,
+      title: String(b.title).trim(),
+      shortName: String(b.shortName).trim(),
+      scope: String(b.scope || 'International Conference').trim(),
+      theme: String(b.theme || '').trim(),
+      startDate: String(b.startDate || new Date().toISOString().slice(0, 10)).trim(),
+      endDate: String(b.endDate || b.startDate || new Date().toISOString().slice(0, 10)).trim(),
+      venue: String(b.venue || "SVERI's COE Auditorium, Pandharpur").trim(),
+      mode: String(b.mode || 'Hybrid (On-Campus + Online)').trim(),
+      organizingDepartment: String(b.organizingDepartment || 'All Engineering Departments').trim(),
+      indexingPartners: Array.isArray(b.indexingPartners) ? b.indexingPartners.map(String) : [],
+      contactEmail: String(b.contactEmail || 'conference@coe.sveri.ac.in').trim(),
+      contactPhone: String(b.contactPhone || '+91-02186-216063').trim(),
+      bannerUrl: String(b.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg').trim(),
+      brochureUrl: b.brochureUrl ? String(b.brochureUrl).trim() : '',
+      templateUrl: b.templateUrl ? String(b.templateUrl).trim() : '',
+      overviewHtml: String(b.overviewHtml || '<p>Conference overview and technical scope.</p>'),
+      cfpHtml: String(b.cfpHtml || '<p>Original unpublished research papers are invited.</p>'),
+      isPublished: b.isPublished !== false,
+      isFeatured: Boolean(b.isFeatured ?? true),
+      sortOrder: Number(b.sortOrder ?? nextSort),
+      tracks: Array.isArray(b.tracks) ? b.tracks : [],
+      importantDates: Array.isArray(b.importantDates) ? b.importantDates : [],
+      people: Array.isArray(b.people) ? b.people : [],
+      schedule: Array.isArray(b.schedule) ? b.schedule : [],
+      feeTiers: Array.isArray(b.feeTiers) ? b.feeTiers : [],
+    };
+    db.conferences.push(created);
+    addAudit(actor, 'CREATE_CONFERENCE', 'Conference', `${created.shortName} (${created.scope})`);
+    saveDatabase();
+    res.status(201).json(created);
+  });
+
+  app.put('/api/admin/conferences/:id', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const conf = (db.conferences ?? []).find((c) => c.id === Number(req.params.id));
+    if (!conf) {
+      res.status(404).json({ error: 'Conference not found.' });
+      return;
+    }
+    const patch = req.body as Partial<Conference>;
+    const { id: _ignoreId, ...rest } = patch;
+    Object.assign(conf, rest);
+    addAudit(actor, 'UPDATE_CONFERENCE', 'Conference', conf.shortName);
+    saveDatabase();
+    res.json(conf);
+  });
+
+  app.delete('/api/admin/conferences/:id', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const list = db.conferences ?? [];
+    const idx = list.findIndex((c) => c.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Conference not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    db.conferenceSubmissions = (db.conferenceSubmissions ?? []).filter((s) => s.conferenceId !== removed.id);
+    db.conferenceRegistrations = (db.conferenceRegistrations ?? []).filter((r) => r.conferenceId !== removed.id);
+    addAudit(actor, 'DELETE_CONFERENCE', 'Conference', removed.shortName);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/conferences/:id/submissions/:subId', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sub = (db.conferenceSubmissions ?? []).find(
+      (s) => s.id === Number(req.params.subId) && s.conferenceId === Number(req.params.id),
+    );
+    if (!sub) {
+      res.status(404).json({ error: 'Paper submission not found.' });
+      return;
+    }
+    const { status, reviewerNote } = req.body as { status?: ConferencePaperStatus; reviewerNote?: string };
+    if (status && ['submitted', 'under_review', 'accepted', 'revision_required', 'rejected'].includes(status)) {
+      sub.status = status;
+    }
+    if (reviewerNote !== undefined) sub.reviewerNote = String(reviewerNote).trim();
+    addAudit(actor, 'REVIEW_CONF_PAPER', 'ConferencePaper', `${sub.trackingCode} -> ${sub.status}`);
+    saveDatabase();
+    res.json(sub);
+  });
+
+  app.delete('/api/admin/conferences/:id/submissions/:subId', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const list = db.conferenceSubmissions ?? [];
+    const idx = list.findIndex(
+      (s) => s.id === Number(req.params.subId) && s.conferenceId === Number(req.params.id),
+    );
+    if (idx === -1) {
+      res.status(404).json({ error: 'Paper submission not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    addAudit(actor, 'DELETE_CONF_PAPER', 'ConferencePaper', removed.trackingCode);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/conferences/:id/registrations/:regId', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const reg = (db.conferenceRegistrations ?? []).find(
+      (r) => r.id === Number(req.params.regId) && r.conferenceId === Number(req.params.id),
+    );
+    if (!reg) {
+      res.status(404).json({ error: 'Delegate registration not found.' });
+      return;
+    }
+    if (req.body.status && ['registered', 'verified', 'cancelled'].includes(String(req.body.status))) {
+      reg.status = req.body.status;
+    }
+    addAudit(actor, 'UPDATE_CONF_REG', 'ConferenceReg', `${reg.regCode} -> ${reg.status}`);
+    saveDatabase();
+    res.json(reg);
+  });
+
+  app.delete('/api/admin/conferences/:id/registrations/:regId', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const list = db.conferenceRegistrations ?? [];
+    const idx = list.findIndex(
+      (r) => r.id === Number(req.params.regId) && r.conferenceId === Number(req.params.id),
+    );
+    if (idx === -1) {
+      res.status(404).json({ error: 'Delegate registration not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    addAudit(actor, 'DELETE_CONF_REG', 'ConferenceReg', removed.regCode);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // ============================================================================
+  // TRAINING & PLACEMENT CELL + GRIEVANCE REDRESSAL ADMIN ROUTES
+  // ============================================================================
+  function ensurePlacementsState() {
+    if (!db.placements) {
+      db.placements = createSeedDatabase().placements!;
+    }
+    return db.placements;
+  }
+
+  app.put('/api/admin/placements/settings', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const { summaryNote, coordinatorName, coordinatorEmail, coordinatorPhone } = req.body;
+    if (summaryNote !== undefined) pl.summaryNote = String(summaryNote);
+    if (coordinatorName !== undefined) pl.coordinatorName = String(coordinatorName);
+    if (coordinatorEmail !== undefined) pl.coordinatorEmail = String(coordinatorEmail);
+    if (coordinatorPhone !== undefined) pl.coordinatorPhone = String(coordinatorPhone);
+    addAudit(actor, 'UPDATE_PLACEMENT_INFO', 'Placements', pl.coordinatorName);
+    saveDatabase();
+    res.json(pl);
+  });
+
+  app.post('/api/admin/placements/stats', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const b = req.body as Partial<PlacementYearStat>;
+    if (!b.academicYear || !b.branch) {
+      res.status(400).json({ error: 'Academic year and branch are required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...pl.stats.map((s) => s.id)) + 1;
+    const stat: PlacementYearStat = {
+      id: nextId,
+      academicYear: String(b.academicYear).trim(),
+      branch: String(b.branch).trim(),
+      eligibleStudents: Number(b.eligibleStudents || 60),
+      placedStudents: Number(b.placedStudents || 50),
+      highestPackageLpa: Number(b.highestPackageLpa || 10),
+      averagePackageLpa: Number(b.averagePackageLpa || 4.8),
+      topRecruitersList: String(b.topRecruitersList || '').trim(),
+      sortOrder: Number(b.sortOrder ?? pl.stats.length + 1),
+    };
+    pl.stats.push(stat);
+    addAudit(actor, 'CREATE_PLACEMENT_STAT', 'Placements', `${stat.branch} (${stat.academicYear})`);
+    saveDatabase();
+    res.status(201).json(stat);
+  });
+
+  app.put('/api/admin/placements/stats/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const item = pl.stats.find((s) => s.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Placement stat not found.' });
+      return;
+    }
+    Object.assign(item, req.body);
+    addAudit(actor, 'UPDATE_PLACEMENT_STAT', 'Placements', item.branch);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/placements/stats/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const idx = pl.stats.findIndex((s) => s.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Placement stat not found.' });
+      return;
+    }
+    const [removed] = pl.stats.splice(idx, 1);
+    addAudit(actor, 'DELETE_PLACEMENT_STAT', 'Placements', removed.branch);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/placements/stories', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const b = req.body as Partial<PlacementStory>;
+    if (!b.studentName || !b.company) {
+      res.status(400).json({ error: 'Student name and company are required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...pl.stories.map((s) => s.id)) + 1;
+    const story: PlacementStory = {
+      id: nextId,
+      studentName: String(b.studentName).trim(),
+      branch: String(b.branch || 'B.Tech').trim(),
+      company: String(b.company).trim(),
+      packageLpa: String(b.packageLpa || '').trim(),
+      batchYear: String(b.batchYear || '2026').trim(),
+      photoUrl: String(b.photoUrl || '/src/assets/images/campus_convocation_1794512597749.jpg').trim(),
+      quote: String(b.quote || '').trim(),
+      sortOrder: Number(b.sortOrder ?? pl.stories.length + 1),
+    };
+    pl.stories.push(story);
+    addAudit(actor, 'CREATE_PLACEMENT_STORY', 'Placements', story.studentName);
+    saveDatabase();
+    res.status(201).json(story);
+  });
+
+  app.delete('/api/admin/placements/stories/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const idx = pl.stories.findIndex((s) => s.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Placement story not found.' });
+      return;
+    }
+    const [removed] = pl.stories.splice(idx, 1);
+    addAudit(actor, 'DELETE_PLACEMENT_STORY', 'Placements', removed.studentName);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/grievances/:id', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const ticket = (db.grievances ?? []).find((g) => g.id === Number(req.params.id));
+    if (!ticket) {
+      res.status(404).json({ error: 'Grievance ticket not found.' });
+      return;
+    }
+    const { status, resolutionNote } = req.body as { status?: GrievanceStatus; resolutionNote?: string };
+    if (status && ['submitted', 'in_review', 'resolved', 'closed'].includes(status)) {
+      ticket.status = status;
+    }
+    if (resolutionNote !== undefined) ticket.resolutionNote = String(resolutionNote).trim();
+    ticket.updatedAt = new Date().toISOString().slice(0, 10);
+    addAudit(actor, 'UPDATE_GRIEVANCE', 'Grievance', `${ticket.ticketCode} -> ${ticket.status}`);
+    saveDatabase();
+    res.json(ticket);
+  });
+
+  app.delete('/api/admin/grievances/:id', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const list = db.grievances ?? [];
+    const idx = list.findIndex((g) => g.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Grievance ticket not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    addAudit(actor, 'DELETE_GRIEVANCE', 'Grievance', removed.ticketCode);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
   // Complete Website Migration Package (.zip: Code + DB + Uploaded Photos/Media)
   function collectFilesForMigrationZip(
     rootDir: string,
@@ -3563,10 +4255,7 @@ async function startServer() {
           };
         }
 
-        db = applyBackupRestore(db, pkgToRestore);
-        if (!db.alumni) {
-          db.alumni = createSeedAlumniData();
-        }
+        db = migrateDatabaseInPlace(applyBackupRestore(db, pkgToRestore), createSeedDatabase()).db;
         entityCounts = countDatabaseEntities(pkgToRestore.data);
       }
 
@@ -3773,7 +4462,7 @@ async function startServer() {
       notes: `Automatic pre-restore safety snapshot before restoring ${validation.pkg.mode} archive`,
     });
 
-    db = applyBackupRestore(db, validation.pkg);
+    db = migrateDatabaseInPlace(applyBackupRestore(db, validation.pkg), createSeedDatabase()).db;
     addAudit(
       actor,
       'RESTORE_BACKUP',

@@ -168,11 +168,44 @@ export type AdminResource =
   | 'gallery'
   | 'leadership'
   | 'directory'
-  | 'alumni';
+  | 'alumni'
+  | 'conferences'
+  | 'placements'
+  | 'grievances';
+
+export interface RbacModuleOption {
+  id: AdminResource;
+  label: string;
+  description: string;
+}
+
+export const ALL_RBAC_MODULE_OPTIONS: RbacModuleOption[] = [
+  { id: 'categories', label: 'Categories & Header Menus', description: 'Top nav portals & category ordering' },
+  { id: 'pages', label: 'Pages & UGC Portal Content', description: 'Micro-pages selected in Per-Page matrix below' },
+  { id: 'departments', label: 'Departments & Microsites', description: 'Department profiles, faculty, labs & sub-pages' },
+  { id: 'sliders_events', label: 'Homepage, Sliders, Ticker & Events', description: 'Hero banners, news marquee & campus events' },
+  { id: 'leadership', label: 'Leadership & Governance Committees', description: 'Statutory officers, BoG, Academic Council, ICC' },
+  { id: 'conferences', label: 'Conferences (Nat\'l / Int\'l)', description: 'Call for papers, tracks, speakers, submissions & reg' },
+  { id: 'placements', label: 'Training & Placement Hub', description: 'Branch placement stats, recruiters & stories' },
+  { id: 'grievances', label: 'Grievance & Anti-Ragging Helpdesk', description: 'Review tickets & post resolution responses' },
+  { id: 'alumni', label: 'Alumni Network, Jobs & Forum', description: 'Profiles, jobs, achievers, discussions & pledges' },
+  { id: 'gallery', label: 'Picture Gallery', description: 'Campus photo albums & event pictures' },
+  { id: 'documents', label: 'Document Repository & Quick Links', description: 'PDFs, circulars, fees & approvals' },
+  { id: 'directory', label: 'Telephone Directory', description: 'Campus extensions & office contacts' },
+  { id: 'settings', label: 'Site Settings, Theme & Design', description: 'Colors, fonts, layout & upload size controls' },
+  { id: 'users', label: 'Users, RBAC & Website Backup', description: 'Account roles, permissions & .zip migration' },
+  { id: 'audit_logs', label: 'Security Audit Logs', description: 'View administrative change history' },
+];
 
 export type RbacUserLike = Pick<
   CmsUser,
-  'role' | 'assignedDepartmentId' | 'allowedCategories' | 'allowedPageIds' | 'isActive'
+  | 'role'
+  | 'assignedDepartmentId'
+  | 'allowedCategories'
+  | 'allowedPageIds'
+  | 'allowedModules'
+  | 'allowedDepartmentIds'
+  | 'isActive'
 >;
 
 export function canUserAccessResource(
@@ -185,9 +218,36 @@ export function canUserAccessResource(
 
   if (role === 'super_admin') return true;
 
+  const explicitModules = Array.isArray(user.allowedModules) ? user.allowedModules : [];
+  const hasExplicitModules = explicitModules.length > 0;
+  const explicitDepts = Array.isArray(user.allowedDepartmentIds) ? user.allowedDepartmentIds : [];
+
   const hasExplicitPageScope =
     (user.allowedCategories?.length ?? 0) > 0 ||
     (user.allowedPageIds?.length ?? 0) > 0;
+
+  // If explicit per-module permissions are granted, honor them directly for any resource
+  if (hasExplicitModules) {
+    if (resource === 'departments') {
+      if (!explicitModules.includes('departments') && role !== 'department_admin') {
+        return false;
+      }
+      if (targetDepartmentId === undefined || targetDepartmentId === null) {
+        return explicitModules.includes('departments') || Boolean(user.assignedDepartmentId);
+      }
+      if (explicitDepts.length > 0) {
+        return explicitDepts.includes(targetDepartmentId);
+      }
+      if (user.assignedDepartmentId) {
+        return user.assignedDepartmentId === targetDepartmentId;
+      }
+      return explicitModules.includes('departments');
+    }
+    if (resource === 'pages' && (explicitModules.includes('pages') || hasExplicitPageScope)) {
+      return true;
+    }
+    return explicitModules.includes(resource);
+  }
 
   switch (resource) {
     case 'users':
@@ -201,6 +261,9 @@ export function canUserAccessResource(
     case 'categories':
     case 'leadership':
     case 'alumni':
+    case 'conferences':
+    case 'placements':
+    case 'grievances':
       return role === 'content_editor' || role === 'iqac_officer';
     case 'pages':
       return (
@@ -217,6 +280,10 @@ export function canUserAccessResource(
         role === 'exam_controller'
       );
     case 'departments':
+      if (explicitDepts.length > 0) {
+        if (targetDepartmentId === undefined || targetDepartmentId === null) return true;
+        return explicitDepts.includes(targetDepartmentId);
+      }
       if (role !== 'department_admin') return false;
       if (targetDepartmentId === undefined || targetDepartmentId === null) {
         return Boolean(user.assignedDepartmentId);
@@ -245,6 +312,9 @@ export function canUserAccessCategory(
   if (user.role === 'exam_controller') {
     return categorySlug === 'examination';
   }
+  if (user.allowedModules?.includes('pages') && user.role === 'specific_page_editor') {
+    return true;
+  }
   return user.role === 'content_editor' || user.role === 'iqac_officer';
 }
 
@@ -256,6 +326,8 @@ export const LEADERSHIP_GROUP_PRESETS = [
   'Board of Studies',
   'Finance Committee',
   'Academic Council',
+  'Anti-Ragging Committee',
+  'Student Grievance Redressal Committee (SGRC)',
 ] as const;
 
 export function formatCommitteeGroupLabel(group?: string): string {
@@ -301,6 +373,9 @@ export function canUserAccessPage(
   if (user.role === 'exam_controller') {
     return page.categorySlug === 'examination';
   }
+  if (user.allowedModules?.includes('pages') && user.role === 'specific_page_editor') {
+    return true;
+  }
   return user.role === 'content_editor' || user.role === 'iqac_officer';
 }
 
@@ -324,7 +399,7 @@ export function filterDocuments(
 
 export function searchCmsContent(
   query: string,
-  db: Pick<CmsDatabase, 'pages' | 'departments' | 'documents' | 'events'>,
+  db: Pick<CmsDatabase, 'pages' | 'departments' | 'documents' | 'events' | 'conferences'>,
 ): SearchResultItem[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
@@ -346,6 +421,25 @@ export function searchCmsContent(
         subtitle: page.subtitle || 'UGC Mandatory Disclosure Page',
         url: `/page/${page.slug}`,
         meta: `UGC Disclosure · ${page.categorySlug.replace('-', ' ')}`,
+      });
+    }
+  }
+
+  for (const conf of db.conferences || []) {
+    if (!conf.isPublished) continue;
+    if (
+      conf.title.toLowerCase().includes(q) ||
+      conf.shortName.toLowerCase().includes(q) ||
+      conf.theme.toLowerCase().includes(q) ||
+      conf.scope.toLowerCase().includes(q)
+    ) {
+      results.push({
+        id: `conf-${conf.id}`,
+        type: 'conference',
+        title: `${conf.shortName}: ${conf.title}`,
+        subtitle: `${conf.scope} · ${conf.startDate} to ${conf.endDate}`,
+        url: `/conference/${conf.slug}`,
+        meta: `${conf.organizingDepartment} · ${conf.mode}`,
       });
     }
   }

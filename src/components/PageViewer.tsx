@@ -200,52 +200,83 @@ export function PageViewer({
             );
           })()}
 
-          {/* Statutory Officers Leadership Grid (for Section 5(b)) */}
-          {page.slug === 'statutory-officers' && (
-            <div className="mt-8 pt-6 border-t border-stone-200 dark:border-slate-800">
-              <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white mb-4">
-                Profiles with Photographs &amp; Contact Particulars
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {sortByOrder(leadership).map((officer) => (
-                  <div
-                    key={officer.id}
-                    className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 flex items-start gap-4"
-                  >
-                    <img
-                      src={officer.photoUrl}
-                      alt={officer.name}
-                      referrerPolicy="no-referrer"
-                      className="w-20 h-20 rounded-lg object-cover border border-stone-200 dark:border-slate-700 shrink-0"
-                    />
-                    <div className="min-w-0 space-y-1">
-                      <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300">
-                        {formatCommitteeGroupLabel(officer.committeeGroup)}
-                      </span>
-                      <p className="text-xs font-semibold" style={{ color: 'var(--secondary-color)' }}>
-                        {officer.roleTitle}
-                      </p>
-                      <h3 className="text-base font-bold text-stone-900 dark:text-white">
-                        {officer.name}
-                      </h3>
-                      <p className="text-xs text-stone-500 dark:text-slate-400">
-                        {officer.qualification}
-                      </p>
-                      <p className="text-xs text-stone-600 dark:text-slate-300">{officer.bio}</p>
-                      <div className="pt-1 flex flex-wrap gap-3 text-xs text-stone-700 dark:text-slate-300 tabular-nums">
-                        <span className="inline-flex items-center gap-1">
-                          <Mail className="w-3 h-3" /> {officer.email}
+          {/* Leadership & Committee Profiles with Photographs & Contact Particulars */}
+          {(() => {
+            const matchedLeadership = sortByOrder(leadership).filter((officer) => {
+              if (page.slug === 'statutory-officers') return true;
+              const label = formatCommitteeGroupLabel(officer.committeeGroup).toLowerCase();
+              const slugWords = page.slug.toLowerCase();
+              const titleWords = page.title.toLowerCase();
+              if (slugWords.includes('governing') || titleWords.includes('governing')) {
+                return label.includes('governing') || label.includes('statutory');
+              }
+              if (slugWords.includes('academic-council') || titleWords.includes('academic council')) {
+                return label.includes('academic council') || label.includes('academic leadership');
+              }
+              if (slugWords.includes('board-of-studies') || slugWords.includes('bos') || titleWords.includes('board of studies')) {
+                return label.includes('board of studies') || label.includes('bos');
+              }
+              if (slugWords.includes('finance') || titleWords.includes('finance committee')) {
+                return label.includes('finance');
+              }
+              if (slugWords.includes('internal-complaint') || slugWords.includes('icc') || titleWords.includes('icc')) {
+                return label.includes('internal complaint') || label.includes('icc');
+              }
+              if (slugWords.includes('anti-ragging') || titleWords.includes('anti-ragging')) {
+                return label.includes('anti-ragging');
+              }
+              if (slugWords.includes('grievance') || titleWords.includes('grievance')) {
+                return label.includes('grievance') || label.includes('sgrc');
+              }
+              return false;
+            });
+            if (matchedLeadership.length === 0) return null;
+            return (
+              <div className="mt-8 pt-6 border-t border-stone-200 dark:border-slate-800">
+                <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white mb-4">
+                  Profiles with Photographs &amp; Contact Particulars
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {matchedLeadership.map((officer) => (
+                    <div
+                      key={officer.id}
+                      className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 flex items-start gap-4"
+                    >
+                      <img
+                        src={officer.photoUrl}
+                        alt={officer.name}
+                        referrerPolicy="no-referrer"
+                        className="w-20 h-20 rounded-lg object-cover border border-stone-200 dark:border-slate-700 shrink-0"
+                      />
+                      <div className="min-w-0 space-y-1">
+                        <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300">
+                          {formatCommitteeGroupLabel(officer.committeeGroup)}
                         </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Phone className="w-3 h-3" /> {officer.phone}
-                        </span>
+                        <p className="text-xs font-semibold" style={{ color: 'var(--secondary-color)' }}>
+                          {officer.roleTitle}
+                        </p>
+                        <h3 className="text-base font-bold text-stone-900 dark:text-white">
+                          {officer.name}
+                        </h3>
+                        <p className="text-xs text-stone-500 dark:text-slate-400">
+                          {officer.qualification}
+                        </p>
+                        <p className="text-xs text-stone-600 dark:text-slate-300">{officer.bio}</p>
+                        <div className="pt-1 flex flex-wrap gap-3 text-xs text-stone-700 dark:text-slate-300 tabular-nums">
+                          <span className="inline-flex items-center gap-1">
+                            <Mail className="w-3 h-3" /> {officer.email}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Phone className="w-3 h-3" /> {officer.phone}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Live Circulars & Events Feed (for Section 5(h)) */}
           {page.slug === 'circulars-notices' && (

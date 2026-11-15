@@ -309,7 +309,7 @@ function escapeHtmlText(str: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function buildPhotoProfileCardHtml(input: {
+export interface PhotoProfileCardInput {
   roleBadge: string;
   name: string;
   designation: string;
@@ -320,7 +320,9 @@ export function buildPhotoProfileCardHtml(input: {
   bio?: string;
   photoUrl?: string;
   columns?: 1 | 2;
-}): string {
+}
+
+export function buildSinglePhotoProfileCardInnerHtml(input: PhotoProfileCardInput): string {
   const safePhoto =
     input.photoUrl && !/^(javascript|data:text|vbscript):/i.test(input.photoUrl.trim())
       ? input.photoUrl.trim()
@@ -340,7 +342,7 @@ export function buildPhotoProfileCardHtml(input: {
     input.profileUrl && !/^(javascript|data|vbscript):/i.test(input.profileUrl.trim())
       ? input.profileUrl.trim()
       : '';
-  const cardInner = `<div class="cms-photo-profile-card">
+  return `<div class="cms-photo-profile-card">
   <div class="cms-photo-profile-media">
     <img src="${escapeHtmlText(safePhoto)}" alt="${escapeHtmlText(input.name || 'Profile Photo')}" />
   </div>
@@ -354,7 +356,10 @@ export function buildPhotoProfileCardHtml(input: {
     ${safeLink ? `<p class="cms-photo-profile-link"><a class="cms-btn cms-btn-outline" href="${escapeHtmlText(safeLink)}" target="_blank" rel="noopener noreferrer">View Full Profile &rarr;</a></p>` : ''}
   </div>
 </div>`;
+}
 
+export function buildPhotoProfileCardHtml(input: PhotoProfileCardInput): string {
+  const cardInner = buildSinglePhotoProfileCardInnerHtml(input);
   if (input.columns === 2) {
     return `<div class="cms-block cms-grid-2" data-block="photo-profile-card">${cardInner}${cardInner}</div><p></p>`;
   }

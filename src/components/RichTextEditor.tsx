@@ -40,6 +40,7 @@ import { ImageCropModal } from './ImageCropModal';
 import { ImageUploader } from './ImageUploader';
 import {
   buildPhotoProfileCardHtml,
+  buildSinglePhotoProfileCardInnerHtml,
   buildStyledTableHtml,
   EDITOR_COMPONENT_BLOCKS,
   FONT_FAMILY_OPTIONS,
@@ -92,6 +93,8 @@ export function RichTextEditor({
   const [activeTableEl, setActiveTableEl] = useState<HTMLTableElement | null>(null);
   const [activeCellEl, setActiveCellEl] = useState<HTMLTableCellElement | null>(null);
   const [activeImgEl, setActiveImgEl] = useState<HTMLImageElement | null>(null);
+  const [activeProfileCardEl, setActiveProfileCardEl] = useState<HTMLElement | null>(null);
+  const [editingCardEl, setEditingCardEl] = useState<HTMLElement | null>(null);
   const [editorErr, setEditorErr] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const [profRoleBadge, setProfRoleBadge] = useState('Statutory Officer / Faculty Profile');
@@ -158,6 +161,77 @@ export function RichTextEditor({
       setActiveImgEl(el);
     } else {
       setActiveImgEl(null);
+    }
+
+    const cardEl = el?.closest('.cms-photo-profile-card') as HTMLElement | null;
+    if (cardEl && editorRef.current.contains(cardEl)) {
+      setActiveProfileCardEl(cardEl);
+    } else {
+      setActiveProfileCardEl(null);
+    }
+  };
+
+  const openProfileCardEditor = (cardEl?: HTMLElement | null) => {
+    setTableOpen(false);
+    setLinkOpen(false);
+    setTextColorOpen(false);
+    setBgColorOpen(false);
+    if (cardEl) {
+      setEditingCardEl(cardEl);
+      const img = cardEl.querySelector('.cms-photo-profile-media img') as HTMLImageElement | null;
+      const roleEl = cardEl.querySelector('.cms-profile-role');
+      const nameEl = cardEl.querySelector('h4');
+      const desigEl = cardEl.querySelector('.cms-photo-profile-desig');
+      const deptEl = cardEl.querySelector('.cms-photo-profile-dept');
+      const bioEl = cardEl.querySelector('.cms-photo-profile-bio');
+      const linkEl = cardEl.querySelector('.cms-photo-profile-link a') as HTMLAnchorElement | null;
+      const metaSpans = Array.from(cardEl.querySelectorAll('.cms-photo-profile-meta span'));
+      let extractedEmail = '';
+      let extractedPhone = '';
+      metaSpans.forEach((sp) => {
+        const txt = sp.textContent || '';
+        if (/email:/i.test(txt)) extractedEmail = txt.replace(/^.*email:\s*/i, '').trim();
+        if (/phone:/i.test(txt)) extractedPhone = txt.replace(/^.*phone:\s*/i, '').trim();
+      });
+      setProfPhotoUrl(img?.getAttribute('src') || '/src/assets/images/leadership_principal_1794512597061.jpg');
+      setProfRoleBadge(roleEl?.textContent?.trim() || 'Committee Member');
+      setProfName(nameEl?.textContent?.trim() || '');
+      setProfDesig(desigEl?.textContent?.trim() || '');
+      setProfDept(deptEl?.textContent?.trim() || '');
+      setProfBio(bioEl?.textContent?.trim() || '');
+      setProfEmail(extractedEmail);
+      setProfPhone(extractedPhone);
+      setProfLink(linkEl?.getAttribute('href') || '');
+      setProfileOpen(true);
+    } else {
+      setEditingCardEl(null);
+      setProfileOpen((v) => !v);
+    }
+  };
+
+  const handleAddProfileCardAlongside = () => {
+    if (!activeProfileCardEl || !editorRef.current) return;
+    const blockParent = activeProfileCardEl.closest('[data-block="photo-profile-card"]') as HTMLElement | null;
+    const newCardHtml = buildSinglePhotoProfileCardInnerHtml({
+      roleBadge: 'Committee Member',
+      name: 'Dr. / Prof. New Member Name',
+      designation: 'Designation & Qualification',
+      department: 'Department / Committee',
+      email: 'member@coe.sveri.ac.in',
+      phone: '+91-02186-216063',
+      photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+    });
+    if (blockParent) {
+      if (!blockParent.classList.contains('cms-grid-2') && !blockParent.classList.contains('cms-grid-3')) {
+        blockParent.classList.add('cms-grid-2');
+      }
+      blockParent.insertAdjacentHTML('beforeend', newCardHtml);
+      syncFromVisual();
+      const cards = blockParent.querySelectorAll('.cms-photo-profile-card');
+      const lastCard = cards[cards.length - 1] as HTMLElement | undefined;
+      if (lastCard) {
+        openProfileCardEditor(lastCard);
+      }
     }
   };
 
@@ -684,13 +758,7 @@ export function RichTextEditor({
 
           <button
             type="button"
-            onClick={() => {
-              setProfileOpen((v) => !v);
-              setTableOpen(false);
-              setLinkOpen(false);
-              setTextColorOpen(false);
-              setBgColorOpen(false);
-            }}
+            onClick={() => openProfileCardEditor(null)}
             className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded border transition-colors ${
               profileOpen
                 ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300'
@@ -835,22 +903,26 @@ export function RichTextEditor({
           </div>
         )}
 
-        {/* Statutory Body / Faculty Photo Profile Card Builder */}
+        {/* Statutory Body / Faculty Photo Profile Card Builder (Insert or Edit-in-Place) */}
         {profileOpen && (
           <div className="p-3 bg-emerald-50/60 dark:bg-slate-800/90 border-b border-stone-200 dark:border-slate-700 space-y-2.5 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <strong className="text-stone-800 dark:text-slate-100">
-                Insert Statutory / Faculty Photo Profile Card Template
+                {editingCardEl
+                  ? 'Edit Selected Photo Profile Card & Photograph (1:1 Auto-Crop)'
+                  : 'Insert Statutory / Committee / Faculty Photo Profile Card'}
               </strong>
-              <select
-                aria-label="Profile Card Column Layout"
-                value={profCols}
-                onChange={(e) => setProfCols(Number(e.target.value) === 2 ? 2 : 1)}
-                className="px-2 py-1 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-[11px]"
-              >
-                <option value={1}>1-Column Card (Full Width)</option>
-                <option value={2}>2-Column Side-by-Side Cards</option>
-              </select>
+              {!editingCardEl && (
+                <select
+                  aria-label="Profile Card Column Layout"
+                  value={profCols}
+                  onChange={(e) => setProfCols(Number(e.target.value) === 2 ? 2 : 1)}
+                  className="px-2 py-1 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-[11px]"
+                >
+                  <option value={1}>1-Column Card (Full Width)</option>
+                  <option value={2}>2-Column Side-by-Side Cards</option>
+                </select>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -938,7 +1010,10 @@ export function RichTextEditor({
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setProfileOpen(false)}
+                onClick={() => {
+                  setEditingCardEl(null);
+                  setProfileOpen(false);
+                }}
                 className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-600"
               >
                 Cancel
@@ -946,8 +1021,8 @@ export function RichTextEditor({
               <button
                 type="button"
                 onClick={() => {
-                  const html = buildPhotoProfileCardHtml({
-                    roleBadge: profRoleBadge || 'Statutory Officer / Faculty Profile',
+                  const cardPayload = {
+                    roleBadge: profRoleBadge || 'Statutory Officer / Committee Member',
                     name: profName || 'Dr. Prashant M. Pawar',
                     designation: profDesig || 'Professor & Member',
                     department: profDept,
@@ -957,21 +1032,35 @@ export function RichTextEditor({
                     bio: profBio,
                     photoUrl: profPhotoUrl,
                     columns: profCols,
-                  });
-                  insertHtml(html);
-                  setProfileOpen(false);
+                  };
+                  if (editingCardEl && editingCardEl.parentNode) {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = buildSinglePhotoProfileCardInnerHtml(cardPayload);
+                    const replacement = temp.firstElementChild as HTMLElement | null;
+                    if (replacement) {
+                      editingCardEl.replaceWith(replacement);
+                      setActiveProfileCardEl(replacement);
+                      syncFromVisual();
+                    }
+                    setEditingCardEl(null);
+                    setProfileOpen(false);
+                  } else {
+                    const html = buildPhotoProfileCardHtml(cardPayload);
+                    insertHtml(html);
+                    setProfileOpen(false);
+                  }
                 }}
                 className="px-3 py-1.5 rounded text-white font-semibold"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                Insert Photo Profile Card
+                {editingCardEl ? 'Update Photo Profile Card' : 'Insert Photo Profile Card'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Contextual Controls when clicking inside a Block, Table, or Image */}
-        {mode === 'visual' && (selectedBlockEl || activeTableEl || activeImgEl) && (
+        {/* Contextual Controls when clicking inside a Block, Photo Profile Card, Table, or Image */}
+        {mode === 'visual' && (selectedBlockEl || activeProfileCardEl || activeTableEl || activeImgEl) && (
           <div className="px-3 py-1.5 bg-amber-50 dark:bg-slate-800 border-b border-amber-200 dark:border-slate-700 flex flex-wrap items-center gap-2 text-[11px]">
             {selectedBlockEl && (
               <>
@@ -1003,6 +1092,26 @@ export function RichTextEditor({
                   className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
                 >
                   <Trash2 className="w-3 h-3" /> Remove Block
+                </button>
+              </>
+            )}
+
+            {activeProfileCardEl && (
+              <>
+                <span className="font-bold text-emerald-900 dark:text-emerald-300 ml-1">Profile Card:</span>
+                <button
+                  type="button"
+                  onClick={() => openProfileCardEditor(activeProfileCardEl)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-700 text-white font-semibold"
+                >
+                  <UserCheck className="w-3 h-3" /> Edit Card Photo &amp; Details
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddProfileCardAlongside}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-emerald-400 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 font-semibold"
+                >
+                  <Plus className="w-3 h-3" /> Add Card Alongside
                 </button>
               </>
             )}

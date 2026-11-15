@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
+  Award,
   Briefcase,
   Building2,
   Calendar,
@@ -9,6 +10,7 @@ import {
   ExternalLink,
   Globe,
   GraduationCap,
+  HeartHandshake,
   Linkedin,
   Lock,
   LogIn,
@@ -23,7 +25,14 @@ import {
   Users,
 } from 'lucide-react';
 import { filterAlumniJobs, filterAlumniProfiles } from '../lib/alumniLogic';
+import {
+  ALUMNI_CHAPTER_PRESETS,
+  ALUMNI_DEGREE_PRESETS,
+  ALUMNI_JOB_TYPE_PRESETS,
+  ALUMNI_PLEDGE_TYPE_PRESETS,
+} from '../lib/collegeFeaturesLogic';
 import { CaptchaWidget } from './CaptchaWidget';
+import { CustomSelectInput } from './CustomSelectInput';
 import { ImageUploader } from './ImageUploader';
 import type {
   AlumniData,
@@ -37,7 +46,15 @@ import type {
   SiteSettings,
 } from '../types/cms';
 
-export type AlumniPortalTab = 'directory' | 'register' | 'jobs' | 'events' | 'discussions' | 'login';
+export type AlumniPortalTab =
+  | 'directory'
+  | 'achievers'
+  | 'register'
+  | 'jobs'
+  | 'events'
+  | 'pledge'
+  | 'discussions'
+  | 'login';
 
 interface AlumniPortalProps {
   alumni: AlumniData;
@@ -155,6 +172,20 @@ export function AlumniPortal({
   // RSVP local state optimistic tracking
   const [rsvpBusyId, setRsvpBusyId] = useState<number | null>(null);
   const [rsvpDoneIds, setRsvpDoneIds] = useState<number[]>([]);
+
+  // Endowment / Give Back Pledge Form
+  const [plName, setPlName] = useState('');
+  const [plEmail, setPlEmail] = useState('');
+  const [plPhone, setPlPhone] = useState('');
+  const [plBatch, setPlBatch] = useState('2016');
+  const [plDept, setPlDept] = useState(departments[0]?.code || 'CSE');
+  const [plType, setPlType] = useState<string>(ALUMNI_PLEDGE_TYPE_PRESETS[0]);
+  const [plAmount, setPlAmount] = useState('');
+  const [plMsg, setPlMsg] = useState('');
+  const [plCaptchaId, setPlCaptchaId] = useState('');
+  const [plCaptchaAnswer, setPlCaptchaAnswer] = useState('');
+  const [plCaptchaRefresh, setPlCaptchaRefresh] = useState(0);
+  const [submittingPledge, setSubmittingPledge] = useState(false);
 
   const saveAlumniSessionStorage = (token: string, csrf: string) => {
     setAlumniToken(token);
@@ -590,6 +621,49 @@ export function AlumniPortal({
     }
   };
 
+  const handlePledgeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBanner(null);
+    setSubmittingPledge(true);
+    try {
+      const resp = await fetch('/api/public/alumni/pledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: plName,
+          email: plEmail,
+          phone: plPhone,
+          batchYear: Number(plBatch),
+          departmentCode: plDept,
+          pledgeType: plType,
+          amountOrSupport: plAmount,
+          message: plMsg,
+          captchaId: plCaptchaId,
+          captchaAnswer: plCaptchaAnswer,
+        }),
+      });
+      const data = (await resp.json().catch(() => ({}))) as { message?: string; error?: string };
+      setPlCaptchaRefresh((v) => v + 1);
+      if (!resp.ok) throw new Error(data.error || 'Could not submit pledge.');
+      setBanner({
+        type: 'ok',
+        text: data.message || 'Thank you! Your alumni pledge has been recorded for acknowledgement.',
+      });
+      setPlName('');
+      setPlEmail('');
+      setPlPhone('');
+      setPlAmount('');
+      setPlMsg('');
+      setPlCaptchaAnswer('');
+    } catch (err) {
+      setBanner({ type: 'err', text: (err as Error).message });
+    } finally {
+      setSubmittingPledge(false);
+    }
+  };
+
+  const achievers = alumni.achievers ?? [];
+
   return (
     <div className="max-w-[1380px] mx-auto px-4 py-8 space-y-7">
       {/* Alumni Portal Hero Banner */}
@@ -675,8 +749,10 @@ export function AlumniPortal({
         <div role="tablist" aria-label="Alumni Portal Sections" className="flex flex-wrap gap-2">
           {[
             { id: 'directory' as const, label: `Alumni Directory (${alumni.profiles.length})`, icon: <Users className="w-4 h-4" /> },
+            { id: 'achievers' as const, label: `Distinguished Achievers (${achievers.length})`, icon: <Award className="w-4 h-4" /> },
             { id: 'jobs' as const, label: `Jobs & Internships (${alumni.jobs.length})`, icon: <Briefcase className="w-4 h-4" /> },
             { id: 'events' as const, label: `Chapters & Reunions (${alumni.events.length})`, icon: <Calendar className="w-4 h-4" /> },
+            { id: 'pledge' as const, label: 'Give Back / Endowment', icon: <HeartHandshake className="w-4 h-4" /> },
             { id: 'discussions' as const, label: 'Discussions (Members Only)', icon: <Lock className="w-3.5 h-3.5" /> },
             { id: 'register' as const, label: 'Alumni Registration', icon: <UserPlus className="w-4 h-4" /> },
             ...(!loggedAlumni
@@ -862,6 +938,19 @@ export function AlumniPortal({
                       )}
                     </div>
 
+                    {prof.mentorshipAreas && prof.mentorshipAreas.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {prof.mentorshipAreas.map((area, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-[10px] font-semibold border border-amber-200 dark:border-amber-900/50"
+                          >
+                            {area}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
                     {prof.bio && (
                       <p className="text-xs text-stone-600 dark:text-slate-300 leading-relaxed line-clamp-3">
                         {prof.bio}
@@ -895,6 +984,52 @@ export function AlumniPortal({
                         </a>
                       )}
                     </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 1B: DISTINGUISHED ACHIEVERS SHOWCASE */}
+      {activeTab === 'achievers' && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+            <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
+              <Award className="w-5 h-5 text-amber-600" />
+              Distinguished Alumni Achievers &amp; Hall of Pride
+            </h2>
+            <p className="text-xs text-stone-500 mt-1">
+              Recognizing outstanding engineering graduates leading technology, research, public service, and entrepreneurship worldwide.
+            </p>
+          </div>
+          {achievers.length === 0 ? (
+            <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-stone-500">
+              No distinguished alumni achievers published yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {achievers.map((ach) => (
+                <article
+                  key={ach.id}
+                  className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 flex items-start gap-4"
+                >
+                  <img
+                    src={ach.photoUrl}
+                    alt={ach.fullName}
+                    className="w-20 h-20 rounded-xl object-cover border border-stone-200 dark:border-slate-700 shrink-0"
+                  />
+                  <div className="min-w-0 space-y-1 text-xs">
+                    <span className="inline-block px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-bold uppercase">
+                      {ach.awardTitle}
+                    </span>
+                    <h3 className="text-base font-bold text-stone-900 dark:text-white">{ach.fullName}</h3>
+                    <p className="font-semibold text-stone-700 dark:text-slate-200">
+                      {ach.designation} · {ach.organization}
+                    </p>
+                    <p className="text-stone-500">Class of {ach.batchYear} · {ach.departmentCode}</p>
+                    {ach.citation && <p className="text-stone-600 dark:text-slate-300 leading-relaxed pt-1">{ach.citation}</p>}
                   </div>
                 </article>
               ))}
@@ -1025,19 +1160,13 @@ export function AlumniPortal({
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Opportunity Type</label>
-                  <select
-                    value={jobType}
-                    onChange={(e) => setJobType(e.target.value as AlumniJobType)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  >
-                    <option value="Full-Time">Full-Time</option>
-                    <option value="Internship">Internship</option>
-                    <option value="Referral">Alumni Referral</option>
-                    <option value="Consultancy">Consultancy</option>
-                  </select>
-                </div>
+                <CustomSelectInput
+                  label="Opportunity Type"
+                  value={jobType}
+                  onChange={(v) => setJobType(v)}
+                  options={[...ALUMNI_JOB_TYPE_PRESETS]}
+                  customPlaceholder="Enter custom opportunity type..."
+                />
                 <div>
                   <label className="block text-xs font-semibold mb-1">Target Department</label>
                   <select
@@ -1264,6 +1393,126 @@ export function AlumniPortal({
         </div>
       )}
 
+      {/* TAB 3B: GIVE BACK / ENDOWMENT & LAB SUPPORT PLEDGE */}
+      {activeTab === 'pledge' && (
+        <div className="max-w-3xl mx-auto rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <HeartHandshake className="w-5 h-5 text-amber-600" />
+            <div>
+              <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white">
+                Give Back: Endowment, Lab Equipment &amp; Scholarship Pledge
+              </h2>
+              <p className="text-xs text-stone-500">
+                Support departmental CoEs, student merit scholarships, industrial visits, and guest expert lectures.
+              </p>
+            </div>
+          </div>
+          <form onSubmit={handlePledgeSubmit} className="space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold mb-1">Alumni Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={plName}
+                  onChange={(e) => setPlName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={plEmail}
+                  onChange={(e) => setPlEmail(e.target.value)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1">Phone / WhatsApp</label>
+                <input
+                  type="text"
+                  value={plPhone}
+                  onChange={(e) => setPlPhone(e.target.value)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Batch Year</label>
+                  <input
+                    type="number"
+                    value={plBatch}
+                    onChange={(e) => setPlBatch(e.target.value)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1">Department</label>
+                  <select
+                    value={plDept}
+                    onChange={(e) => setPlDept(e.target.value)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  >
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.code}>{d.code}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <CustomSelectInput
+                  label="Contribution / Support Area"
+                  required
+                  value={plType}
+                  onChange={setPlType}
+                  options={[...ALUMNI_PLEDGE_TYPE_PRESETS]}
+                  customPlaceholder="Enter custom contribution or mentorship pledge..."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold mb-1">Pledge Amount / Commitment Details *</label>
+                <input
+                  type="text"
+                  required
+                  value={plAmount}
+                  onChange={(e) => setPlAmount(e.target.value)}
+                  placeholder="e.g. ₹50,000 Scholarship Fund / 2 IoT Kits / 3 Guest Lectures"
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold mb-1">Message / Department Note</label>
+                <textarea
+                  rows={2}
+                  value={plMsg}
+                  onChange={(e) => setPlMsg(e.target.value)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+            </div>
+            <CaptchaWidget
+              idPrefix="alumni-pledge"
+              captchaId={plCaptchaId}
+              captchaAnswer={plCaptchaAnswer}
+              onCaptchaIdChange={setPlCaptchaId}
+              onCaptchaAnswerChange={setPlCaptchaAnswer}
+              refreshSignal={plCaptchaRefresh}
+              label="Endowment Pledge CAPTCHA *"
+            />
+            <button
+              type="submit"
+              disabled={submittingPledge}
+              className="px-5 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-60"
+              style={{ backgroundColor: 'var(--primary-color)' }}
+            >
+              {submittingPledge ? 'Recording Pledge...' : 'Submit Endowment / Mentorship Pledge'}
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* TAB 4: SELF-SERVICE ALUMNI REGISTRATION */}
       {activeTab === 'register' && (
         <div className="max-w-3xl mx-auto rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5">
@@ -1362,17 +1611,14 @@ export function AlumniPortal({
                       className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                     />
                   </div>
-                  <div>
-                    <label htmlFor="reg-degree" className="block text-xs font-semibold mb-1">Degree</label>
-                    <input
-                      id="reg-degree"
-                      type="text"
-                      value={regDegree}
-                      onChange={(e) => setRegDegree(e.target.value)}
-                      placeholder="B.Tech / M.Tech / MBA"
-                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    />
-                  </div>
+                  <CustomSelectInput
+                    id="reg-degree"
+                    label="Degree"
+                    value={regDegree}
+                    onChange={setRegDegree}
+                    options={[...ALUMNI_DEGREE_PRESETS]}
+                    customPlaceholder="Enter custom degree..."
+                  />
                 </div>
                 <div>
                   <label htmlFor="reg-dept" className="block text-xs font-semibold mb-1">Graduation Department *</label>
@@ -1389,21 +1635,14 @@ export function AlumniPortal({
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label htmlFor="reg-chapter" className="block text-xs font-semibold mb-1">Preferred Alumni Chapter</label>
-                  <select
-                    id="reg-chapter"
-                    value={regChapter}
-                    onChange={(e) => setRegChapter(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  >
-                    {CHAPTER_OPTIONS.map((ch) => (
-                      <option key={ch} value={ch}>
-                        {ch}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CustomSelectInput
+                  id="reg-chapter"
+                  label="Preferred Alumni Chapter"
+                  value={regChapter}
+                  onChange={setRegChapter}
+                  options={[...ALUMNI_CHAPTER_PRESETS, ...CHAPTER_OPTIONS.filter((c) => !(ALUMNI_CHAPTER_PRESETS as readonly string[]).includes(c))]}
+                  customPlaceholder="Enter custom city / global chapter..."
+                />
                 <div>
                   <label htmlFor="reg-company" className="block text-xs font-semibold mb-1">Current Company / Organization *</label>
                   <input

@@ -6,6 +6,7 @@ import type {
 } from '../types/cms';
 
 export const BACKUP_DATA_KEYS = [
+  'schemaVersion',
   'categories',
   'pages',
   'leadership',
@@ -17,6 +18,11 @@ export const BACKUP_DATA_KEYS = [
   'gallery',
   'telephoneDirectory',
   'alumni',
+  'conferences',
+  'conferenceSubmissions',
+  'conferenceRegistrations',
+  'placements',
+  'grievances',
   'users',
   'auditLogs',
   'settings',
@@ -28,6 +34,7 @@ export function extractSnapshotData(
   db: CmsDatabase,
 ): Omit<CmsDatabase, 'backups' | 'backupSchedule'> {
   return {
+    schemaVersion: db.schemaVersion,
     categories: db.categories,
     pages: db.pages,
     leadership: db.leadership,
@@ -39,6 +46,11 @@ export function extractSnapshotData(
     gallery: db.gallery,
     telephoneDirectory: db.telephoneDirectory,
     alumni: db.alumni,
+    conferences: db.conferences,
+    conferenceSubmissions: db.conferenceSubmissions,
+    conferenceRegistrations: db.conferenceRegistrations,
+    placements: db.placements,
+    grievances: db.grievances,
     users: db.users,
     auditLogs: db.auditLogs,
     settings: db.settings,
@@ -55,8 +67,11 @@ export function countDatabaseEntities(
       counts[key] = val.length;
     } else if (val && typeof val === 'object') {
       if (key === 'alumni' && 'profiles' in val && Array.isArray((val as { profiles?: unknown[] }).profiles)) {
-        const alum = val as { profiles: unknown[]; jobs?: unknown[]; events?: unknown[] };
-        counts[key] = alum.profiles.length + (alum.jobs?.length ?? 0) + (alum.events?.length ?? 0);
+        const alum = val as { profiles: unknown[]; jobs?: unknown[]; events?: unknown[]; achievers?: unknown[] };
+        counts[key] = alum.profiles.length + (alum.jobs?.length ?? 0) + (alum.events?.length ?? 0) + (alum.achievers?.length ?? 0);
+      } else if (key === 'placements' && 'stats' in val && Array.isArray((val as { stats?: unknown[] }).stats)) {
+        const pl = val as { stats: unknown[]; stories?: unknown[] };
+        counts[key] = pl.stats.length + (pl.stories?.length ?? 0);
       } else {
         counts[key] = 1;
       }

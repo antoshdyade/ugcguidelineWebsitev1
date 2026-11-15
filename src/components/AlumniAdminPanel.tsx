@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  Award,
   Briefcase,
   Calendar,
   Check,
   Edit3,
+  HeartHandshake,
   MessageSquare,
   Pin,
   Settings,
@@ -14,8 +16,15 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import {
+  ALUMNI_CHAPTER_PRESETS,
+  ALUMNI_DEGREE_PRESETS,
+  ALUMNI_JOB_TYPE_PRESETS,
+} from '../lib/collegeFeaturesLogic';
+import { CustomSelectInput } from './CustomSelectInput';
 import { ImageUploader } from './ImageUploader';
 import type {
+  AlumniAchiever,
   AlumniApprovalStatus,
   AlumniData,
   AlumniDiscussionTopic,
@@ -23,7 +32,6 @@ import type {
   AlumniJob,
   AlumniJobStatus,
   AlumniJobType,
-  AlumniProfile,
   Department,
   SiteSettings,
 } from '../types/cms';
@@ -45,7 +53,9 @@ export function AlumniAdminPanel({
   uploadBinary,
   notify,
 }: AlumniAdminPanelProps) {
-  const [subTab, setSubTab] = useState<'profiles' | 'jobs' | 'events' | 'discussions' | 'settings'>('profiles');
+  const [subTab, setSubTab] = useState<
+    'profiles' | 'achievers' | 'jobs' | 'events' | 'discussions' | 'pledges' | 'settings'
+  >('profiles');
 
   // Profile form state (controlled defaults)
   const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
@@ -102,6 +112,16 @@ export function AlumniAdminPanel({
   const [tActive, setTActive] = useState(true);
   const [dTopicFilter, setDTopicFilter] = useState<number | 'ALL'>('ALL');
   const [dStatusFilter, setDStatusFilter] = useState<'ALL' | AlumniApprovalStatus>('ALL');
+
+  // Distinguished Achievers form state
+  const [achName, setAchName] = useState('');
+  const [achYear, setAchYear] = useState('2015');
+  const [achDept, setAchDept] = useState(departments[0]?.code || 'CSE');
+  const [achDesig, setAchDesig] = useState('');
+  const [achOrg, setAchOrg] = useState('');
+  const [achAward, setAchAward] = useState('');
+  const [achCitation, setAchCitation] = useState('');
+  const [achPhoto, setAchPhoto] = useState('/src/assets/images/leadership_principal_1794512597061.jpg');
 
   // Alumni portal settings state (strictly controlled primitives)
   const normalizeCfg = (raw: AlumniData['settings']) => ({
@@ -202,6 +222,8 @@ export function AlumniAdminPanel({
   const discussionTopics = alumni.discussionTopics ?? [];
   const discussions = alumni.discussions ?? [];
   const pendingPosts = discussions.filter((p) => p.status === 'pending');
+  const achievers = alumni.achievers ?? [];
+  const pledges = alumni.pledges ?? [];
 
   return (
     <div className="space-y-6">
@@ -214,6 +236,11 @@ export function AlumniAdminPanel({
             icon: <Users className="w-3.5 h-3.5" />,
           },
           {
+            id: 'achievers' as const,
+            label: `Achievers (${achievers.length})`,
+            icon: <Award className="w-3.5 h-3.5" />,
+          },
+          {
             id: 'jobs' as const,
             label: `Jobs & Referrals (${alumni.jobs.length})${pendingJobs.length ? ` · ${pendingJobs.length} Pending` : ''}`,
             icon: <Briefcase className="w-3.5 h-3.5" />,
@@ -222,6 +249,11 @@ export function AlumniAdminPanel({
             id: 'events' as const,
             label: `Chapters & Reunions (${alumni.events.length})`,
             icon: <Calendar className="w-3.5 h-3.5" />,
+          },
+          {
+            id: 'pledges' as const,
+            label: `Endowment Pledges (${pledges.length})`,
+            icon: <HeartHandshake className="w-3.5 h-3.5" />,
           },
           {
             id: 'discussions' as const,
@@ -364,19 +396,19 @@ export function AlumniAdminPanel({
                 placeholder="City / Country"
                 className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
-              <input
-                type="text"
+              <CustomSelectInput
+                ariaLabel="Alumni Chapter"
                 value={pChapter}
-                onChange={(e) => setPChapter(e.target.value)}
-                placeholder="Alumni Chapter"
-                className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                onChange={setPChapter}
+                options={[...ALUMNI_CHAPTER_PRESETS]}
+                customPlaceholder="Custom Alumni Chapter..."
               />
-              <input
-                type="text"
+              <CustomSelectInput
+                ariaLabel="Degree"
                 value={pDegree}
-                onChange={(e) => setPDegree(e.target.value)}
-                placeholder="Degree (B.Tech / M.Tech)"
-                className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                onChange={setPDegree}
+                options={[...ALUMNI_DEGREE_PRESETS]}
+                customPlaceholder="Custom Degree..."
               />
               <select
                 value={pStatus}
@@ -650,16 +682,13 @@ export function AlumniAdminPanel({
                 placeholder="Location"
                 className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
-              <select
+              <CustomSelectInput
+                ariaLabel="Job Type"
                 value={jType}
-                onChange={(e) => setJType(e.target.value as AlumniJobType)}
-                className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-              >
-                <option value="Full-Time">Full-Time</option>
-                <option value="Internship">Internship</option>
-                <option value="Referral">Referral</option>
-                <option value="Consultancy">Consultancy</option>
-              </select>
+                onChange={setJType}
+                options={[...ALUMNI_JOB_TYPE_PRESETS]}
+                customPlaceholder="Custom Opportunity Type..."
+              />
               <select
                 value={jDept}
                 onChange={(e) => setJDept(e.target.value)}
@@ -1313,6 +1342,203 @@ export function AlumniAdminPanel({
                 })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 4B. DISTINGUISHED ALUMNI ACHIEVERS */}
+      {subTab === 'achievers' && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              try {
+                await adminFetch('/api/admin/alumni/achievers', 'POST', {
+                  fullName: achName,
+                  batchYear: Number(achYear),
+                  departmentCode: achDept,
+                  designation: achDesig,
+                  organization: achOrg,
+                  awardTitle: achAward,
+                  citation: achCitation,
+                  photoUrl: achPhoto,
+                });
+                setAchName('');
+                setAchDesig('');
+                setAchOrg('');
+                setAchAward('');
+                setAchCitation('');
+                notify('ok', `Added Distinguished Achiever "${achName}".`);
+              } catch (err) {
+                notify('err', (err as Error).message);
+              }
+            }}
+            className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+          >
+            <h2 className="text-base font-bold">Add Distinguished Alumni Achiever</h2>
+            <input
+              type="text"
+              required
+              value={achName}
+              onChange={(e) => setAchName(e.target.value)}
+              placeholder="Achiever Full Name *"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                value={achYear}
+                onChange={(e) => setAchYear(e.target.value)}
+                placeholder="Batch Year"
+                className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <select
+                value={achDept}
+                onChange={(e) => setAchDept(e.target.value)}
+                className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              >
+                {departments.map((d) => (
+                  <option key={d.id} value={d.code}>{d.code}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={achDesig}
+                onChange={(e) => setAchDesig(e.target.value)}
+                placeholder="Current Role / Title"
+                className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={achOrg}
+                onChange={(e) => setAchOrg(e.target.value)}
+                placeholder="Organization"
+                className="px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+            </div>
+            <input
+              type="text"
+              required
+              value={achAward}
+              onChange={(e) => setAchAward(e.target.value)}
+              placeholder="Award / Honor Title *"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <textarea
+              rows={2}
+              value={achCitation}
+              onChange={(e) => setAchCitation(e.target.value)}
+              placeholder="Achievement citation..."
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <ImageUploader
+              label="Achiever Photo (1:1 Auto-Crop)"
+              value={achPhoto}
+              onChange={setAchPhoto}
+              uploadBinary={uploadBinary}
+              aspectRatio="1:1"
+              maxPhotoMb={settings.maxPhotoUploadMb ?? 2}
+              autoCropEnabled={settings.autoCropImages !== false}
+            />
+            <button
+              type="submit"
+              className="w-full py-2 rounded-lg text-xs font-semibold text-white"
+              style={{ backgroundColor: 'var(--primary-color)' }}
+            >
+              Add Achiever Card
+            </button>
+          </form>
+
+          <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+            <h3 className="text-sm font-bold">Distinguished Achievers ({achievers.length})</h3>
+            <div className="divide-y divide-stone-100 dark:divide-slate-800">
+              {achievers.map((ach: AlumniAchiever) => (
+                <div key={ach.id} className="py-3 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img src={ach.photoUrl} alt={ach.fullName} className="w-12 h-12 rounded-lg object-cover border shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm">{ach.fullName} ({ach.batchYear} {ach.departmentCode})</p>
+                      <p className="text-amber-700 font-semibold">{ach.awardTitle}</p>
+                      <p className="text-stone-500">{ach.designation} · {ach.organization}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      adminFetch(`/api/admin/alumni/achievers/${ach.id}`, 'DELETE').then(() =>
+                        notify('ok', `Deleted achiever "${ach.fullName}".`),
+                      )
+                    }
+                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4C. ENDOWMENT & GIVE BACK PLEDGES */}
+      {subTab === 'pledges' && (
+        <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+          <h3 className="text-sm font-bold">Alumni Endowment &amp; Lab Support Pledges ({pledges.length})</h3>
+          {pledges.length === 0 ? (
+            <p className="text-xs text-stone-500">No alumni pledges received yet.</p>
+          ) : (
+            <div className="divide-y divide-stone-100 dark:divide-slate-800 text-xs">
+              {pledges.map((pl) => (
+                <div key={pl.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-sm">
+                      {pl.fullName} ({pl.batchYear} {pl.departmentCode}) —{' '}
+                      <span className="text-amber-700">{pl.pledgeType}</span>
+                    </p>
+                    <p className="font-semibold">{pl.amountOrSupport}</p>
+                    <p className="text-stone-500">
+                      {pl.email} {pl.phone ? `· ${pl.phone}` : ''} · Status: <strong className="uppercase">{pl.status}</strong>
+                    </p>
+                    {pl.message && <p className="text-stone-600 mt-1">{pl.message}</p>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        adminFetch(`/api/admin/alumni/pledges/${pl.id}`, 'PUT', { status: 'acknowledged' }).then(() =>
+                          notify('ok', `Acknowledged pledge from ${pl.fullName}.`),
+                        )
+                      }
+                      className="px-2.5 py-1 rounded bg-emerald-600 text-white font-semibold"
+                    >
+                      Acknowledge
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        adminFetch(`/api/admin/alumni/pledges/${pl.id}`, 'PUT', { status: 'fulfilled' }).then(() =>
+                          notify('ok', `Marked pledge from ${pl.fullName} fulfilled.`),
+                        )
+                      }
+                      className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 font-semibold"
+                    >
+                      Mark Fulfilled
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        adminFetch(`/api/admin/alumni/pledges/${pl.id}`, 'DELETE').then(() =>
+                          notify('ok', 'Deleted pledge record.'),
+                        )
+                      }
+                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

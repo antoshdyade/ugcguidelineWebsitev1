@@ -25,7 +25,8 @@ export function PerPageRbacSelector({
 
   const grouped = useMemo(() => {
     const q = filterText.trim().toLowerCase();
-    return orderedCats
+    const knownCatSlugs = new Set(orderedCats.map((c) => c.slug));
+    const catGroups = orderedCats
       .map((cat) => {
         const catPages = sortByOrder(pages.filter((p) => p.categorySlug === cat.slug)).filter((pg) => {
           if (!q) return true;
@@ -38,6 +39,29 @@ export function PerPageRbacSelector({
         return { cat, catPages };
       })
       .filter((g) => g.catPages.length > 0);
+
+    const orphanPages = sortByOrder(pages.filter((p) => !knownCatSlugs.has(p.categorySlug))).filter((pg) => {
+      if (!q) return true;
+      return (
+        pg.title.toLowerCase().includes(q) ||
+        pg.slug.toLowerCase().includes(q) ||
+        'uncategorized other'.includes(q)
+      );
+    });
+    if (orphanPages.length > 0) {
+      catGroups.push({
+        cat: {
+          id: -999,
+          slug: '__uncategorized__',
+          name: 'Other / Uncategorized Micro-Pages',
+          ugcCode: 'Custom',
+          sortOrder: 9999,
+          description: 'Pages not linked to a listed category',
+        },
+        catPages: orphanPages,
+      });
+    }
+    return catGroups;
   }, [orderedCats, pages, filterText]);
 
   const togglePage = (pageId: number) => {
@@ -67,8 +91,15 @@ export function PerPageRbacSelector({
         </div>
         <div className="flex items-center gap-2 text-[11px]">
           <span className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 font-semibold tabular-nums">
-            {selectedPageIds.length} {selectedPageIds.length === 1 ? 'page' : 'pages'} selected
+            {selectedPageIds.length} / {pages.length} {selectedPageIds.length === 1 ? 'page' : 'pages'} selected
           </span>
+          <button
+            type="button"
+            onClick={() => onChange(pages.map((p) => p.id))}
+            className="text-amber-700 dark:text-amber-400 hover:underline font-semibold"
+          >
+            Select All
+          </button>
           {selectedPageIds.length > 0 && (
             <button
               type="button"

@@ -48,16 +48,7 @@ export interface LeadershipProfile {
   sortOrder: number;
 }
 
-export type DepartmentSubPageType =
-  | 'general'
-  | 'gallery'
-  | 'library'
-  | 'notice_board'
-  | 'events'
-  | 'notes_syllabus'
-  | 'achievements_students'
-  | 'achievements_faculty'
-  | 'celebrations';
+export type DepartmentSubPageType = string;
 
 export interface DepartmentSubPagePhoto {
   id: number;
@@ -178,11 +169,13 @@ export interface TickerItem {
   sortOrder: number;
 }
 
+export type CampusEventCategory = string;
+
 export interface CampusEvent {
   id: number;
   title: string;
   eventDate: string;
-  category: 'Event' | 'Notice' | 'Achievement' | 'Circular' | 'Placement';
+  category: CampusEventCategory;
   departmentSlug?: string;
   summary: string;
   contentHtml: string;
@@ -192,14 +185,7 @@ export interface CampusEvent {
   sortOrder?: number;
 }
 
-export type DocumentCategory =
-  | 'Fee Structure'
-  | 'Academic Calendar'
-  | 'Syllabus'
-  | 'UGC & AICTE Approvals'
-  | 'NAAC / NBA / NIRF'
-  | 'Annual Reports & Audits'
-  | 'Circulars & Forms';
+export type DocumentCategory = string;
 
 export interface CmsDocument {
   id: number;
@@ -242,6 +228,23 @@ export interface TelephoneEntry {
   sortOrder?: number;
 }
 
+export type AdminModuleKey =
+  | 'users'
+  | 'settings'
+  | 'audit_logs'
+  | 'categories'
+  | 'pages'
+  | 'sliders_events'
+  | 'departments'
+  | 'documents'
+  | 'gallery'
+  | 'leadership'
+  | 'directory'
+  | 'alumni'
+  | 'conferences'
+  | 'placements'
+  | 'grievances';
+
 export interface CmsUser {
   id: number;
   fullName: string;
@@ -250,6 +253,8 @@ export interface CmsUser {
   assignedDepartmentId?: number | null;
   allowedCategories?: string[];
   allowedPageIds?: number[];
+  allowedModules?: AdminModuleKey[];
+  allowedDepartmentIds?: number[];
   isActive: boolean;
   lastLoginAt?: string;
 }
@@ -299,6 +304,7 @@ export interface HomeSectionsConfig {
 }
 
 export interface SiteSettings {
+  schemaVersion?: number;
   trustName?: string;
   institutionName: string;
   shortCode: string;
@@ -314,6 +320,12 @@ export interface SiteSettings {
   defaultPaletteId: string;
   primaryColor: string;
   secondaryColor: string;
+  designPreset?: 'heritage-navy' | 'modern-slate' | 'emerald-campus' | 'crimson-scholar';
+  fontHeading?: string;
+  fontBody?: string;
+  cardRadius?: 'sharp' | 'rounded' | 'soft';
+  headerStyle?: 'classic' | 'compact';
+  customCss?: string;
   aboutSummary?: string;
   aboutImageUrl?: string;
   visionText?: string;
@@ -430,6 +442,7 @@ export interface AlumniProfile {
   websiteUrl?: string;
   photoUrl: string;
   bio: string;
+  mentorshipAreas?: string[];
   openToMentorship: boolean;
   isFeatured: boolean;
   status: AlumniApprovalStatus;
@@ -437,7 +450,7 @@ export interface AlumniProfile {
   registeredAt: string;
 }
 
-export type AlumniJobType = 'Full-Time' | 'Internship' | 'Referral' | 'Consultancy';
+export type AlumniJobType = string;
 export type AlumniJobStatus = 'open' | 'closed' | 'pending';
 
 export interface AlumniJob {
@@ -509,6 +522,34 @@ export interface AlumniDiscussionPost {
   comments: AlumniDiscussionComment[];
 }
 
+export interface AlumniAchiever {
+  id: number;
+  fullName: string;
+  batchYear: number;
+  departmentCode: string;
+  designation: string;
+  organization: string;
+  awardTitle: string;
+  citation: string;
+  photoUrl: string;
+  linkedinUrl?: string;
+  sortOrder: number;
+}
+
+export interface AlumniEndowmentPledge {
+  id: number;
+  fullName: string;
+  email: string;
+  phone: string;
+  batchYear: number;
+  departmentCode: string;
+  pledgeType: string;
+  amountOrSupport: string;
+  message: string;
+  status: 'pending' | 'acknowledged' | 'fulfilled';
+  submittedAt: string;
+}
+
 export interface AlumniSettings {
   heroTitle: string;
   heroSubtitle: string;
@@ -528,9 +569,185 @@ export interface AlumniData {
   events: AlumniEventChapter[];
   discussionTopics?: AlumniDiscussionTopic[];
   discussions?: AlumniDiscussionPost[];
+  achievers?: AlumniAchiever[];
+  pledges?: AlumniEndowmentPledge[];
+}
+
+// International & National Conferences Module
+export interface ConferenceTrack {
+  id: number;
+  title: string;
+  chair?: string;
+  description: string;
+}
+
+export interface ConferenceImportantDate {
+  id: number;
+  label: string;
+  date: string;
+  statusNote?: string;
+}
+
+export interface ConferencePerson {
+  id: number;
+  kind: 'keynote' | 'committee';
+  role: string;
+  name: string;
+  designation: string;
+  affiliation: string;
+  email?: string;
+  phone?: string;
+  photoUrl: string;
+  bio?: string;
+  sortOrder: number;
+}
+
+export interface ConferenceScheduleItem {
+  id: number;
+  dayLabel: string;
+  timeSlot: string;
+  trackTitle: string;
+  sessionTitle: string;
+  speakerOrChair: string;
+  venue: string;
+}
+
+export interface ConferenceFeeTier {
+  id: number;
+  categoryLabel: string;
+  inrAmount: string;
+  usdAmount?: string;
+  includesNote?: string;
+}
+
+export interface Conference {
+  id: number;
+  slug: string;
+  title: string;
+  shortName: string;
+  scope: string;
+  theme: string;
+  startDate: string;
+  endDate: string;
+  venue: string;
+  mode: string;
+  organizingDepartment: string;
+  indexingPartners: string[];
+  contactEmail: string;
+  contactPhone: string;
+  bannerUrl: string;
+  brochureUrl?: string;
+  templateUrl?: string;
+  overviewHtml: string;
+  cfpHtml: string;
+  isPublished: boolean;
+  isFeatured: boolean;
+  sortOrder: number;
+  tracks: ConferenceTrack[];
+  importantDates: ConferenceImportantDate[];
+  people: ConferencePerson[];
+  schedule: ConferenceScheduleItem[];
+  feeTiers: ConferenceFeeTier[];
+}
+
+export type ConferencePaperStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'accepted'
+  | 'revision_required'
+  | 'rejected';
+
+export interface ConferenceSubmission {
+  id: number;
+  conferenceId: number;
+  trackingCode: string;
+  paperTitle: string;
+  trackTitle: string;
+  authorName: string;
+  authorEmail: string;
+  authorPhone: string;
+  affiliation: string;
+  coAuthors?: string;
+  abstractText: string;
+  manuscriptUrl?: string;
+  status: ConferencePaperStatus;
+  reviewerNote?: string;
+  submittedAt: string;
+}
+
+export interface ConferenceRegistration {
+  id: number;
+  conferenceId: number;
+  regCode: string;
+  attendeeName: string;
+  email: string;
+  phone: string;
+  affiliation: string;
+  designation: string;
+  feeCategory: string;
+  participationMode: string;
+  paperTrackingCode?: string;
+  paymentRef?: string;
+  status: 'registered' | 'verified' | 'cancelled';
+  registeredAt: string;
+}
+
+// Engineering College Portals: Training & Placement + AICTE/UGC Grievance Redressal
+export interface PlacementYearStat {
+  id: number;
+  academicYear: string;
+  branch: string;
+  eligibleStudents: number;
+  placedStudents: number;
+  highestPackageLpa: number;
+  averagePackageLpa: number;
+  topRecruitersList: string;
+  sortOrder: number;
+}
+
+export interface PlacementStory {
+  id: number;
+  studentName: string;
+  branch: string;
+  company: string;
+  packageLpa: string;
+  batchYear: string;
+  photoUrl: string;
+  quote: string;
+  sortOrder: number;
+}
+
+export interface PlacementsData {
+  summaryNote: string;
+  coordinatorName: string;
+  coordinatorEmail: string;
+  coordinatorPhone: string;
+  stats: PlacementYearStat[];
+  stories: PlacementStory[];
+}
+
+export type GrievanceStatus = 'submitted' | 'in_review' | 'resolved' | 'closed';
+
+export interface GrievanceTicket {
+  id: number;
+  ticketCode: string;
+  complainantName: string;
+  complainantRole: string;
+  email: string;
+  phone: string;
+  departmentOrCell: string;
+  category: string;
+  subject: string;
+  description: string;
+  attachmentUrl?: string;
+  status: GrievanceStatus;
+  resolutionNote?: string;
+  submittedAt: string;
+  updatedAt: string;
 }
 
 export interface CmsDatabase {
+  schemaVersion?: number;
   categories: CmsCategory[];
   pages: CmsPage[];
   leadership: LeadershipProfile[];
@@ -542,6 +759,11 @@ export interface CmsDatabase {
   gallery: GalleryAlbum[];
   telephoneDirectory: TelephoneEntry[];
   alumni?: AlumniData;
+  conferences?: Conference[];
+  conferenceSubmissions?: ConferenceSubmission[];
+  conferenceRegistrations?: ConferenceRegistration[];
+  placements?: PlacementsData;
+  grievances?: GrievanceTicket[];
   users: (CmsUser & { passwordHash: string })[];
   auditLogs: AuditLogEntry[];
   settings: SiteSettings;
@@ -551,10 +773,11 @@ export interface CmsDatabase {
 
 export interface SearchResultItem {
   id: string;
-  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni';
+  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni' | 'conference' | 'placement';
   title: string;
   subtitle: string;
   url: string;
   meta: string;
 }
+
 

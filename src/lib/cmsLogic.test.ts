@@ -317,3 +317,91 @@ test('buildPhotoProfileCardHtml renders portrait card and neutralizes XSS scheme
   assert.ok(!html.includes('<script>'));
   assert.ok(!html.includes('javascript:alert(1)'));
 });
+
+test('canUserAccessResource honors explicit allowedModules and allowedDepartmentIds for any staff role', () => {
+  const conferenceChairUser = {
+    role: 'specific_page_editor' as const,
+    assignedDepartmentId: null,
+    allowedCategories: [],
+    allowedPageIds: [1],
+    allowedModules: ['conferences', 'placements', 'departments'] as any,
+    allowedDepartmentIds: [2, 3],
+    isActive: true,
+  };
+  assert.equal(canUserAccessResource(conferenceChairUser, 'conferences'), true);
+  assert.equal(canUserAccessResource(conferenceChairUser, 'placements'), true);
+  assert.equal(canUserAccessResource(conferenceChairUser, 'grievances'), false);
+  assert.equal(canUserAccessResource(conferenceChairUser, 'pages'), true);
+  assert.equal(canUserAccessResource(conferenceChairUser, 'departments', 2), true);
+  assert.equal(canUserAccessResource(conferenceChairUser, 'departments', 3), true);
+  assert.equal(canUserAccessResource(conferenceChairUser, 'departments', 1), false);
+});
+
+test('searchCmsContent indexes published conferences and excludes unpublished ones', () => {
+  const results = searchCmsContent('ICAEST', {
+    pages: [],
+    departments: [],
+    documents: [],
+    events: [],
+    conferences: [
+      {
+        id: 1,
+        slug: 'icaest-2026',
+        title: 'International Conference on Advances in Engineering & Smart Technology',
+        shortName: 'ICAEST-2026',
+        scope: 'International Conference',
+        theme: 'AI, Sustainable Infrastructure & Robotics',
+        startDate: '2026-12-18',
+        endDate: '2026-12-19',
+        venue: 'SVCOER Auditorium',
+        mode: 'Hybrid (On-Campus + Online)',
+        organizingDepartment: 'CSE',
+        indexingPartners: ['IEEE Xplore'],
+        contactEmail: 'icaest@coe.sveri.ac.in',
+        contactPhone: '02186-216063',
+        bannerUrl: '/uploads/conf.jpg',
+        overviewHtml: '<p>Overview</p>',
+        cfpHtml: '<p>CFP</p>',
+        isPublished: true,
+        isFeatured: true,
+        sortOrder: 1,
+        tracks: [],
+        importantDates: [],
+        people: [],
+        schedule: [],
+        feeTiers: [],
+      },
+      {
+        id: 2,
+        slug: 'draft-conf',
+        title: 'ICAEST Draft Conference',
+        shortName: 'DRAFT-2026',
+        scope: 'National Conference',
+        theme: 'Draft',
+        startDate: '2026-11-01',
+        endDate: '2026-11-02',
+        venue: 'Campus',
+        mode: 'On-Campus',
+        organizingDepartment: 'MECH',
+        indexingPartners: [],
+        contactEmail: 'c@coe.sveri.ac.in',
+        contactPhone: '123',
+        bannerUrl: '',
+        overviewHtml: '',
+        cfpHtml: '',
+        isPublished: false,
+        isFeatured: false,
+        sortOrder: 2,
+        tracks: [],
+        importantDates: [],
+        people: [],
+        schedule: [],
+        feeTiers: [],
+      },
+    ],
+  });
+  assert.equal(results.length, 1);
+  assert.equal(results[0].type, 'conference');
+  assert.equal(results[0].url, '/conference/icaest-2026');
+});
+
