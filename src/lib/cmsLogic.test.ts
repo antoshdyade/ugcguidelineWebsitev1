@@ -267,3 +267,53 @@ test('getUploadSizeLimitMb, getUploadSizeLimitBytes, and isImageFileMeta enforce
   assert.equal(isImageFileMeta('slide.jpg', 'image/jpeg'), true);
   assert.equal(isImageFileMeta('brochure.pdf', 'application/pdf'), false);
 });
+
+import { buildPhotoProfileCardHtml } from './editorBlocks';
+
+test('specific_page_editor role strictly limits access to assigned pages/categories only', () => {
+  const pageOnlyUser = {
+    role: 'specific_page_editor' as const,
+    assignedDepartmentId: null,
+    allowedCategories: [],
+    allowedPageIds: [12, 15],
+    isActive: true,
+  };
+  assert.equal(canUserAccessResource(pageOnlyUser, 'pages'), true);
+  assert.equal(canUserAccessResource(pageOnlyUser, 'categories'), false);
+  assert.equal(canUserAccessResource(pageOnlyUser, 'leadership'), false);
+  assert.equal(canUserAccessResource(pageOnlyUser, 'alumni'), false);
+  assert.equal(canUserAccessResource(pageOnlyUser, 'documents'), false);
+  assert.equal(canUserAccessResource(pageOnlyUser, 'users'), false);
+  assert.equal(canUserAccessResource(pageOnlyUser, 'settings'), false);
+  assert.equal(canUserAccessPage(pageOnlyUser, { id: 12, categorySlug: 'academics' }), true);
+  assert.equal(canUserAccessPage(pageOnlyUser, { id: 99, categorySlug: 'academics' }), false);
+  assert.equal(canUserAccessCategory(pageOnlyUser, 'academics'), false);
+
+  const unassignedSpecificUser = {
+    role: 'specific_page_editor' as const,
+    assignedDepartmentId: null,
+    allowedCategories: [],
+    allowedPageIds: [],
+    isActive: true,
+  };
+  assert.equal(canUserAccessPage(unassignedSpecificUser, { id: 12, categorySlug: 'academics' }), false);
+  assert.equal(canUserAccessCategory(unassignedSpecificUser, 'academics'), false);
+});
+
+test('buildPhotoProfileCardHtml renders portrait card and neutralizes XSS schemes', () => {
+  const html = buildPhotoProfileCardHtml({
+    roleBadge: 'Statutory Officer',
+    name: 'Dr. <script>alert(1)</script> Patil',
+    designation: 'Principal',
+    department: 'Civil Engineering',
+    email: 'principal@coe.sveri.ac.in',
+    phone: '02186-216063',
+    photoUrl: 'javascript:alert(1)',
+    profileUrl: 'https://coe.sveri.ac.in/faculty/patil',
+    columns: 2,
+  });
+  assert.ok(html.includes('cms-photo-profile-card'));
+  assert.ok(html.includes('cms-grid-2'));
+  assert.ok(!html.includes('<script>'));
+  assert.ok(!html.includes('javascript:alert(1)'));
+});

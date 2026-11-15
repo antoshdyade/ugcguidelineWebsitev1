@@ -32,11 +32,14 @@ import {
   Trash2,
   Underline,
   Undo2,
+  UserCheck,
 } from 'lucide-react';
 import { validateUploadMeta } from '../lib/cmsLogic';
 import { DEFAULT_MAX_PHOTO_UPLOAD_MB } from '../lib/imageCrop';
 import { ImageCropModal } from './ImageCropModal';
+import { ImageUploader } from './ImageUploader';
 import {
+  buildPhotoProfileCardHtml,
   buildStyledTableHtml,
   EDITOR_COMPONENT_BLOCKS,
   FONT_FAMILY_OPTIONS,
@@ -90,6 +93,17 @@ export function RichTextEditor({
   const [activeCellEl, setActiveCellEl] = useState<HTMLTableCellElement | null>(null);
   const [activeImgEl, setActiveImgEl] = useState<HTMLImageElement | null>(null);
   const [editorErr, setEditorErr] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profRoleBadge, setProfRoleBadge] = useState('Statutory Officer / Faculty Profile');
+  const [profName, setProfName] = useState('');
+  const [profDesig, setProfDesig] = useState('');
+  const [profDept, setProfDept] = useState('');
+  const [profEmail, setProfEmail] = useState('');
+  const [profPhone, setProfPhone] = useState('');
+  const [profLink, setProfLink] = useState('');
+  const [profBio, setProfBio] = useState('');
+  const [profPhotoUrl, setProfPhotoUrl] = useState('/src/assets/images/leadership_principal_1794512597061.jpg');
+  const [profCols, setProfCols] = useState<1 | 2>(1);
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -660,11 +674,31 @@ export function RichTextEditor({
             onClick={() => {
               setLinkOpen((v) => !v);
               setTableOpen(false);
+              setProfileOpen(false);
             }}
             className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-stone-100 dark:hover:bg-slate-700"
           >
             <Link2 className="w-3 h-3" />
             <span>+ Link / PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setProfileOpen((v) => !v);
+              setTableOpen(false);
+              setLinkOpen(false);
+              setTextColorOpen(false);
+              setBgColorOpen(false);
+            }}
+            className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded border transition-colors ${
+              profileOpen
+                ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300'
+                : 'border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-stone-100 dark:hover:bg-slate-700'
+            }`}
+          >
+            <UserCheck className="w-3 h-3" />
+            <span>+ Profile Card</span>
           </button>
 
           {uploadBinary && (
@@ -798,6 +832,141 @@ export function RichTextEditor({
             >
               Insert Styled Button
             </button>
+          </div>
+        )}
+
+        {/* Statutory Body / Faculty Photo Profile Card Builder */}
+        {profileOpen && (
+          <div className="p-3 bg-emerald-50/60 dark:bg-slate-800/90 border-b border-stone-200 dark:border-slate-700 space-y-2.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-stone-800 dark:text-slate-100">
+                Insert Statutory / Faculty Photo Profile Card Template
+              </strong>
+              <select
+                aria-label="Profile Card Column Layout"
+                value={profCols}
+                onChange={(e) => setProfCols(Number(e.target.value) === 2 ? 2 : 1)}
+                className="px-2 py-1 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-[11px]"
+              >
+                <option value={1}>1-Column Card (Full Width)</option>
+                <option value={2}>2-Column Side-by-Side Cards</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={profName}
+                onChange={(e) => setProfName(e.target.value)}
+                placeholder="Full Name (e.g. Dr. Prashant M. Pawar)"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+              <input
+                type="text"
+                value={profRoleBadge}
+                onChange={(e) => setProfRoleBadge(e.target.value)}
+                placeholder="Role / Badge (e.g. Governing Body)"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+              <input
+                type="text"
+                value={profDesig}
+                onChange={(e) => setProfDesig(e.target.value)}
+                placeholder="Designation & Qualification"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+              <input
+                type="text"
+                value={profDept}
+                onChange={(e) => setProfDept(e.target.value)}
+                placeholder="Department / Committee"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+              <input
+                type="email"
+                value={profEmail}
+                onChange={(e) => setProfEmail(e.target.value)}
+                placeholder="Email (optional)"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+              <input
+                type="text"
+                value={profPhone}
+                onChange={(e) => setProfPhone(e.target.value)}
+                placeholder="Phone / Ext (optional)"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={profBio}
+                onChange={(e) => setProfBio(e.target.value)}
+                placeholder="Short bio / responsibilities (optional)"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+              <input
+                type="url"
+                value={profLink}
+                onChange={(e) => setProfLink(e.target.value)}
+                placeholder="Full Profile URL (optional)"
+                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+            </div>
+
+            {uploadBinary ? (
+              <ImageUploader
+                label="Profile Portrait Photo (1:1 Auto-Crop)"
+                value={profPhotoUrl}
+                onChange={setProfPhotoUrl}
+                uploadBinary={uploadBinary}
+                aspectRatio="1:1"
+                maxPhotoMb={maxPhotoMb}
+                autoCropEnabled={autoCropEnabled}
+              />
+            ) : (
+              <input
+                type="text"
+                value={profPhotoUrl}
+                onChange={(e) => setProfPhotoUrl(e.target.value)}
+                placeholder="Portrait photo URL (/uploads/...)"
+                className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+              />
+            )}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setProfileOpen(false)}
+                className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const html = buildPhotoProfileCardHtml({
+                    roleBadge: profRoleBadge || 'Statutory Officer / Faculty Profile',
+                    name: profName || 'Dr. Prashant M. Pawar',
+                    designation: profDesig || 'Professor & Member',
+                    department: profDept,
+                    email: profEmail,
+                    phone: profPhone,
+                    profileUrl: profLink,
+                    bio: profBio,
+                    photoUrl: profPhotoUrl,
+                    columns: profCols,
+                  });
+                  insertHtml(html);
+                  setProfileOpen(false);
+                }}
+                className="px-3 py-1.5 rounded text-white font-semibold"
+                style={{ backgroundColor: 'var(--primary-color)' }}
+              >
+                Insert Photo Profile Card
+              </button>
+            </div>
           </div>
         )}
 

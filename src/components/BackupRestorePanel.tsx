@@ -46,6 +46,11 @@ export function BackupRestorePanel({
   const [createDest, setCreateDest] = useState<BackupDestination>('local');
   const [createNotes, setCreateNotes] = useState('');
 
+  // Selective Complete Website Export checkboxes
+  const [exportData, setExportData] = useState<boolean>(true);
+  const [exportMedia, setExportMedia] = useState<boolean>(true);
+  const [exportCode, setExportCode] = useState<boolean>(true);
+
   // Import & Restore state (.json OR full-site .zip)
   const [restoreFileName, setRestoreFileName] = useState('');
   const [restoreKind, setRestoreKind] = useState<'json' | 'zip' | null>(null);
@@ -244,19 +249,34 @@ export function BackupRestorePanel({
     }
   };
 
-  const handleCreateCompleteSiteZip = async () => {
+  const handleCreateCompleteSiteZip = async (
+    destination: BackupDestination = 'local',
+    downloadToLocal = true,
+  ) => {
+    if (!exportData && !exportMedia && !exportCode) {
+      notify('err', 'Select at least one export component (Data + Hashed Credentials, Images/Media, or Source Code).');
+      return;
+    }
     setBusyAction(true);
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const res = await adminFetch<{ record: BackupRecord }>('/api/admin/backups/export-site', 'POST', {
         sourceBaseUrl: origin,
+        includeData: exportData,
+        includeMedia: exportMedia,
+        includeCode: exportCode,
+        destination,
       });
       await loadBackups();
       notify(
         'ok',
-        `Complete Site Migration ZIP ready: ${res.record.filename} (${res.record.mediaCount ?? 0} media files, ${res.record.codeCount ?? 0} code files).`,
+        `Migration ZIP packaged: ${res.record.filename} (${res.record.mediaCount ?? 0} media, ${res.record.codeCount ?? 0} code files)${
+          res.record.remoteStatus ? ` · ${res.record.remoteStatus}` : ''
+        }`,
       );
-      await downloadAuthenticatedFile(`/api/admin/backups/${res.record.id}/download`, res.record.filename);
+      if (downloadToLocal) {
+        await downloadAuthenticatedFile(`/api/admin/backups/${res.record.id}/download`, res.record.filename);
+      }
     } catch (err) {
       notify('err', (err as Error).message);
     } finally {
@@ -285,27 +305,102 @@ export function BackupRestorePanel({
 
   return (
     <div className="space-y-6">
-      {/* Complete Website Migration Package (.zip: Code + DB + All Uploaded Photos/Media) */}
-      <div className="rounded-xl border border-amber-300 dark:border-amber-800/70 bg-amber-50/40 dark:bg-amber-950/20 p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* Complete Website Export & Migration Package (.zip) */}
+      <div className="rounded-xl border border-amber-300 dark:border-amber-800/70 bg-amber-50/40 dark:bg-amber-950/20 p-5 space-y-4">
         <div className="space-y-1">
           <h2 className="text-base font-bold flex items-center gap-2 text-stone-900 dark:text-white">
             <FolderArchive className="w-4 h-4 text-amber-600" />
-            <span>Complete Website Migration Package (.zip — Code + Data + All Photos/Media)</span>
+            <span>Complete Website Export &amp; Migration Package (.zip)</span>
           </h2>
-          <p className="text-xs text-stone-600 dark:text-slate-300 max-w-3xl">
-            Bundles full application code (React + PHP/Webmin source), structured database snapshot (including Alumni Network, pages &amp; departments), and every uploaded photograph &amp; PDF into a single portable <code>.zip</code> archive for effortless cross-domain migration. Secrets and credentials are automatically excluded.
+          <p className="text-xs text-stone-600 dark:text-slate-300 max-w-4xl">
+            Export website structured data, <strong>hashed Staff &amp; Alumni login credentials</strong>, all uploaded images/photographs &amp; PDFs, and optionally the full application codebase into a portable <code>.zip</code> archive. Database secrets (<code>.env</code> / <code>config.local.php</code>) are excluded.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={busyAction}
-          onClick={handleCreateCompleteSiteZip}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold text-white shrink-0 disabled:opacity-50"
-          style={{ backgroundColor: 'var(--primary-color)' }}
-        >
-          <FolderArchive className="w-4 h-4" />
-          <span>{busyAction ? 'Packaging Site ZIP...' : 'Export Complete Website (.zip)'}</span>
-        </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
+          <label className="flex items-start gap-2 p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={exportData}
+              onChange={(e) => setExportData(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              <strong className="block text-stone-900 dark:text-white">Data &amp; Hashed Credentials</strong>
+              <span className="text-[11px] text-stone-500 dark:text-slate-400">
+                All pages, departments, alumni &amp; hashed passwords
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={exportMedia}
+              onChange={(e) => setExportMedia(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              <strong className="block text-stone-900 dark:text-white">Images &amp; Uploaded Files</strong>
+              <span className="text-[11px] text-stone-500 dark:text-slate-400">
+                Faculty photos, logos, gallery &amp; PDFs ({uploadsCount} uploads)
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={exportCode}
+              onChange={(e) => setExportCode(e.target.checked)}
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              <strong className="block text-stone-900 dark:text-white">Full Website Source Code</strong>
+              <span className="text-[11px] text-stone-500 dark:text-slate-400">
+                React + Express + PHP/Webmin application files
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 pt-1">
+          <button
+            type="button"
+            disabled={busyAction}
+            onClick={() => handleCreateCompleteSiteZip('local', true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-50"
+            style={{ backgroundColor: 'var(--primary-color)' }}
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{busyAction ? 'Packaging ZIP...' : 'Download to Local Computer (.zip)'}</span>
+          </button>
+          <button
+            type="button"
+            disabled={busyAction}
+            onClick={() => handleCreateCompleteSiteZip('local', false)}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-50"
+          >
+            <HardDrive className="w-3.5 h-3.5" />
+            <span>Save to Server Disk</span>
+          </button>
+          <button
+            type="button"
+            disabled={busyAction}
+            onClick={() => handleCreateCompleteSiteZip('scp', false)}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-50"
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span>Send to Remote Disk (SCP)</span>
+          </button>
+          <button
+            type="button"
+            disabled={busyAction}
+            onClick={() => handleCreateCompleteSiteZip('webhook', false)}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-50"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Send to Remote Drive / Webhook</span>
+          </button>
+        </div>
       </div>
 
       {/* Top Action Row: Create Full / Incremental Backup + Instant Export */}
@@ -781,12 +876,14 @@ export function BackupRestorePanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] ${
-                        bk.mode === 'full'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                        bk.archiveType === 'site-zip'
+                          ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300'
+                          : bk.mode === 'full'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                       }`}
                     >
-                      {bk.mode}
+                      {bk.archiveType === 'site-zip' ? 'ZIP SITE' : bk.mode}
                     </span>
                     <span className="font-semibold text-sm text-stone-900 dark:text-white truncate">
                       {bk.filename}

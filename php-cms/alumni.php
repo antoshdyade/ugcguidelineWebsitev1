@@ -2,14 +2,16 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/captcha.php';
 
 $pdo = getDB();
 ensureCmsSchemaUpgraded($pdo);
 $settings = getSiteSettings($pdo);
 $alumniSettings = getAlumniSettings($pdo);
+$loggedAlumni = currentAlumni();
 
 $activeTab = $_GET['tab'] ?? 'directory';
-if (!in_array($activeTab, ['directory', 'jobs', 'events', 'register'], true)) {
+if (!in_array($activeTab, ['directory', 'jobs', 'events', 'discussions', 'register', 'login'], true)) {
     $activeTab = 'directory';
 }
 
@@ -20,13 +22,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'register_alumni') {
+    if ($action === 'alumni_login') {
+        $activeTab = 'login';
+        $email = strtolower(trim((string)($_POST['email'] ?? '')));
+        $pass = (string)($_POST['password'] ?? '');
+        $captchaAns = (string)($_POST['captcha_answer'] ?? '');
+        if (!verifyCaptchaAnswer($captchaAns, 'alumni_login')) {
+            $err = 'Incorrect or expired security CAPTCHA code. Please try again.';
+        } else {
+            $st = $pdo->prepare('SELECT * FROM alumni_profiles WHERE LOWER(email) = ? LIMIT 1');
+            $st->execute([$email]);
+            $prof = $st->fetch();
+            if (!$prof || empty($prof['password_hash']) || !password_verify($pass, $prof['password_hash'])) {
+                $err = 'Invalid alumni email or password.';
+            } elseif (($prof['status'] ?? 'pending') !== 'approved') {
+                $err = 'Your alumni account is awaiting Alumni Cell verification (' . ($prof['status'] ?? 'pending') . ').';
+            } else {
+                session_regenerate_id(true);
+                setAlumniSession($prof);
+                $loggedAlumni = currentAlumni();
+                $activeTab = 'discussions';
+                $msg = 'Welcome back, ' . $prof['full_name'] . '! You now have access to Job Posting & Members-Only Discussions.';
+            }
+        }
+    } elseif ($action === 'alumni_logout') {
+        logoutAlumniSession();
+        $loggedAlumni = null;
+        $activeTab = 'directory';
+        $msg = 'You have been signed out of the Alumni Member portal.';
+    } elseif ($action === 'register_alumni') {
         $activeTab = 'register';
         if (empty($alumniSettings['allowSelfRegistration'])) {
             $err = 'Self-service alumni registration is currently closed by the administrator.';
+        } elseif (!verifyCaptchaAnswer($_POST['captcha_answer'] ?? null, 'alumni_register')) {
+            $err = 'Incorrect or expired security CAPTCHA code. Please try again.';
         } else {
             $fullName = trim((string)($_POST['full_name'] ?? ''));
-            $email = trim((string)($_POST['email'] ?? ''));
+            $email = strtolower(trim((string)($_POST['email'] ?? '')));
+            $pw = (string)($_POST['password'] ?? '');
             $phone = trim((string)($_POST['phone'] ?? ''));
             $gradYear = (int)($_POST['graduation_year'] ?? 0);
             $deptCode = strtoupper(trim((string)($_POST['department_code'] ?? 'CSE')));
@@ -42,37 +75,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($fullName === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || $gradYear < 1998 || $gradYear > 2035) {
                 $err = 'Please enter a valid full name, institutional/personal email, and graduation year (1998–2035).';
+            } elseif (strlen($pw) < 6) {
+                $err = 'Please set an account password of at least 6 characters for Alumni Login.';
             } elseif ($linkedin !== '' && !validateExternalUrl($linkedin)) {
                 $err = 'LinkedIn / portfolio link must be a valid http(s) URL.';
             } else {
-                $photoUrl = 'assets/images/principal.jpg';
-                if (!empty($_FILES['photo']['name'])) {
-                    $up = handleCmsUpload($pdo, $_FILES['photo'], __DIR__ . '/uploads', 'photo');
-                    if (!$up['ok']) {
-                        $err = $up['error'];
-                    } else {
-                        $photoUrl = $up['file_url'];
+                $dupStmt = $pdo->prepare('SELECT id FROM alumni_profiles WHERE LOWER(email) = ? LIMIT 1');
+                $dupStmt->execute([$email]);
+                if ($dupStmt->fetch()) {
+                    $err = 'An alumni profile with this email already exists.';
+                } else {
+                    $photoUrl = 'assets/images/principal.jpg';
+                    if (!empty($_FILES['photo']['name'])) {
+                        $up = handleCmsUpload($pdo, $_FILES['photo'], __DIR__ . '/uploads', 'photo');
+                        if (!$up['ok']) {
+                            $err = $up['error'];
+                        } else {
+                            $photoUrl = $up['file_url'];
+                        }
                     }
-                }
-                if ($err === '') {
-                    $nextSort = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM alumni_profiles')->fetchColumn()) + 1;
-                    $stmt = $pdo->prepare(
-                        'INSERT INTO alumni_profiles (full_name, email, phone, graduation_year, department_code, department_name, degree, current_company, designation, location, chapter, linkedin_url, photo_url, bio, open_to_mentorship, is_featured, status, sort_order, registered_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,\'pending\',?,CURDATE())'
-                    );
-                    $stmt->execute([
-                        $fullName, $email, $phone !== '' ? $phone : null, $gradYear, $deptCode, $deptName,
-                        $degree, $company !== '' ? $company : null, $designation !== '' ? $designation : null,
-                        $location !== '' ? $location : null, $chapter, $linkedin !== '' ? $linkedin : null,
-                        $photoUrl, $bio !== '' ? $bio : null, $openToMentor, $nextSort,
-                    ]);
-                    $msg = 'Thank you! Your alumni profile has been submitted for verification and will appear in the Verified Directory once approved by the Alumni Cell.';
+                    if ($err === '') {
+                        $nextSort = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM alumni_profiles')->fetchColumn()) + 1;
+                        $stmt = $pdo->prepare(
+                            'INSERT INTO alumni_profiles (full_name, email, password_hash, phone, graduation_year, department_code, department_name, degree, current_company, designation, location, chapter, linkedin_url, photo_url, bio, open_to_mentorship, is_featured, status, sort_order, registered_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,\'pending\',?,CURDATE())'
+                        );
+                        $stmt->execute([
+                            $fullName, $email, password_hash($pw, PASSWORD_DEFAULT), $phone !== '' ? $phone : null, $gradYear, $deptCode, $deptName,
+                            $degree, $company !== '' ? $company : null, $designation !== '' ? $designation : null,
+                            $location !== '' ? $location : null, $chapter, $linkedin !== '' ? $linkedin : null,
+                            $photoUrl, $bio !== '' ? $bio : null, $openToMentor, $nextSort,
+                        ]);
+                        $msg = 'Thank you! Your alumni profile has been submitted for verification. Once approved, you can sign in using your email and password under Alumni Login.';
+                    }
                 }
             }
         }
     } elseif ($action === 'post_job') {
         $activeTab = 'jobs';
-        if (empty($alumniSettings['allowPublicJobPosting'])) {
-            $err = 'Public alumni job posting is currently disabled by the administrator.';
+        if (!$loggedAlumni) {
+            $err = 'Please sign in as a registered alumni before posting a job or referral.';
+            $activeTab = 'login';
+        } elseif (empty($alumniSettings['allowPublicJobPosting'])) {
+            $err = 'Alumni job posting is currently disabled by the administrator.';
+        } elseif (!verifyCaptchaAnswer($_POST['captcha_answer'] ?? null, 'alumni_job')) {
+            $err = 'Incorrect or expired security CAPTCHA code. Please try again.';
         } else {
             $title = trim((string)($_POST['title'] ?? ''));
             $company = trim((string)($_POST['company'] ?? ''));
@@ -85,12 +131,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $comp = trim((string)($_POST['compensation'] ?? ''));
             $desc = trim((string)($_POST['description'] ?? ''));
             $applyTarget = trim((string)($_POST['apply_url_or_email'] ?? ''));
-            $posterName = trim((string)($_POST['posted_by_alumni_name'] ?? ''));
-            $posterBatch = trim((string)($_POST['posted_by_batch'] ?? ''));
+            $posterName = $loggedAlumni['full_name'];
+            $posterBatch = trim((string)($loggedAlumni['graduation_year'] . ' ' . $loggedAlumni['department_code']));
             $deadline = trim((string)($_POST['deadline_date'] ?? ''));
 
-            if ($title === '' || $company === '' || $location === '' || $desc === '' || $applyTarget === '' || $posterName === '') {
-                $err = 'Please fill in job title, company, location, description, application URL/email, and your name.';
+            if ($title === '' || $company === '' || $location === '' || $desc === '' || $applyTarget === '') {
+                $err = 'Please fill in job title, company, location, description, and application URL/email.';
             } else {
                 $nextSort = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM alumni_jobs')->fetchColumn()) + 1;
                 $stmt = $pdo->prepare(
@@ -99,10 +145,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([
                     $title, $company, $location, $jobType, $deptFocus, $expRange,
                     $comp !== '' ? $comp : null, $desc, $applyTarget, $posterName,
-                    $posterBatch !== '' ? $posterBatch : 'Alumni',
-                    $deadline !== '' ? $deadline : null, 'pending', $nextSort,
+                    $posterBatch, $deadline !== '' ? $deadline : null, 'pending', $nextSort,
                 ]);
                 $msg = 'Opportunity submitted! It is queued for moderation and will go live on the Job Board once approved.';
+            }
+        }
+    } elseif ($action === 'create_discussion') {
+        $activeTab = 'discussions';
+        if (!$loggedAlumni) {
+            $err = 'Members-Only Discussion Panel requires Alumni Login.';
+            $activeTab = 'login';
+        } elseif (isset($alumniSettings['enableDiscussions']) && !$alumniSettings['enableDiscussions']) {
+            $err = 'The Members-Only Discussion Panel is currently paused by Admin.';
+        } else {
+            $topicId = (int)($_POST['topic_id'] ?? 0);
+            $title = trim((string)($_POST['post_title'] ?? ''));
+            $summary = trim((string)($_POST['post_summary'] ?? ''));
+            $content = trim((string)($_POST['post_content'] ?? ''));
+            if ($topicId <= 0 || $title === '' || $content === '') {
+                $err = 'Please select a topic and enter a title and article body.';
+            } else {
+                $status = !empty($alumniSettings['requireDiscussionApproval']) ? 'pending' : 'approved';
+                $nowStr = gmdate('Y-m-d H:i');
+                $batchStr = $loggedAlumni['graduation_year'] . ' ' . $loggedAlumni['department_code'];
+                $pdo->prepare(
+                    'INSERT INTO alumni_discussion_posts (topic_id, author_alumni_id, author_name, author_batch, author_role, title, summary, content, status, is_pinned, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,0,?,?)'
+                )->execute([
+                    $topicId, (int)$loggedAlumni['id'], $loggedAlumni['full_name'], $batchStr,
+                    $loggedAlumni['chapter'], $title, $summary, $content, $status, $nowStr, $nowStr,
+                ]);
+                $msg = $status === 'pending'
+                    ? 'Article submitted for Alumni Cell approval.'
+                    : 'Your article has been published in the Members-Only Discussion Panel!';
+            }
+        }
+    } elseif ($action === 'post_comment') {
+        $activeTab = 'discussions';
+        if (!$loggedAlumni) {
+            $err = 'Please sign in as an alumni to reply to threads.';
+            $activeTab = 'login';
+        } else {
+            $postId = (int)($_POST['post_id'] ?? 0);
+            $body = trim((string)($_POST['comment_body'] ?? ''));
+            if ($postId > 0 && $body !== '') {
+                $batchStr = $loggedAlumni['graduation_year'] . ' ' . $loggedAlumni['department_code'];
+                $pdo->prepare(
+                    'INSERT INTO alumni_discussion_comments (post_id, author_alumni_id, author_name, author_batch, body, created_at) VALUES (?,?,?,?,?,?)'
+                )->execute([
+                    $postId, (int)$loggedAlumni['id'], $loggedAlumni['full_name'], $batchStr, $body, gmdate('Y-m-d H:i'),
+                ]);
+                $msg = 'Reply posted.';
             }
         }
     } elseif ($action === 'rsvp_event') {
@@ -220,11 +312,26 @@ require_once __DIR__ . '/includes/header.php';
 <?php if ($msg): ?><div class="alert-ok" style="margin-top:1rem;"><?= e($msg) ?></div><?php endif; ?>
 <?php if ($err): ?><div class="alert-err" style="margin-top:1rem;"><?= e($err) ?></div><?php endif; ?>
 
+<?php if ($loggedAlumni): ?>
+  <div class="alert-ok" style="margin-top:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+    <span>Signed in as <strong><?= e($loggedAlumni['full_name']) ?></strong> (<?= (int)$loggedAlumni['graduation_year'] ?> <?= e($loggedAlumni['department_code']) ?>)</span>
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="alumni_logout">
+      <button type="submit" class="btn-outline btn-sm">Sign Out</button>
+    </form>
+  </div>
+<?php endif; ?>
+
 <nav class="alumni-tabbar" aria-label="Alumni Portal Sections">
   <a href="?tab=directory" class="alumni-tabbtn <?= $activeTab === 'directory' ? 'is-active' : '' ?>">Verified Alumni Directory (<?= count($approvedProfiles) ?>)</a>
   <a href="?tab=jobs" class="alumni-tabbtn <?= $activeTab === 'jobs' ? 'is-active' : '' ?>">Job &amp; Internship Board (<?= count($openJobs) ?>)</a>
   <a href="?tab=events" class="alumni-tabbtn <?= $activeTab === 'events' ? 'is-active' : '' ?>">Chapters &amp; Reunions (<?= count($activeEvents) ?>)</a>
+  <a href="?tab=discussions" class="alumni-tabbtn <?= $activeTab === 'discussions' ? 'is-active' : '' ?>">Discussions (Members Only)</a>
   <a href="?tab=register" class="alumni-tabbtn <?= $activeTab === 'register' ? 'is-active' : '' ?>">Register as Alumni</a>
+  <?php if (!$loggedAlumni): ?>
+    <a href="?tab=login" class="alumni-tabbtn <?= $activeTab === 'login' ? 'is-active' : '' ?>">Alumni Login</a>
+  <?php endif; ?>
 </nav>
 
 <?php if ($activeTab === 'directory'): ?>
@@ -357,38 +464,45 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 
   <?php if (!empty($alumniSettings['allowPublicJobPosting'])): ?>
-    <form method="post" class="card">
-      <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Post an Alumni Job / Internship Referral</h2>
-      <p style="font-size:0.84rem;color:var(--text-muted);margin-top:0;">Share hiring openings at your organization with SVERI students and graduates. Submissions undergo quick Alumni Cell moderation.</p>
-      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-      <input type="hidden" name="action" value="post_job">
-      <div class="grid-3" style="margin-bottom:0.75rem;">
-        <label style="font-size:0.8rem;font-weight:600;">Job / Internship Title *<input type="text" name="title" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Company / Organization *<input type="text" name="company" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Location *<input type="text" name="location" required placeholder="Pune / Hybrid" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Opportunity Type
-          <select name="job_type" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
-            <option value="Full-Time">Full-Time</option><option value="Internship">Internship</option><option value="Referral">Referral</option><option value="Part-Time">Part-Time</option>
-          </select>
-        </label>
-        <label style="font-size:0.8rem;font-weight:600;">Department Focus
-          <select name="department_focus" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
-            <option value="ALL">All Engineering Branches</option>
-            <?php foreach ($departmentsList as $dl): ?><option value="<?= e($dl['code']) ?>"><?= e($dl['code']) ?> — <?= e($dl['name']) ?></option><?php endforeach; ?>
-          </select>
-        </label>
-        <label style="font-size:0.8rem;font-weight:600;">Experience / Batch Eligibility<input type="text" name="experience_range" value="0-2 Years" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Compensation / Stipend<input type="text" name="compensation" placeholder="e.g. Rs. 7.5 LPA" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Application Link or HR Email *<input type="text" name="apply_url_or_email" required placeholder="https://... or hr@company.com" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Application Deadline<input type="date" name="deadline_date" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Your Name (Alumni) *<input type="text" name="posted_by_alumni_name" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-        <label style="font-size:0.8rem;font-weight:600;">Your Batch &amp; Dept<input type="text" name="posted_by_batch" placeholder="2018 CSE" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+    <?php if (!$loggedAlumni): ?>
+      <div class="card" style="border:1px solid #FDE68A;background:#FFFBEB;">
+        <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Alumni Sign-In Required to Post Jobs or Referrals</h2>
+        <p style="font-size:0.86rem;color:#78350F;margin-bottom:0.85rem;">To prevent spam, direct anonymous job submissions are disabled. Please sign in with your verified alumni account to publish job openings or referrals.</p>
+        <a href="?tab=login" class="btn-primary">Sign In to Alumni Portal &rarr;</a>
       </div>
-      <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.85rem;">Role Description &amp; Referral Instructions *
-        <textarea name="description" rows="3" required style="width:100%;padding:0.55rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></textarea>
-      </label>
-      <button type="submit" class="btn-primary">Submit Opportunity for Moderation</button>
-    </form>
+    <?php else: ?>
+      <form method="post" class="card">
+        <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Post an Alumni Job / Internship Referral</h2>
+        <p style="font-size:0.84rem;color:var(--text-muted);margin-top:0;">Posting as <strong><?= e($loggedAlumni['full_name']) ?></strong> (<?= (int)$loggedAlumni['graduation_year'] ?> <?= e($loggedAlumni['department_code']) ?>). Submissions undergo Alumni Cell moderation.</p>
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="post_job">
+        <div class="grid-3" style="margin-bottom:0.75rem;">
+          <label style="font-size:0.8rem;font-weight:600;">Job / Internship Title *<input type="text" name="title" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Company / Organization *<input type="text" name="company" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Location *<input type="text" name="location" required placeholder="Pune / Hybrid" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Opportunity Type
+            <select name="job_type" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+              <option value="Full-Time">Full-Time</option><option value="Internship">Internship</option><option value="Referral">Referral</option><option value="Part-Time">Part-Time</option>
+            </select>
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Department Focus
+            <select name="department_focus" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+              <option value="ALL">All Engineering Branches</option>
+              <?php foreach ($departmentsList as $dl): ?><option value="<?= e($dl['code']) ?>"><?= e($dl['code']) ?> — <?= e($dl['name']) ?></option><?php endforeach; ?>
+            </select>
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Experience / Batch Eligibility<input type="text" name="experience_range" value="0-2 Years" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Compensation / Stipend<input type="text" name="compensation" placeholder="e.g. Rs. 7.5 LPA" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Application Link or HR Email *<input type="text" name="apply_url_or_email" required placeholder="https://... or hr@company.com" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Application Deadline<input type="date" name="deadline_date" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+        </div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.85rem;">Role Description &amp; Referral Instructions *
+          <textarea name="description" rows="3" required style="width:100%;padding:0.55rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></textarea>
+        </label>
+        <?= renderCaptchaWidget('alumni_job', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
+        <button type="submit" class="btn-primary">Submit Opportunity for Moderation</button>
+      </form>
+    <?php endif; ?>
   <?php endif; ?>
 
 <?php elseif ($activeTab === 'events'): ?>
@@ -420,19 +534,153 @@ require_once __DIR__ . '/includes/header.php';
     <?php endif; ?>
   </div>
 
+<?php elseif ($activeTab === 'discussions'): ?>
+  <?php if (!$loggedAlumni): ?>
+    <div class="card" style="max-width:640px;margin:0 auto;text-align:center;padding:2rem;">
+      <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Members-Only Alumni Discussion Panel</h2>
+      <p style="font-size:0.9rem;color:var(--text-muted);">Topic blogs, technical career guides, and peer discussions are private to signed-in alumni members and are never exposed publicly.</p>
+      <div style="display:flex;justify-content:center;gap:0.65rem;flex-wrap:wrap;margin-top:1rem;">
+        <a href="?tab=login" class="btn-primary">Sign In as Alumni &rarr;</a>
+        <a href="?tab=register" class="btn-outline">Register for Membership</a>
+      </div>
+    </div>
+  <?php elseif (isset($alumniSettings['enableDiscussions']) && !$alumniSettings['enableDiscussions']): ?>
+    <div class="card">The Members-Only Discussion Panel is currently paused by the administrator.</div>
+  <?php else:
+    $topics = $pdo->query('SELECT * FROM alumni_discussion_topics WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+    $topicFilterId = isset($_GET['topic']) ? (int)$_GET['topic'] : 0;
+    $postSql = "SELECT * FROM alumni_discussion_posts WHERE status = 'approved'";
+    $postParams = [];
+    if ($topicFilterId > 0) {
+        $postSql .= ' AND topic_id = ?';
+        $postParams[] = $topicFilterId;
+    }
+    $postSql .= ' ORDER BY is_pinned DESC, id DESC';
+    $stPosts = $pdo->prepare($postSql);
+    $stPosts->execute($postParams);
+    $visiblePosts = $stPosts->fetchAll();
+    $allComs = $pdo->query('SELECT * FROM alumni_discussion_comments ORDER BY id ASC')->fetchAll();
+    $comMap = [];
+    foreach ($allComs as $cRow) {
+        $comMap[(int)$cRow['post_id']][] = $cRow;
+    }
+    $topicTitleMap = [];
+    foreach ($topics as $tRow) {
+        $topicTitleMap[(int)$tRow['id']] = $tRow['title'];
+    }
+  ?>
+    <div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-bottom:1.15rem;">
+      <a href="?tab=discussions" class="alumni-tabbtn <?= $topicFilterId === 0 ? 'is-active' : '' ?>" style="padding:0.38rem 0.75rem;font-size:0.78rem;">All Topics</a>
+      <?php foreach ($topics as $tp): ?>
+        <a href="?tab=discussions&topic=<?= (int)$tp['id'] ?>" class="alumni-tabbtn <?= $topicFilterId === (int)$tp['id'] ? 'is-active' : '' ?>" style="padding:0.38rem 0.75rem;font-size:0.78rem;"><?= e($tp['title']) ?></a>
+      <?php endforeach; ?>
+    </div>
+
+    <div class="grid-2" style="align-items:start;">
+      <div style="display:grid;gap:1rem;">
+        <?php foreach ($visiblePosts as $vp):
+          $pComments = $comMap[(int)$vp['id']] ?? [];
+        ?>
+          <article class="card">
+            <div style="display:flex;gap:0.45rem;flex-wrap:wrap;margin-bottom:0.45rem;">
+              <?php if (!empty($vp['is_pinned'])): ?><span class="badge badge-warn">Pinned</span><?php endif; ?>
+              <span class="alumni-pill"><?= e($topicTitleMap[(int)$vp['topic_id']] ?? 'General Topic') ?></span>
+            </div>
+            <h3 style="margin:0 0 0.3rem;font-family:'Playfair Display',serif;"><?= e($vp['title']) ?></h3>
+            <div style="font-size:0.78rem;color:#57534E;margin-bottom:0.65rem;">
+              <strong><?= e($vp['author_name']) ?></strong> · <?= e($vp['author_batch']) ?> · <?= e($vp['created_at']) ?>
+            </div>
+            <?php if (!empty($vp['summary'])): ?>
+              <p style="font-size:0.86rem;font-style:italic;color:var(--secondary-color);margin:0 0 0.5rem;"><?= e($vp['summary']) ?></p>
+            <?php endif; ?>
+            <div style="font-size:0.88rem;line-height:1.65;white-space:pre-line;margin-bottom:0.85rem;"><?= e($vp['content']) ?></div>
+            <div style="border-top:1px solid var(--border-color);padding-top:0.75rem;">
+              <strong style="font-size:0.78rem;">Alumni Replies (<?= count($pComments) ?>)</strong>
+              <div style="display:grid;gap:0.45rem;margin:0.5rem 0 0.75rem;">
+                <?php foreach ($pComments as $cm): ?>
+                  <div style="background:#FAF9F6;border:1px solid var(--border-color);border-radius:8px;padding:0.55rem 0.75rem;font-size:0.82rem;">
+                    <strong><?= e($cm['author_name']) ?></strong> <small style="color:#78716C;">(<?= e($cm['author_batch']) ?> · <?= e($cm['created_at']) ?>)</small>
+                    <div style="margin-top:2px;"><?= e($cm['body']) ?></div>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+              <form method="post" style="display:flex;gap:0.45rem;">
+                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                <input type="hidden" name="action" value="post_comment">
+                <input type="hidden" name="post_id" value="<?= (int)$vp['id'] ?>">
+                <input type="text" name="comment_body" required placeholder="Write a helpful reply..." style="flex:1;padding:0.45rem 0.65rem;border:1px solid var(--border-color);border-radius:7px;">
+                <button type="submit" class="btn-primary btn-sm">Reply</button>
+              </form>
+            </div>
+          </article>
+        <?php endforeach; ?>
+        <?php if (empty($visiblePosts)): ?>
+          <div class="card" style="color:var(--text-muted);">No articles in this topic yet. Start the conversation on the right!</div>
+        <?php endif; ?>
+      </div>
+
+      <form method="post" class="card">
+        <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Write a Discussion / Blog Post</h2>
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="create_discussion">
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.65rem;">Topic *
+          <select name="topic_id" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+            <?php foreach ($topics as $tp): ?>
+              <option value="<?= (int)$tp['id'] ?>"><?= e($tp['title']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.65rem;">Article Headline *
+          <input type="text" name="post_title" required placeholder="e.g., How to Prepare for Cloud Architect Interviews" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+        </label>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.65rem;">Short Summary (Optional)
+          <input type="text" name="post_summary" placeholder="One-line takeaway for alumni readers" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+        </label>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.85rem;">Article Body *
+          <textarea name="post_content" rows="5" required placeholder="Share experiences, technical notes, mentorship advice..." style="width:100%;padding:0.55rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></textarea>
+        </label>
+        <button type="submit" class="btn-primary">Publish to Members Panel</button>
+      </form>
+    </div>
+  <?php endif; ?>
+
+<?php elseif ($activeTab === 'login'): ?>
+  <div class="card" style="max-width:480px;">
+    <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Alumni Member Sign In</h2>
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0;">Sign in with your approved alumni credentials to post job referrals and access the Members-Only Discussion Panel.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="alumni_login">
+      <label class="login-field">
+        <span class="login-label">Registered Alumni Email *</span>
+        <input class="login-input" type="email" name="email" required value="<?= e($_POST['email'] ?? '') ?>" placeholder="rohan.deshmukh@alumni.svcoer.edu.in">
+      </label>
+      <label class="login-field">
+        <span class="login-label">Password *</span>
+        <input class="login-input" type="password" name="password" required placeholder="••••••••">
+      </label>
+      <?= renderCaptchaWidget('alumni_login', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
+      <button type="submit" class="login-submit">Sign In to Alumni Portal</button>
+    </form>
+    <p style="font-size:0.76rem;color:#78716C;margin:0.85rem 0 0;">
+      Demo Approved Alumni: <code>rohan.deshmukh@alumni.svcoer.edu.in</code> / <code>Alumni@123</code>
+    </p>
+  </div>
+
 <?php else: ?>
   <div class="card" style="max-width:860px;">
     <h2 style="margin-top:0;font-family:'Playfair Display',serif;">Alumni Association Membership &amp; Directory Registration</h2>
     <?php if (empty($alumniSettings['allowSelfRegistration'])): ?>
       <div class="alert-err">Self-service alumni registration is currently paused. Contact <?= e($alumniSettings['coordinatorEmail']) ?>.</div>
     <?php else: ?>
-      <p style="font-size:0.86rem;color:var(--text-muted);margin-top:0;">Register to join the verified SVERI Alumni Directory, connect with regional chapters, and optionally volunteer as a student mentor.</p>
+      <p style="font-size:0.86rem;color:var(--text-muted);margin-top:0;">Register to join the verified SVERI Alumni Directory and create your login credentials for Job Posting &amp; Members-Only Discussions.</p>
       <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
         <input type="hidden" name="action" value="register_alumni">
         <div class="grid-3" style="margin-bottom:0.75rem;">
           <label style="font-size:0.8rem;font-weight:600;">Full Name *<input type="text" name="full_name" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Email Address *<input type="email" name="email" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Portal Password (Min 6 chars) *<input type="password" name="password" required minlength="6" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Mobile / Phone<input type="text" name="phone" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Graduation Year *<input type="number" name="graduation_year" min="1998" max="2035" value="2020" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Department *
@@ -453,9 +701,10 @@ require_once __DIR__ . '/includes/header.php';
         <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.75rem;">Short Bio / Career Highlights
           <textarea name="bio" rows="3" style="width:100%;padding:0.55rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></textarea>
         </label>
-        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.86rem;font-weight:600;margin-bottom:1rem;">
+        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.86rem;font-weight:600;margin-bottom:0.85rem;">
           <input type="checkbox" name="open_to_mentorship" value="1"> Willing to mentor current students &amp; provide career guidance
         </label>
+        <?= renderCaptchaWidget('alumni_register', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
         <button type="submit" class="btn-primary">Submit Alumni Registration</button>
       </form>
     <?php endif; ?>

@@ -64,6 +64,9 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
         return true;
     }
     $hasExplicitScope = !empty($user['allowed_categories']) || !empty($user['allowed_page_ids']);
+    if ($role === 'specific_page_editor') {
+        return $resource === 'pages' && $hasExplicitScope;
+    }
     return match ($resource) {
         'users', 'settings', 'audit_logs' => false,
         'sliders_events', 'gallery', 'directory' => $role === 'content_editor',
@@ -84,12 +87,15 @@ function canAccessCategory(array $user, string $categorySlug): bool
     if ($role === 'super_admin') {
         return true;
     }
+    $allowedPages = $user['allowed_page_ids'] ?? null;
+    if (is_array($allowedPages) && count($allowedPages) > 0) {
+        return false;
+    }
     $allowedCats = $user['allowed_categories'] ?? null;
     if (is_array($allowedCats) && count($allowedCats) > 0) {
         return in_array($categorySlug, $allowedCats, true);
     }
-    $allowedPages = $user['allowed_page_ids'] ?? null;
-    if (is_array($allowedPages) && count($allowedPages) > 0) {
+    if ($role === 'specific_page_editor') {
         return false;
     }
     if ($role === 'exam_controller') {
@@ -108,11 +114,41 @@ function canAccessPage(array $user, array $page, ?string $categorySlug = null): 
     if (is_array($allowedPages) && count($allowedPages) > 0) {
         return in_array((int)($page['id'] ?? 0), array_map('intval', $allowedPages), true);
     }
+    $allowedCats = $user['allowed_categories'] ?? null;
+    if (is_array($allowedCats) && count($allowedCats) > 0) {
+        $catSlug = $categorySlug ?? ($page['category_slug'] ?? $page['cat_slug'] ?? '');
+        return $catSlug !== '' && in_array($catSlug, $allowedCats, true);
+    }
+    if ($role === 'specific_page_editor') {
+        return false;
+    }
     $catSlug = $categorySlug ?? ($page['category_slug'] ?? $page['cat_slug'] ?? '');
     if ($catSlug !== '') {
         return canAccessCategory($user, $catSlug);
     }
     return canAccessResource($user, 'pages');
+}
+
+function currentAlumni(): ?array
+{
+    return $_SESSION['svcoer_alumni'] ?? null;
+}
+
+function setAlumniSession(array $profile): void
+{
+    $_SESSION['svcoer_alumni'] = [
+        'id'              => (int)$profile['id'],
+        'full_name'       => $profile['full_name'],
+        'email'           => $profile['email'],
+        'graduation_year' => (int)$profile['graduation_year'],
+        'department_code' => $profile['department_code'],
+        'chapter'         => $profile['chapter'] ?? 'Pandharpur Home Chapter',
+    ];
+}
+
+function logoutAlumniSession(): void
+{
+    unset($_SESSION['svcoer_alumni']);
 }
 
 function leadershipGroupPresets(): array
@@ -146,13 +182,15 @@ function formatCommitteeGroupLabel(?string $group): string
 function defaultAlumniSettings(): array
 {
     return [
-        'heroTitle'             => "SVERI's COE Alumni Association & Global Network",
-        'heroSubtitle'          => 'Connecting 11,500+ engineering graduates, mentors, industry leaders, and chapter communities across Pune, Bengaluru, Mumbai, USA, Europe & Pandharpur.',
-        'associationRegNo'      => 'MH/SOL/ALU-2016/06220',
-        'coordinatorName'       => 'Prof. D. B. Kulkarni',
-        'coordinatorEmail'      => 'alumni@coe.sveri.ac.in',
-        'allowSelfRegistration' => true,
-        'allowPublicJobPosting' => true,
+        'heroTitle'                 => "SVERI's COE Alumni Association & Global Network",
+        'heroSubtitle'              => 'Connecting 11,500+ engineering graduates, mentors, industry leaders, and chapter communities across Pune, Bengaluru, Mumbai, USA, Europe & Pandharpur.',
+        'associationRegNo'          => 'MH/SOL/ALU-2016/06220',
+        'coordinatorName'           => 'Prof. D. B. Kulkarni',
+        'coordinatorEmail'          => 'alumni@coe.sveri.ac.in',
+        'allowSelfRegistration'     => true,
+        'allowPublicJobPosting'     => true,
+        'enableDiscussions'         => true,
+        'requireDiscussionApproval' => false,
     ];
 }
 
@@ -201,11 +239,16 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB"
         );
+        try {
+            $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('super_admin', 'content_editor', 'department_admin', 'iqac_officer', 'exam_controller', 'specific_page_editor') NOT NULL");
+        } catch (Throwable $ignoredEnum) {
+        }
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS alumni_profiles (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 full_name VARCHAR(150) NOT NULL,
                 email VARCHAR(160) NOT NULL,
+                password_hash VARCHAR(255) NOT NULL DEFAULT '',
                 phone VARCHAR(60) NULL,
                 graduation_year SMALLINT NOT NULL,
                 department_code VARCHAR(20) NOT NULL,
@@ -225,6 +268,10 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 registered_at DATE NOT NULL
             ) ENGINE=InnoDB"
         );
+        try {
+            $pdo->exec("ALTER TABLE alumni_profiles ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '' AFTER email");
+        } catch (Throwable $ignoredCol) {
+        }
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS alumni_jobs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -259,6 +306,44 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 rsvp_count INT UNSIGNED DEFAULT 0,
                 is_active TINYINT(1) DEFAULT 1,
                 sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS alumni_discussion_topics (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                slug VARCHAR(100) NOT NULL UNIQUE,
+                title VARCHAR(180) NOT NULL,
+                description TEXT NULL,
+                is_active TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS alumni_discussion_posts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                topic_id INT NOT NULL,
+                author_alumni_id INT NOT NULL,
+                author_name VARCHAR(150) NOT NULL,
+                author_batch VARCHAR(80) NOT NULL,
+                author_role VARCHAR(180) NULL,
+                title VARCHAR(240) NOT NULL,
+                summary VARCHAR(500) NULL,
+                content MEDIUMTEXT NOT NULL,
+                status ENUM('approved','pending','rejected') DEFAULT 'approved',
+                is_pinned TINYINT(1) DEFAULT 0,
+                created_at VARCHAR(32) NOT NULL,
+                updated_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS alumni_discussion_comments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                post_id INT NOT NULL,
+                author_alumni_id INT NOT NULL,
+                author_name VARCHAR(150) NOT NULL,
+                author_batch VARCHAR(80) NOT NULL,
+                body TEXT NOT NULL,
+                created_at VARCHAR(32) NOT NULL
             ) ENGINE=InnoDB"
         );
 
@@ -315,6 +400,58 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('alumni_settings', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
                 ->execute([json_encode(defaultAlumniSettings(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('alumni_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
+
+        // Ensure all alumni_profiles without a password hash get default 'Alumni@123' hash cleanly
+        $blankPwCount = (int)$pdo->query("SELECT COUNT(*) FROM alumni_profiles WHERE password_hash IS NULL OR password_hash = ''")->fetchColumn();
+        if ($blankPwCount > 0) {
+            $defaultAlumniHash = password_hash('Alumni@123', PASSWORD_DEFAULT);
+            $pdo->prepare("UPDATE alumni_profiles SET password_hash = ? WHERE password_hash IS NULL OR password_hash = ''")
+                ->execute([$defaultAlumniHash]);
+        }
+
+        // Seed Members-Only Discussion Topics & Blogger Posts once
+        $discChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'alumni_discussions_seeded_v1' LIMIT 1");
+        $discChk->execute();
+        $discSeeded = (bool)$discChk->fetchColumn();
+        $topicCount = (int)$pdo->query('SELECT COUNT(*) FROM alumni_discussion_topics')->fetchColumn();
+        if (!$discSeeded && $topicCount === 0) {
+            $insTop = $pdo->prepare('INSERT INTO alumni_discussion_topics (id, slug, title, description, is_active, sort_order) VALUES (?,?,?,?,?,?)');
+            $seedTopics = [
+                [1, 'career-architecture', 'Cloud, AI & System Architecture', 'Deep-dive technical notes, interview frameworks, and distributed architecture discussions by senior alumni.', 1, 1],
+                [2, 'core-engineering', 'EV Powertrain, VLSI & Smart Grid Careers', 'Domain insights on core mechanical, E&TC, civil infrastructure, and electrical power systems.', 1, 2],
+                [3, 'mentorship-higher-studies', 'Mentorship, Startups & Higher Studies', 'SOP reviews, GATE / GRE / MBA strategies, entrepreneurship lessons, and campus mentoring threads.', 1, 3],
+            ];
+            foreach ($seedTopics as $st) {
+                $insTop->execute($st);
+            }
+
+            $insPost = $pdo->prepare(
+                'INSERT INTO alumni_discussion_posts (id, topic_id, author_alumni_id, author_name, author_batch, author_role, title, summary, content, status, is_pinned, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            );
+            $insPost->execute([
+                1, 1, 1, 'Rohan Deshmukh', '2016 CSE', 'Principal Cloud Architect · Microsoft India',
+                'Designing Resilient Multi-Region APIs: Field Notes for SVERI Alumni & Pre-Final Mentees',
+                'Practical trade-offs between idempotency keys, circuit breakers, and read replicas from 10 years of production incidents.',
+                "Over the past decade building distributed cloud platforms, three architectural habits saved our teams during peak traffic events:\n1. Treat every write endpoint as retryable using deterministic idempotency keys.\n2. Separate read-heavy catalog queries onto cached replicas so dashboard spikes never starve transactional writes.\n3. Run game-day chaos drills before major releases.\nDrop your system design questions below and our Hyderabad & Bengaluru chapters will review them together.",
+                'approved', 1, '2026-11-04 10:15', '2026-11-04 10:15',
+            ]);
+            $insPost->execute([
+                2, 2, 2, 'Snehal Patwardhan', '2018 ENTC', 'Staff SoC Verification Engineer · Qualcomm',
+                'How E&TC Graduates Can Transition Into SoC Design Verification & UVM',
+                'Recommended SystemVerilog projects, simulation tools, and technical topics to showcase before referral rounds.',
+                "Students and recent graduates frequently ask what separates a shortlisted VLSI verification candidate. Focus on building a clean UVM testbench from scratch for an AXI4-Lite or SPI controller, write functional coverage bins, and document assertion failures clearly on GitHub.",
+                'approved', 0, '2026-11-06 16:40', '2026-11-06 16:40',
+            ]);
+
+            $insCom = $pdo->prepare(
+                'INSERT INTO alumni_discussion_comments (id, post_id, author_alumni_id, author_name, author_batch, body, created_at) VALUES (?,?,?,?,?,?,?)'
+            );
+            $insCom->execute([1, 1, 2, 'Snehal Patwardhan', '2018 ENTC', 'Great write-up Rohan! Idempotency + backpressure also applies to telemetry ingestion pipelines.', '2026-11-05 09:20']);
+            $insCom->execute([2, 2, 3, 'Aditya Kulkarni', '2015 MECH', 'Sharing this thread with our Mechatronics & Embedded Systems interns in Pune.', '2026-11-07 14:05']);
+
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('alumni_discussions_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
                 ->execute();
         }
     } catch (Throwable $ignoredSchema) {

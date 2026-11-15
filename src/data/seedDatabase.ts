@@ -2297,6 +2297,7 @@ export function createSeedDatabase(): CmsDatabase {
 }
 
 export function createSeedAlumniData(): import('../types/cms').AlumniData {
+  const defaultAlumniHash = hashPassword('Alumni@123');
   return {
     settings: {
       heroTitle: "SVERI's COE Alumni Association & Global Network",
@@ -2307,12 +2308,15 @@ export function createSeedAlumniData(): import('../types/cms').AlumniData {
       coordinatorEmail: 'alumni@coe.sveri.ac.in',
       allowSelfRegistration: true,
       allowPublicJobPosting: true,
+      enableDiscussions: true,
+      requireDiscussionApproval: false,
     },
     profiles: [
       {
         id: 1,
         fullName: 'Rohan Deshmukh',
         email: 'rohan.deshmukh@alumni.svcoer.edu.in',
+        passwordHash: defaultAlumniHash,
         phone: '+91-98220-11201',
         graduationYear: 2016,
         departmentCode: 'CSE',
@@ -2335,6 +2339,7 @@ export function createSeedAlumniData(): import('../types/cms').AlumniData {
         id: 2,
         fullName: 'Snehal Patwardhan',
         email: 'snehal.patwardhan@alumni.svcoer.edu.in',
+        passwordHash: defaultAlumniHash,
         phone: '+91-98901-44310',
         graduationYear: 2018,
         departmentCode: 'ENTC',
@@ -2357,6 +2362,7 @@ export function createSeedAlumniData(): import('../types/cms').AlumniData {
         id: 3,
         fullName: 'Aditya Kulkarni',
         email: 'aditya.k@alumni.svcoer.edu.in',
+        passwordHash: defaultAlumniHash,
         graduationYear: 2015,
         departmentCode: 'MECH',
         departmentName: 'Mechanical Engineering',
@@ -2378,6 +2384,7 @@ export function createSeedAlumniData(): import('../types/cms').AlumniData {
         id: 4,
         fullName: 'Priya Joshi',
         email: 'priya.joshi@alumni.svcoer.edu.in',
+        passwordHash: defaultAlumniHash,
         graduationYear: 2020,
         departmentCode: 'CIVIL',
         departmentName: 'Civil Engineering',
@@ -2399,6 +2406,7 @@ export function createSeedAlumniData(): import('../types/cms').AlumniData {
         id: 5,
         fullName: 'Omkar Shinde',
         email: 'omkar.shinde@alumni.svcoer.edu.in',
+        passwordHash: defaultAlumniHash,
         graduationYear: 2022,
         departmentCode: 'ELEC',
         departmentName: 'Electrical Engineering',
@@ -2420,6 +2428,7 @@ export function createSeedAlumniData(): import('../types/cms').AlumniData {
         id: 6,
         fullName: 'Tanvi Mane',
         email: 'tanvi.mane@alumni.svcoer.edu.in',
+        passwordHash: defaultAlumniHash,
         graduationYear: 2023,
         departmentCode: 'CSE',
         departmentName: 'Computer Science & Engineering',
@@ -2560,6 +2569,94 @@ export function createSeedAlumniData(): import('../types/cms').AlumniData {
         rsvpCount: 54,
         isActive: true,
         sortOrder: 3,
+      },
+    ],
+    discussionTopics: [
+      {
+        id: 1,
+        slug: 'career-guidance-placements',
+        title: 'Career Guidance & Placements',
+        description: 'Interview prep, resume reviews, and mentorship threads for graduating engineers.',
+        isActive: true,
+        sortOrder: 1,
+      },
+      {
+        id: 2,
+        slug: 'industry-trends-referrals',
+        title: 'Industry Referrals & Tech Trends',
+        description: 'Insights on AI/Cloud, EV powertrains, VLSI verification, and smart infrastructure.',
+        isActive: true,
+        sortOrder: 2,
+      },
+      {
+        id: 3,
+        slug: 'higher-studies-research',
+        title: 'Higher Studies, GATE & Research',
+        description: 'Peer advice on M.Tech, MS abroad, fellowships, and patent/paper publishing.',
+        isActive: true,
+        sortOrder: 3,
+      },
+      {
+        id: 4,
+        slug: 'campus-chapter-stories',
+        title: 'Pandharpur Campus & Chapter Stories',
+        description: 'Alumni reunions, endowment initiatives, and chapter meetup recaps.',
+        isActive: true,
+        sortOrder: 4,
+      },
+    ],
+    discussions: [
+      {
+        id: 1,
+        topicId: 1,
+        title: '2026 Cloud & System Design Interview Roadmap for SVERI Juniors',
+        content:
+          'Over the past quarter I interviewed 30+ freshers and mid-level engineers. Strong fundamentals in Linux networking, SQL indexing, and clean REST API error handling matter far more than memorizing frameworks.\n\nIf any batchmates in Hyderabad or Pune would like to co-host mock interviews for our final-year CSE/E&TC students next month, drop a comment below!',
+        authorAlumniId: 1,
+        authorName: 'Rohan Deshmukh',
+        authorBatch: '2016 CSE',
+        authorDesignation: 'Principal Cloud Architect, Microsoft India',
+        isPinned: true,
+        status: 'approved',
+        createdAt: '2026-11-04 10:30',
+        comments: [
+          {
+            id: 1,
+            postId: 1,
+            authorAlumniId: 2,
+            authorName: 'Snehal Patwardhan',
+            authorBatch: '2018 ENTC',
+            content:
+              'Count me in for weekend mock interviews—especially for embedded C and digital design tracks!',
+            createdAt: '2026-11-04 14:15',
+          },
+        ],
+      },
+      {
+        id: 2,
+        topicId: 2,
+        title: 'EV Thermal & Powertrain Engineering Trends in Pune Manufacturing Hub',
+        content:
+          'Tier-1 automotive suppliers around Chakan and Pimpri-Chinchwad are actively hiring mechanical & electrical graduates skilled in battery thermal modeling, BMS calibration, and DFMEA.\n\nHappy to review resumes from verified alumni looking to transition into EV R&D teams.',
+        authorAlumniId: 3,
+        authorName: 'Aditya Kulkarni',
+        authorBatch: '2015 MECH',
+        authorDesignation: 'DGM - EV Powertrain, Bharat Forge Ltd.',
+        isPinned: false,
+        status: 'approved',
+        createdAt: '2026-11-06 09:45',
+        comments: [
+          {
+            id: 2,
+            postId: 2,
+            authorAlumniId: 5,
+            authorName: 'Omkar Shinde',
+            authorBatch: '2022 ELEC',
+            content:
+              'Great perspective, Aditya sir. High-voltage safety and CAN-bus diagnostics skills are also in huge demand.',
+            createdAt: '2026-11-06 18:20',
+          },
+        ],
       },
     ],
   };

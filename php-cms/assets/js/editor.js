@@ -48,6 +48,7 @@
     down: svgIcon('<path d="m6 9 6 6 6-6"/>', 13),
     copy: svgIcon('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', 13),
     trash: svgIcon('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>', 13),
+    userCard: svgIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><rect x="15" y="5" width="7" height="10" rx="1.5"/>'),
   };
 
   var TEXT_SWATCHES = [
@@ -80,6 +81,44 @@
     { id: 'slate', label: 'Executive Slate', color: '#334155' },
     { id: 'minimal', label: 'Clean Border', color: '#78716C' },
   ];
+
+  function escapeProfileHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function buildPhotoProfileCardHtml(opts) {
+    var o = opts || {};
+    var safePhoto = (o.photoUrl && !/^(javascript|data:text|vbscript):/i.test(String(o.photoUrl).trim()))
+      ? String(o.photoUrl).trim()
+      : resolveUrl('assets/images/leadership_principal.jpg');
+    var contacts = [];
+    if (o.email && String(o.email).trim()) {
+      contacts.push('<span><strong>Email:</strong> ' + escapeProfileHtml(String(o.email).trim()) + '</span>');
+    }
+    if (o.phone && String(o.phone).trim()) {
+      contacts.push('<span><strong>Phone:</strong> ' + escapeProfileHtml(String(o.phone).trim()) + '</span>');
+    }
+    var cardInner = '<div class="cms-photo-profile-card">' +
+      '<div class="cms-photo-profile-media">' +
+      '<img src="' + escapeProfileHtml(safePhoto) + '" alt="' + escapeProfileHtml(o.name || 'Profile Photo') + '">' +
+      '</div>' +
+      '<div class="cms-photo-profile-body">' +
+      '<p class="cms-profile-role">' + escapeProfileHtml(o.roleBadge || 'Statutory Officer / Faculty Profile') + '</p>' +
+      '<h4>' + escapeProfileHtml(o.name || 'Dr. Faculty / Officer Name') + '</h4>' +
+      '<p class="cms-photo-profile-desig">' + escapeProfileHtml(o.designation || 'Professor & Officer') + '</p>' +
+      (o.department && String(o.department).trim() ? '<p class="cms-photo-profile-dept">' + escapeProfileHtml(String(o.department).trim()) + '</p>' : '') +
+      (o.bio && String(o.bio).trim() ? '<p class="cms-photo-profile-bio">' + escapeProfileHtml(String(o.bio).trim()) + '</p>' : '') +
+      (contacts.length ? '<div class="cms-photo-profile-meta">' + contacts.join('') + '</div>' : '') +
+      '</div></div>';
+    if (String(o.columns) === '2') {
+      return '<div class="cms-block cms-grid-2" data-block="photo-profile-card">' + cardInner + cardInner + '</div><p><br></p>';
+    }
+    return '<div class="cms-block" data-block="photo-profile-card">' + cardInner + '</div><p><br></p>';
+  }
 
   var BLOCKS = [
     {
@@ -137,6 +176,23 @@
       label: 'Officer / Coordinator Card',
       badge: 'Committee Contact',
       html: '<div class="cms-block cms-profile-card" data-block="profile-card"><div class="cms-profile-avatar">SV</div><div><h4>Prof. / Dr. Coordinator Name</h4><p class="cms-profile-role">Statutory Role &amp; Department Designation</p><p class="cms-profile-meta">Email: office@coe.sveri.ac.in · Tel: +91-02186-216063 · Office: Admin Block</p></div></div><p><br></p>',
+    },
+    {
+      id: 'photo-profile-card',
+      category: 'Academic',
+      label: 'Photo Profile Card (Statutory / Faculty)',
+      badge: 'Portrait Photo + Details',
+      html: buildPhotoProfileCardHtml({
+        roleBadge: 'Statutory Officer / Faculty Profile',
+        name: 'Dr. Prashant M. Pawar',
+        designation: 'Principal & Professor (Ph.D., IIT Bombay)',
+        department: 'Governing Body / Civil Engineering',
+        email: 'principal@coe.sveri.ac.in',
+        phone: '+91-02186-216063',
+        bio: '24+ years of academic leadership, autonomous curriculum design, and sponsored R&D.',
+        photoUrl: resolveUrl('assets/images/leadership_principal.jpg'),
+        columns: 1,
+      }),
     },
     {
       id: 'checklist-box',
@@ -793,6 +849,152 @@
     });
     imgLabel.appendChild(imgInput);
     toolbar.appendChild(imgLabel);
+
+    // + Profile Card (Statutory Body / Faculty Photo Profile Template Builder)
+    var profileCardBtn = makeToolBtn(ICONS.userCard + ' <span>+ Profile Card</span>', 'Insert Statutory / Faculty Photo Profile Card', true);
+    profileCardBtn.addEventListener('click', function () {
+      if (isHtmlMode) return;
+      if (activePopover === 'profile_card') { popoverBar.style.display = 'none'; activePopover = null; return; }
+      activePopover = 'profile_card';
+      popoverBar.innerHTML = '';
+      popoverBar.style.display = 'flex';
+
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:8px;';
+
+      var hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+      var hdrTitle = document.createElement('strong');
+      hdrTitle.textContent = 'Statutory / Faculty Photo Profile Card Template';
+      var hdrSub = document.createElement('span');
+      hdrSub.style.cssText = 'font-size:11px;color:#57534E;';
+      hdrSub.textContent = 'Displays cropped 1:1 photo beside designation & contact details';
+      hdr.appendChild(hdrTitle);
+      hdr.appendChild(hdrSub);
+      wrap.appendChild(hdr);
+
+      var grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;width:100%;';
+
+      function mkInput(placeholder, val) {
+        var i = document.createElement('input');
+        i.type = 'text';
+        i.placeholder = placeholder;
+        i.value = val || '';
+        i.style.cssText = 'padding:5px 8px;border:1px solid #D6D3D1;border-radius:6px;background:#fff;font-size:12px;';
+        return i;
+      }
+
+      var roleInp = mkInput('Role / Body (e.g., Statutory Officer)', 'Statutory Officer / Faculty Profile');
+      var nameInp = mkInput('Full Name', 'Dr. Name Surname');
+      var desigInp = mkInput('Designation & Qualification', 'Professor & HoD (Ph.D.)');
+      var deptInp = mkInput('Department / Committee', 'Academic Council / Computer Science & Engg.');
+      var emailInp = mkInput('Email', 'faculty@coe.sveri.ac.in');
+      var phoneInp = mkInput('Phone', '+91-02186-216063');
+      var bioInp = mkInput('Short Bio / Experience', '15+ years of teaching, autonomous examination & sponsored research.');
+      var photoInp = mkInput('Photo URL (or upload below)', resolveUrl('assets/images/leadership_principal.jpg'));
+
+      var layoutSel = document.createElement('select');
+      layoutSel.style.cssText = 'padding:5px 8px;border:1px solid #D6D3D1;border-radius:6px;background:#fff;font-size:12px;';
+      layoutSel.innerHTML = '<option value="1">Single Profile Card (1-Column)</option><option value="2">Two-Column Profile Grid</option>';
+
+      grid.appendChild(roleInp);
+      grid.appendChild(nameInp);
+      grid.appendChild(desigInp);
+      grid.appendChild(deptInp);
+      grid.appendChild(emailInp);
+      grid.appendChild(phoneInp);
+      grid.appendChild(photoInp);
+      grid.appendChild(layoutSel);
+      wrap.appendChild(grid);
+      wrap.appendChild(bioInp);
+
+      var actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;';
+
+      var photoUploadLbl = document.createElement('label');
+      photoUploadLbl.className = 'rte-tool-btn is-outlined';
+      photoUploadLbl.style.cursor = 'pointer';
+      photoUploadLbl.innerHTML = ICONS.image + ' <span>Upload 1:1 Profile Photo</span>';
+      var photoFileInp = document.createElement('input');
+      photoFileInp.type = 'file';
+      photoFileInp.accept = 'image/jpeg,image/png,image/webp';
+      photoFileInp.style.display = 'none';
+
+      function uploadProfilePhoto(targetFile) {
+        var policy = window.SVCOER_UPLOAD_POLICY || {};
+        var maxPhotoMb = parseFloat(policy.maxPhotoMb) || 2;
+        if (targetFile.size > Math.round(maxPhotoMb * 1024 * 1024)) {
+          showNotice('Photo "' + targetFile.name + '" exceeds configured ' + maxPhotoMb + ' MB upload limit.', true);
+          photoFileInp.value = '';
+          return;
+        }
+        var fd = new FormData();
+        fd.append('csrf_token', csrf);
+        fd.append('file', targetFile);
+        var uploadUrl = textarea.getAttribute('data-upload-url') || resolveUrl('admin/upload_handler.php');
+        fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data && data.ok && data.file_url) {
+              photoInp.value = resolveUrl(data.file_url);
+              showNotice('1:1 profile photo uploaded: ' + data.file_url, false);
+            } else {
+              showNotice((data && data.error) || 'Profile photo upload failed.', true);
+            }
+          })
+          .catch(function () { showNotice('Profile photo upload failed.', true); })
+          .finally(function () { photoFileInp.value = ''; });
+      }
+
+      photoFileInp.addEventListener('change', function () {
+        var file = photoFileInp.files && photoFileInp.files[0];
+        if (!file) return;
+        var policy = window.SVCOER_UPLOAD_POLICY || {};
+        var maxPhotoMb = parseFloat(policy.maxPhotoMb) || 2;
+        if (typeof window.svcoerOpenCropModal === 'function') {
+          window.svcoerOpenCropModal(
+            file,
+            { aspectRatio: '1:1', maxPhotoMb: maxPhotoMb },
+            function (croppedFile) { uploadProfilePhoto(croppedFile); },
+            function () { photoFileInp.value = ''; }
+          );
+        } else {
+          uploadProfilePhoto(file);
+        }
+      });
+      photoUploadLbl.appendChild(photoFileInp);
+
+      var rightBtns = document.createElement('div');
+      rightBtns.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      var insertPCBtn = makeToolBtn('Insert Profile Card', 'Insert Profile Card', true);
+      insertPCBtn.style.cssText = 'background:#0F294A;color:#fff;border-color:#0F294A;padding:0 12px;';
+      insertPCBtn.addEventListener('click', function () {
+        insertHtmlAtFocus(buildPhotoProfileCardHtml({
+          roleBadge: roleInp.value,
+          name: nameInp.value,
+          designation: desigInp.value,
+          department: deptInp.value,
+          email: emailInp.value,
+          phone: phoneInp.value,
+          bio: bioInp.value,
+          photoUrl: photoInp.value,
+          columns: layoutSel.value === '2' ? 2 : 1,
+        }));
+        popoverBar.style.display = 'none';
+        activePopover = null;
+      });
+      var closePCBtn = makeToolBtn('Close', 'Close', true);
+      closePCBtn.addEventListener('click', function () { popoverBar.style.display = 'none'; activePopover = null; });
+
+      rightBtns.appendChild(insertPCBtn);
+      rightBtns.appendChild(closePCBtn);
+      actions.appendChild(photoUploadLbl);
+      actions.appendChild(rightBtns);
+      wrap.appendChild(actions);
+      popoverBar.appendChild(wrap);
+    });
+    toolbar.appendChild(profileCardBtn);
 
     // Mode Switching (Visual Word Editor <-> HTML & CSS Source)
     function setMode(nextMode) {

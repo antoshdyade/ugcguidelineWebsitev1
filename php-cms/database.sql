@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name VARCHAR(120) NOT NULL,
   email VARCHAR(160) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
-  role ENUM('super_admin', 'content_editor', 'department_admin', 'iqac_officer', 'exam_controller') NOT NULL,
+  role ENUM('super_admin', 'content_editor', 'department_admin', 'iqac_officer', 'exam_controller', 'specific_page_editor') NOT NULL,
   assigned_department_id INT NULL,
   allowed_categories_json TEXT NULL,
   allowed_page_ids_json TEXT NULL,
@@ -282,6 +282,7 @@ CREATE TABLE IF NOT EXISTS alumni_profiles (
   id INT AUTO_INCREMENT PRIMARY KEY,
   full_name VARCHAR(150) NOT NULL,
   email VARCHAR(160) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL DEFAULT '',
   phone VARCHAR(60) NULL,
   graduation_year SMALLINT NOT NULL,
   department_code VARCHAR(20) NOT NULL,
@@ -333,6 +334,41 @@ CREATE TABLE IF NOT EXISTS alumni_events (
   rsvp_count INT UNSIGNED DEFAULT 0,
   is_active TINYINT(1) DEFAULT 1,
   sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS alumni_discussion_topics (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  slug VARCHAR(100) NOT NULL UNIQUE,
+  title VARCHAR(180) NOT NULL,
+  description TEXT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS alumni_discussion_posts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  topic_id INT NOT NULL,
+  author_alumni_id INT NOT NULL,
+  author_name VARCHAR(150) NOT NULL,
+  author_batch VARCHAR(80) NOT NULL,
+  author_role VARCHAR(180) NULL,
+  title VARCHAR(240) NOT NULL,
+  summary VARCHAR(500) NULL,
+  content MEDIUMTEXT NOT NULL,
+  status ENUM('approved','pending','rejected') DEFAULT 'approved',
+  is_pinned TINYINT(1) DEFAULT 0,
+  created_at VARCHAR(32) NOT NULL,
+  updated_at VARCHAR(32) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS alumni_discussion_comments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  post_id INT NOT NULL,
+  author_alumni_id INT NOT NULL,
+  author_name VARCHAR(150) NOT NULL,
+  author_batch VARCHAR(80) NOT NULL,
+  body TEXT NOT NULL,
+  created_at VARCHAR(32) NOT NULL
 ) ENGINE=InnoDB;
 
 -- ============================================================================

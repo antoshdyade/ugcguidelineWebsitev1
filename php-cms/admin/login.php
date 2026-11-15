@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/captcha.php';
 
 if (currentUser()) {
     header('Location: dashboard.php');
@@ -13,38 +14,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $email = trim((string)($_POST['email'] ?? ''));
     $pass  = (string)($_POST['password'] ?? '');
+    $captchaAnswer = (string)($_POST['captcha_answer'] ?? '');
 
-    $pdo = getDB();
-    try {
-        ensureCmsSchemaUpgraded($pdo);
-        $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
-        $stmt->execute([$email]);
-        $user = $stmt->fetch();
-    } catch (PDOException $ex) {
-        $user = null;
-        $error = 'Database tables not found. Please import database.sql and run setup.php first.';
-    }
+    if (!verifyCaptchaAnswer($captchaAnswer, 'admin_login')) {
+        $error = 'Incorrect or expired security CAPTCHA code. Please try again.';
+    } else {
+        $pdo = getDB();
+        try {
+            ensureCmsSchemaUpgraded($pdo);
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+        } catch (PDOException $ex) {
+            $user = null;
+            $error = 'Database tables not found. Please import database.sql and run setup.php first.';
+        }
 
-    if ($user && password_verify($pass, $user['password_hash'])) {
-        session_regenerate_id(true);
-        $allowedCats = !empty($user['allowed_categories_json']) ? json_decode((string)$user['allowed_categories_json'], true) : null;
-        $allowedPages = !empty($user['allowed_page_ids_json']) ? json_decode((string)$user['allowed_page_ids_json'], true) : null;
-        $_SESSION['cms_user'] = [
-            'id'                     => (int)$user['id'],
-            'full_name'              => $user['full_name'],
-            'email'                  => $user['email'],
-            'role'                   => $user['role'],
-            'assigned_department_id' => $user['assigned_department_id'] ? (int)$user['assigned_department_id'] : null,
-            'allowed_categories'     => is_array($allowedCats) ? $allowedCats : null,
-            'allowed_page_ids'       => is_array($allowedPages) ? array_map('intval', $allowedPages) : null,
-        ];
-        $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
-        logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', $user['email']);
-        header('Location: dashboard.php');
-        exit;
-    }
-    if (!$error) {
-        $error = 'Invalid credentials or inactive account. If deploying for the first time, run setup.php to verify DB & passwords.';
+        if ($user && password_verify($pass, $user['password_hash'])) {
+            session_regenerate_id(true);
+            $allowedCats = !empty($user['allowed_categories_json']) ? json_decode((string)$user['allowed_categories_json'], true) : null;
+            $allowedPages = !empty($user['allowed_page_ids_json']) ? json_decode((string)$user['allowed_page_ids_json'], true) : null;
+            $_SESSION['cms_user'] = [
+                'id'                     => (int)$user['id'],
+                'full_name'              => $user['full_name'],
+                'email'                  => $user['email'],
+                'role'                   => $user['role'],
+                'assigned_department_id' => $user['assigned_department_id'] ? (int)$user['assigned_department_id'] : null,
+                'allowed_categories'     => is_array($allowedCats) ? $allowedCats : null,
+                'allowed_page_ids'       => is_array($allowedPages) ? array_map('intval', $allowedPages) : null,
+            ];
+            $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
+            logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', $user['email']);
+            header('Location: dashboard.php');
+            exit;
+        }
+        if (!$error) {
+            $error = 'Invalid credentials or inactive account. If deploying for the first time, run setup.php to verify DB & passwords.';
+        }
     }
 }
 
@@ -110,6 +116,7 @@ $demoAccounts = [
         <span class="login-label">Password</span>
         <input id="login-password" class="login-input" type="password" name="password" required placeholder="••••••••">
       </label>
+      <?= renderCaptchaWidget('admin_login', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
       <button type="submit" class="login-submit">Sign In to Dashboard</button>
     </form>
 

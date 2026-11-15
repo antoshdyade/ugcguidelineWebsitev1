@@ -19,46 +19,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
     if ($action === 'create') {
-        $hash = password_hash($_POST['password'], PASSWORD_DEFAULT);
         $role = $_POST['role'] ?? 'content_editor';
         $deptId = ($role === 'department_admin') ? (int)$_POST['assigned_department_id'] : null;
         $selCats = array_values(array_filter(array_map('strval', $_POST['allowed_categories'] ?? [])));
         $selPages = array_values(array_filter(array_map('intval', $_POST['allowed_page_ids'] ?? [])));
-        if ($role === 'exam_controller' && empty($selCats)) {
+        if ($role === 'exam_controller' && empty($selCats) && empty($selPages)) {
             $selCats = ['examination'];
         }
-        $stmt = $pdo->prepare('INSERT INTO users (full_name, email, password_hash, role, assigned_department_id, allowed_categories_json, allowed_page_ids_json) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([
-            trim($_POST['full_name']),
-            strtolower(trim($_POST['email'])),
-            $hash,
-            $role,
-            $deptId,
-            !empty($selCats) ? json_encode($selCats) : null,
-            !empty($selPages) ? json_encode($selPages) : null,
-        ]);
-        logAudit($pdo, $user, 'CREATE_USER', 'User', $_POST['email']);
-        $msg = 'RBAC user created with granular permissions.';
+        if ($role === 'specific_page_editor' && empty($selCats) && empty($selPages)) {
+            $err = 'Please select at least one individual page or category for Specific Page / Category Access Only.';
+        } else {
+            $hash = password_hash($_POST['password'], PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare('INSERT INTO users (full_name, email, password_hash, role, assigned_department_id, allowed_categories_json, allowed_page_ids_json) VALUES (?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute([
+                trim($_POST['full_name']),
+                strtolower(trim($_POST['email'])),
+                $hash,
+                $role,
+                $deptId,
+                !empty($selCats) ? json_encode($selCats) : null,
+                !empty($selPages) ? json_encode($selPages) : null,
+            ]);
+            logAudit($pdo, $user, 'CREATE_USER', 'User', $_POST['email']);
+            $msg = 'RBAC user created with granular permissions.';
+        }
     } elseif ($action === 'update_rbac' && !empty($_POST['user_id'])) {
         $targetId = (int)$_POST['user_id'];
         $role = $_POST['role'] ?? 'content_editor';
         $deptId = ($role === 'department_admin') ? (int)$_POST['assigned_department_id'] : null;
         $selCats = array_values(array_filter(array_map('strval', $_POST['allowed_categories'] ?? [])));
         $selPages = array_values(array_filter(array_map('intval', $_POST['allowed_page_ids'] ?? [])));
-        $pdo->prepare('UPDATE users SET role = ?, assigned_department_id = ?, allowed_categories_json = ?, allowed_page_ids_json = ? WHERE id = ?')
-            ->execute([
-                $role,
-                $deptId,
-                !empty($selCats) ? json_encode($selCats) : null,
-                !empty($selPages) ? json_encode($selPages) : null,
-                $targetId,
-            ]);
-        logAudit($pdo, $user, 'UPDATE_RBAC_SCOPE', 'User', 'User #' . $targetId . ' (' . $role . ')');
-        $msg = 'Per-page & category RBAC permissions updated.';
+        if ($role === 'specific_page_editor' && empty($selCats) && empty($selPages)) {
+            $err = 'Please select at least one individual page or category for Specific Page / Category Access Only.';
+        } else {
+            $pdo->prepare('UPDATE users SET role = ?, assigned_department_id = ?, allowed_categories_json = ?, allowed_page_ids_json = ? WHERE id = ?')
+                ->execute([
+                    $role,
+                    $deptId,
+                    !empty($selCats) ? json_encode($selCats) : null,
+                    !empty($selPages) ? json_encode($selPages) : null,
+                    $targetId,
+                ]);
+            logAudit($pdo, $user, 'UPDATE_RBAC_SCOPE', 'User', 'User #' . $targetId . ' (' . $role . ')');
+            $msg = 'Per-page & category RBAC permissions updated.';
+        }
     } elseif ($action === 'toggle') {
         $pdo->prepare('UPDATE users SET is_active = NOT is_active WHERE id = ? AND id != ?')->execute([(int)$_POST['user_id'], $user['id']]);
         logAudit($pdo, $user, 'TOGGLE_USER', 'User', 'ID #' . (int)$_POST['user_id']);
         $msg = 'User status updated.';
+    } elseif ($action === 'delete_user' && !empty($_POST['user_id'])) {
+        $targetId = (int)$_POST['user_id'];
+        if ($targetId === (int)$user['id']) {
+            $err = 'You cannot delete your own currently signed-in administrator account.';
+        } else {
+            $stTarget = $pdo->prepare('SELECT * FROM users WHERE id = ? LIMIT 1');
+            $stTarget->execute([$targetId]);
+            $targetRow = $stTarget->fetch();
+            if (!$targetRow) {
+                $err = 'User account not found.';
+            } else {
+                $activeAdminsCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'super_admin' AND is_active = 1")->fetchColumn();
+                if ($targetRow['role'] === 'super_admin' && !empty($targetRow['is_active']) && $activeAdminsCount <= 1) {
+                    $err = 'Cannot delete the last active Super Admin account.';
+                } else {
+                    $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$targetId]);
+                    logAudit($pdo, $user, 'DELETE_USER', 'User', $targetRow['email'] . ' (' . $targetRow['role'] . ')');
+                    $msg = 'Revoked & deleted user account: ' . $targetRow['full_name'] . ' (' . $targetRow['email'] . ').';
+                }
+            }
+        }
     }
 }
 
@@ -125,7 +154,7 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
       <div class="grid-2" style="margin-bottom:0.85rem;">
         <label>Role
           <select name="role" style="width:100%;padding:0.5rem;">
-            <?php foreach (['super_admin' => 'Super Admin', 'content_editor' => 'Content Editor / PRO', 'department_admin' => 'Department Admin', 'iqac_officer' => 'IQAC / Compliance Officer', 'exam_controller' => 'Controller of Examinations (CoE)'] as $rk => $rl): ?>
+            <?php foreach (['super_admin' => 'Super Admin', 'content_editor' => 'Content Editor / PRO', 'department_admin' => 'Department Admin', 'iqac_officer' => 'IQAC / Compliance Officer', 'exam_controller' => 'Controller of Examinations (CoE)', 'specific_page_editor' => 'Specific Page / Category Access Only'] as $rk => $rl): ?>
               <option value="<?= $rk ?>" <?= $editingUser['role'] === $rk ? 'selected' : '' ?>><?= e($rl) ?></option>
             <?php endforeach; ?>
           </select>
@@ -169,6 +198,7 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
         <option value="department_admin">Department Admin</option>
         <option value="iqac_officer">IQAC / Compliance Officer</option>
         <option value="exam_controller">Controller of Examinations (CoE)</option>
+        <option value="specific_page_editor">Specific Page / Category Access Only</option>
       </select>
       <select name="assigned_department_id" style="width:100%;padding:0.5rem;margin-bottom:0.65rem;">
         <?php foreach ($depts as $d): ?><option value="<?= (int)$d['id'] ?>"><?= e($d['name']) ?></option><?php endforeach; ?>
@@ -190,14 +220,17 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
       <table class="data-table">
         <thead><tr><th>Name</th><th>Role &amp; Scope</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
-          <?php foreach ($users as $u):
-            $uc = !empty($u['allowed_categories_json']) ? json_decode((string)$u['allowed_categories_json'], true) : [];
-            $up = !empty($u['allowed_page_ids_json']) ? json_decode((string)$u['allowed_page_ids_json'], true) : [];
+          <?php
+            $activeSuperCount = count(array_filter($users, static fn($x) => $x['role'] === 'super_admin' && !empty($x['is_active'])));
+            foreach ($users as $u):
+              $uc = !empty($u['allowed_categories_json']) ? json_decode((string)$u['allowed_categories_json'], true) : [];
+              $up = !empty($u['allowed_page_ids_json']) ? json_decode((string)$u['allowed_page_ids_json'], true) : [];
+              $canDelete = ((int)$u['id'] !== (int)$user['id']) && !($u['role'] === 'super_admin' && !empty($u['is_active']) && $activeSuperCount <= 1);
           ?>
             <tr>
               <td><?= e($u['full_name']) ?><br><small><?= e($u['email']) ?></small></td>
               <td>
-                <strong><?= e($u['role']) ?></strong> <?= $u['dept_name'] ? '(' . e($u['dept_name']) . ')' : '' ?>
+                <strong><?= e($u['role'] === 'specific_page_editor' ? 'Specific Page / Category Access' : $u['role']) ?></strong> <?= $u['dept_name'] ? '(' . e($u['dept_name']) . ')' : '' ?>
                 <?php if (is_array($uc) && $uc): ?><br><small style="color:var(--text-muted);">Cats: <?= e(implode(', ', $uc)) ?></small><?php endif; ?>
                 <?php if (is_array($up) && $up): ?><br><small style="color:var(--secondary-color);"><?= count($up) ?> specific page(s)</small><?php endif; ?>
               </td>
@@ -209,6 +242,12 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
                   <input type="hidden" name="action" value="toggle">
                   <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
                   <button type="submit" class="btn-secondary" style="padding:0.28rem 0.55rem;font-size:0.78rem;">Toggle</button>
+                </form>
+                <form method="post" style="display:inline;" onsubmit="return confirm('Revoke and permanently delete this user account?');">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="delete_user">
+                  <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                  <button type="submit" class="btn-danger btn-sm" <?= $canDelete ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"' ?> title="<?= $canDelete ? 'Revoke & Delete Account' : 'Protected active admin' ?>">Delete</button>
                 </form>
               </td>
             </tr>

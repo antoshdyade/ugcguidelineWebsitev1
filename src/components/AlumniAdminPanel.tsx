@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -6,6 +6,8 @@ import {
   Calendar,
   Check,
   Edit3,
+  MessageSquare,
+  Pin,
   Settings,
   Sparkles,
   Trash2,
@@ -16,6 +18,7 @@ import { ImageUploader } from './ImageUploader';
 import type {
   AlumniApprovalStatus,
   AlumniData,
+  AlumniDiscussionTopic,
   AlumniEventChapter,
   AlumniJob,
   AlumniJobStatus,
@@ -42,12 +45,13 @@ export function AlumniAdminPanel({
   uploadBinary,
   notify,
 }: AlumniAdminPanelProps) {
-  const [subTab, setSubTab] = useState<'profiles' | 'jobs' | 'events' | 'settings'>('profiles');
+  const [subTab, setSubTab] = useState<'profiles' | 'jobs' | 'events' | 'discussions' | 'settings'>('profiles');
 
   // Profile form state (controlled defaults)
   const [editingProfileId, setEditingProfileId] = useState<number | null>(null);
   const [pName, setPName] = useState('');
   const [pEmail, setPEmail] = useState('');
+  const [pPassword, setPPassword] = useState('');
   const [pPhone, setPPhone] = useState('');
   const [pYear, setPYear] = useState('2020');
   const [pDept, setPDept] = useState(departments[0]?.code || 'CSE');
@@ -91,13 +95,36 @@ export function AlumniAdminPanel({
   const [eDesc, setEDesc] = useState('');
   const [eActive, setEActive] = useState(true);
 
-  // Alumni portal settings state
-  const [cfg, setCfg] = useState(alumni.settings);
+  // Discussion topic management & moderation state
+  const [editingTopicId, setEditingTopicId] = useState<number | null>(null);
+  const [tTitle, setTTitle] = useState('');
+  const [tDesc, setTDesc] = useState('');
+  const [tActive, setTActive] = useState(true);
+  const [dTopicFilter, setDTopicFilter] = useState<number | 'ALL'>('ALL');
+  const [dStatusFilter, setDStatusFilter] = useState<'ALL' | AlumniApprovalStatus>('ALL');
+
+  // Alumni portal settings state (strictly controlled primitives)
+  const normalizeCfg = (raw: AlumniData['settings']) => ({
+    heroTitle: raw.heroTitle ?? '',
+    heroSubtitle: raw.heroSubtitle ?? '',
+    associationRegNo: raw.associationRegNo ?? '',
+    coordinatorName: raw.coordinatorName ?? '',
+    coordinatorEmail: raw.coordinatorEmail ?? '',
+    allowSelfRegistration: Boolean(raw.allowSelfRegistration),
+    allowPublicJobPosting: Boolean(raw.allowPublicJobPosting),
+    enableDiscussions: raw.enableDiscussions !== false,
+    requireDiscussionApproval: Boolean(raw.requireDiscussionApproval),
+  });
+  const [cfg, setCfg] = useState(() => normalizeCfg(alumni.settings));
+  useEffect(() => {
+    setCfg(normalizeCfg(alumni.settings));
+  }, [alumni.settings]);
 
   const resetProfileForm = () => {
     setEditingProfileId(null);
     setPName('');
     setPEmail('');
+    setPPassword('');
     setPPhone('');
     setPYear('2020');
     setPDept(departments[0]?.code || 'CSE');
@@ -112,6 +139,13 @@ export function AlumniAdminPanel({
     setPMentor(true);
     setPFeatured(false);
     setPStatus('approved');
+  };
+
+  const resetTopicForm = () => {
+    setEditingTopicId(null);
+    setTTitle('');
+    setTDesc('');
+    setTActive(true);
   };
 
   const resetJobForm = () => {
@@ -165,6 +199,9 @@ export function AlumniAdminPanel({
 
   const pendingProfiles = alumni.profiles.filter((p) => p.status === 'pending');
   const pendingJobs = alumni.jobs.filter((j) => j.status === 'pending');
+  const discussionTopics = alumni.discussionTopics ?? [];
+  const discussions = alumni.discussions ?? [];
+  const pendingPosts = discussions.filter((p) => p.status === 'pending');
 
   return (
     <div className="space-y-6">
@@ -185,6 +222,11 @@ export function AlumniAdminPanel({
             id: 'events' as const,
             label: `Chapters & Reunions (${alumni.events.length})`,
             icon: <Calendar className="w-3.5 h-3.5" />,
+          },
+          {
+            id: 'discussions' as const,
+            label: `Discussions & Topics (${discussions.length})${pendingPosts.length ? ` · ${pendingPosts.length} Pending` : ''}`,
+            icon: <MessageSquare className="w-3.5 h-3.5" />,
           },
           {
             id: 'settings' as const,
@@ -216,7 +258,7 @@ export function AlumniAdminPanel({
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                const payload = {
+                const payload: Record<string, unknown> = {
                   fullName: pName,
                   email: pEmail,
                   phone: pPhone,
@@ -235,9 +277,11 @@ export function AlumniAdminPanel({
                   status: pStatus,
                 };
                 if (editingProfileId) {
+                  if (pPassword.trim()) payload.newPassword = pPassword.trim();
                   await adminFetch(`/api/admin/alumni/profiles/${editingProfileId}`, 'PUT', payload);
                   notify('ok', `Updated alumni profile "${pName}".`);
                 } else {
+                  if (pPassword.trim()) payload.password = pPassword.trim();
                   await adminFetch('/api/admin/alumni/profiles', 'POST', payload);
                   notify('ok', `Added alumni profile "${pName}".`);
                 }
@@ -350,6 +394,18 @@ export function AlumniAdminPanel({
               value={pLinkedin}
               onChange={(e) => setPLinkedin(e.target.value)}
               placeholder="LinkedIn URL (optional)"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <input
+              type="password"
+              value={pPassword}
+              onChange={(e) => setPPassword(e.target.value)}
+              minLength={6}
+              placeholder={
+                editingProfileId
+                  ? 'Reset Alumni Portal Password (leave blank to keep unchanged)'
+                  : 'Alumni Portal Password (min 6 chars, default Alumni@123)'
+              }
               className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
             />
 
@@ -485,6 +541,7 @@ export function AlumniAdminPanel({
                         setEditingProfileId(prof.id);
                         setPName(prof.fullName);
                         setPEmail(prof.email);
+                        setPPassword('');
                         setPPhone(prof.phone || '');
                         setPYear(String(prof.graduationYear));
                         setPDept(prof.departmentCode);
@@ -960,7 +1017,306 @@ export function AlumniAdminPanel({
         </div>
       )}
 
-      {/* 4. ALUMNI PORTAL SETTINGS */}
+      {/* 4. DISCUSSIONS & TOPICS MODERATION (MEMBERS-ONLY BLOGGER FORUM) */}
+      {subTab === 'discussions' && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <div className="xl:col-span-5 space-y-5">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  const payload = {
+                    title: tTitle.trim(),
+                    description: tDesc.trim(),
+                    isActive: tActive,
+                  };
+                  if (editingTopicId) {
+                    await adminFetch(`/api/admin/alumni/topics/${editingTopicId}`, 'PUT', payload);
+                    notify('ok', `Updated topic "${tTitle}".`);
+                  } else {
+                    await adminFetch('/api/admin/alumni/topics', 'POST', payload);
+                    notify('ok', `Created discussion topic "${tTitle}".`);
+                  }
+                  resetTopicForm();
+                } catch (err) {
+                  notify('err', (err as Error).message);
+                }
+              }}
+              className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold">
+                  {editingTopicId ? `Edit Topic: ${tTitle}` : 'Create Discussion Topic'}
+                </h2>
+                {editingTopicId && (
+                  <button type="button" onClick={resetTopicForm} className="text-xs text-stone-500 hover:underline">
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                required
+                value={tTitle}
+                onChange={(e) => setTTitle(e.target.value)}
+                placeholder="Topic Title * (e.g., AI & Cloud Engineering)"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <textarea
+                rows={2}
+                value={tDesc}
+                onChange={(e) => setTDesc(e.target.value)}
+                placeholder="Topic description & guidelines for alumni authors"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <input type="checkbox" checked={tActive} onChange={(e) => setTActive(e.target.checked)} />
+                <span>Active (Visible to Logged-in Alumni)</span>
+              </label>
+              <button
+                type="submit"
+                className="w-full py-2 rounded-lg text-xs font-semibold text-white"
+                style={{ backgroundColor: 'var(--primary-color)' }}
+              >
+                {editingTopicId ? 'Save Topic Changes' : 'Add Discussion Topic'}
+              </button>
+            </form>
+
+            <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+              <h3 className="text-sm font-bold">Discussion Topics ({discussionTopics.length})</h3>
+              <div className="divide-y divide-stone-100 dark:divide-slate-800">
+                {discussionTopics.map((topic: AlumniDiscussionTopic) => (
+                  <div key={topic.id} className="py-2.5 flex items-start justify-between gap-2 text-xs">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-stone-900 dark:text-white">{topic.title}</span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            topic.isActive
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-stone-200 text-stone-700 dark:bg-slate-800 dark:text-slate-300'
+                          }`}
+                        >
+                          {topic.isActive ? 'Active' : 'Hidden'}
+                        </span>
+                      </div>
+                      {topic.description && (
+                        <p className="text-[11px] text-stone-500 dark:text-slate-400 mt-0.5">{topic.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          adminFetch(`/api/admin/alumni/topics/${topic.id}`, 'PUT', {
+                            isActive: !topic.isActive,
+                          }).then(() => notify('ok', `${topic.isActive ? 'Hid' : 'Activated'} "${topic.title}".`))
+                        }
+                        className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                      >
+                        {topic.isActive ? 'Hide' : 'Show'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingTopicId(topic.id);
+                          setTTitle(topic.title);
+                          setTDesc(topic.description);
+                          setTActive(topic.isActive);
+                        }}
+                        className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete topic ${topic.title}`}
+                        onClick={() =>
+                          adminFetch(`/api/admin/alumni/topics/${topic.id}`, 'DELETE').then(() =>
+                            notify('ok', `Deleted topic "${topic.title}".`),
+                          )
+                        }
+                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold">
+                Members-Only Blogger Articles &amp; Thread Moderation ({discussions.length})
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={dTopicFilter}
+                  onChange={(e) => setDTopicFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+                  aria-label="Filter discussions by topic"
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                >
+                  <option value="ALL">All Topics</option>
+                  {discussionTopics.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={dStatusFilter}
+                  onChange={(e) => setDStatusFilter(e.target.value as 'ALL' | AlumniApprovalStatus)}
+                  aria-label="Filter discussions by status"
+                  className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="approved">Approved</option>
+                  <option value="pending">Pending</option>
+                  <option value="rejected">Hidden / Rejected</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {discussions
+                .filter((p) => (dTopicFilter === 'ALL' ? true : p.topicId === dTopicFilter))
+                .filter((p) => (dStatusFilter === 'ALL' ? true : p.status === dStatusFilter))
+                .map((post) => {
+                  const topicName =
+                    discussionTopics.find((t) => t.id === post.topicId)?.title || `Topic #${post.topicId}`;
+                  return (
+                    <div
+                      key={post.id}
+                      className="rounded-lg border border-stone-200 dark:border-slate-800 p-3.5 space-y-2.5 text-xs"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {post.isPinned && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px] uppercase">
+                                <Pin className="w-3 h-3" /> Pinned
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded bg-stone-100 dark:bg-slate-800 font-semibold text-[10px]">
+                              {topicName}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] ${
+                                post.status === 'approved'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : post.status === 'pending'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {post.status}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-sm text-stone-900 dark:text-white mt-1">{post.title}</h4>
+                          <p className="text-[11px] text-stone-500">
+                            By {post.authorName} ({post.authorBatch}) · {post.createdAt}
+                          </p>
+                          <p className="text-stone-700 dark:text-slate-300 mt-1 line-clamp-3">{post.content}</p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1 shrink-0">
+                          {post.status !== 'approved' && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                adminFetch(`/api/admin/alumni/discussions/${post.id}`, 'PUT', {
+                                  status: 'approved',
+                                }).then(() => notify('ok', `Approved post "${post.title}".`))
+                              }
+                              className="px-2 py-1 rounded bg-emerald-600 text-white font-semibold"
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {post.status !== 'rejected' && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                adminFetch(`/api/admin/alumni/discussions/${post.id}`, 'PUT', {
+                                  status: 'rejected',
+                                }).then(() => notify('ok', `Hid post "${post.title}".`))
+                              }
+                              className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                            >
+                              Hide
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              adminFetch(`/api/admin/alumni/discussions/${post.id}`, 'PUT', {
+                                isPinned: !post.isPinned,
+                              }).then(() => notify('ok', `${post.isPinned ? 'Unpinned' : 'Pinned'} "${post.title}".`))
+                            }
+                            className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                          >
+                            {post.isPinned ? 'Unpin' : 'Pin'}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete post ${post.title}`}
+                            onClick={() =>
+                              adminFetch(`/api/admin/alumni/discussions/${post.id}`, 'DELETE').then(() =>
+                                notify('ok', `Deleted post "${post.title}".`),
+                              )
+                            }
+                            className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {post.comments && post.comments.length > 0 && (
+                        <div className="pt-2 border-t border-stone-100 dark:border-slate-800 space-y-1.5">
+                          <p className="text-[11px] font-bold text-stone-500">
+                            Replies ({post.comments.length})
+                          </p>
+                          {post.comments.map((comment) => (
+                            <div
+                              key={comment.id}
+                              className="flex items-start justify-between gap-2 bg-stone-50 dark:bg-slate-800/60 px-2.5 py-1.5 rounded"
+                            >
+                              <div className="min-w-0">
+                                <span className="font-semibold text-stone-800 dark:text-slate-200">
+                                  {comment.authorName} ({comment.authorBatch}):
+                                </span>{' '}
+                                <span className="text-stone-600 dark:text-slate-300">{comment.content}</span>
+                              </div>
+                              <button
+                                type="button"
+                                aria-label={`Delete reply by ${comment.authorName}`}
+                                onClick={() =>
+                                  adminFetch(
+                                    `/api/admin/alumni/discussions/${post.id}/comments/${comment.id}`,
+                                    'DELETE',
+                                  ).then(() => notify('ok', 'Deleted reply.'))
+                                }
+                                className="p-1 text-rose-600 hover:bg-rose-50 rounded shrink-0"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. ALUMNI PORTAL SETTINGS */}
       {subTab === 'settings' && (
         <form
           onSubmit={async (e) => {
@@ -1022,7 +1378,7 @@ export function AlumniAdminPanel({
               />
             </div>
           </div>
-          <div className="flex flex-wrap gap-6 text-xs font-semibold pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold pt-1">
             <label className="inline-flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1037,7 +1393,23 @@ export function AlumniAdminPanel({
                 checked={cfg.allowPublicJobPosting}
                 onChange={(e) => setCfg({ ...cfg, allowPublicJobPosting: e.target.checked })}
               />
-              <span>Allow Alumni to Submit Job Referrals</span>
+              <span>Allow Logged-In Alumni to Post Jobs</span>
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cfg.enableDiscussions}
+                onChange={(e) => setCfg({ ...cfg, enableDiscussions: e.target.checked })}
+              />
+              <span>Enable Members-Only Discussion Panel</span>
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cfg.requireDiscussionApproval}
+                onChange={(e) => setCfg({ ...cfg, requireDiscussionApproval: e.target.checked })}
+              />
+              <span>Require Admin Approval Before Discussion Posts Go Live</span>
             </label>
           </div>
           <button

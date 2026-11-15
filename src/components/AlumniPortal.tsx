@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -10,28 +10,40 @@ import {
   Globe,
   GraduationCap,
   Linkedin,
+  Lock,
+  LogIn,
+  LogOut,
   MapPin,
+  MessageSquare,
+  Pin,
   Search,
+  Send,
   Sparkles,
   UserPlus,
   Users,
 } from 'lucide-react';
 import { filterAlumniJobs, filterAlumniProfiles } from '../lib/alumniLogic';
+import { CaptchaWidget } from './CaptchaWidget';
 import { ImageUploader } from './ImageUploader';
 import type {
   AlumniData,
+  AlumniDiscussionPost,
+  AlumniDiscussionTopic,
   AlumniEventChapter,
   AlumniJob,
   AlumniJobType,
+  AlumniProfile,
   Department,
   SiteSettings,
 } from '../types/cms';
+
+export type AlumniPortalTab = 'directory' | 'register' | 'jobs' | 'events' | 'discussions' | 'login';
 
 interface AlumniPortalProps {
   alumni: AlumniData;
   departments: Department[];
   settings: SiteSettings;
-  initialTab?: 'directory' | 'register' | 'jobs' | 'events';
+  initialTab?: AlumniPortalTab;
   onAlumniDataChanged: () => Promise<void>;
 }
 
@@ -53,8 +65,26 @@ export function AlumniPortal({
   initialTab = 'directory',
   onAlumniDataChanged,
 }: AlumniPortalProps) {
-  const [activeTab, setActiveTab] = useState<'directory' | 'register' | 'jobs' | 'events'>(initialTab);
+  const [activeTab, setActiveTab] = useState<AlumniPortalTab>(initialTab);
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // Authenticated Alumni Member Session
+  const [loggedAlumni, setLoggedAlumni] = useState<Omit<AlumniProfile, 'passwordHash'> | null>(null);
+  const [alumniToken, setAlumniToken] = useState<string>('');
+  const [alumniCsrf, setAlumniCsrf] = useState<string>('');
+  const [authChecking, setAuthChecking] = useState<boolean>(true);
+  const alumniTokenRef = useRef('');
+  alumniTokenRef.current = alumniToken;
+  const alumniCsrfRef = useRef('');
+  alumniCsrfRef.current = alumniCsrf;
+
+  // Alumni Login Form
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginCaptchaId, setLoginCaptchaId] = useState('');
+  const [loginCaptchaAnswer, setLoginCaptchaAnswer] = useState('');
+  const [loginCaptchaRefresh, setLoginCaptchaRefresh] = useState(0);
+  const [loginBusy, setLoginBusy] = useState(false);
 
   // Directory Filters
   const [dirQuery, setDirQuery] = useState('');
@@ -63,7 +93,7 @@ export function AlumniPortal({
   const [dirChapter, setDirChapter] = useState('All');
   const [mentorsOnly, setMentorsOnly] = useState(false);
 
-  // Job Board Filters & Submission
+  // Job Board Filters & Authenticated Submission
   const [jobQuery, setJobQuery] = useState('');
   const [jobTypeFilter, setJobTypeFilter] = useState<AlumniJobType | 'All'>('All');
   const [jobDeptFilter, setJobDeptFilter] = useState('All');
@@ -77,14 +107,17 @@ export function AlumniPortal({
   const [jobComp, setJobComp] = useState('');
   const [jobDesc, setJobDesc] = useState('');
   const [jobApplyUrl, setJobApplyUrl] = useState('');
-  const [jobPosterName, setJobPosterName] = useState('');
-  const [jobPosterBatch, setJobPosterBatch] = useState('');
   const [jobDeadline, setJobDeadline] = useState('');
+  const [jobCaptchaId, setJobCaptchaId] = useState('');
+  const [jobCaptchaAnswer, setJobCaptchaAnswer] = useState('');
+  const [jobCaptchaRefresh, setJobCaptchaRefresh] = useState(0);
   const [submittingJob, setSubmittingJob] = useState(false);
 
   // Registration Form State (always initialized with defined strings)
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regPasswordConfirm, setRegPasswordConfirm] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regYear, setRegYear] = useState(String(new Date().getFullYear() - 2));
   const [regDeptCode, setRegDeptCode] = useState(departments[0]?.code || 'CSE');
@@ -97,11 +130,149 @@ export function AlumniPortal({
   const [regPhotoUrl, setRegPhotoUrl] = useState('');
   const [regBio, setRegBio] = useState('');
   const [regMentor, setRegMentor] = useState(true);
+  const [regCaptchaId, setRegCaptchaId] = useState('');
+  const [regCaptchaAnswer, setRegCaptchaAnswer] = useState('');
+  const [regCaptchaRefresh, setRegCaptchaRefresh] = useState(0);
   const [submittingReg, setSubmittingReg] = useState(false);
+
+  // Members-Only Blogger Discussion Panel State
+  const [discussionTopics, setDiscussionTopics] = useState<AlumniDiscussionTopic[]>([]);
+  const [discussions, setDiscussions] = useState<AlumniDiscussionPost[]>([]);
+  const [discussionsEnabled, setDiscussionsEnabled] = useState<boolean>(
+    alumni.settings.enableDiscussions !== false,
+  );
+  const [discussionsLoading, setDiscussionsLoading] = useState<boolean>(false);
+  const [selectedTopicFilter, setSelectedTopicFilter] = useState<number | 'All'>('All');
+  const [discussionSearch, setDiscussionSearch] = useState('');
+  const [showNewPostComposer, setShowNewPostComposer] = useState(false);
+  const [newPostTopicId, setNewPostTopicId] = useState<number>(0);
+  const [newPostTitle, setNewPostTitle] = useState('');
+  const [newPostContent, setNewPostContent] = useState('');
+  const [publishingPost, setPublishingPost] = useState(false);
+  const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
+  const [replyBusyId, setReplyBusyId] = useState<number | null>(null);
 
   // RSVP local state optimistic tracking
   const [rsvpBusyId, setRsvpBusyId] = useState<number | null>(null);
   const [rsvpDoneIds, setRsvpDoneIds] = useState<number[]>([]);
+
+  const saveAlumniSessionStorage = (token: string, csrf: string) => {
+    setAlumniToken(token);
+    setAlumniCsrf(csrf);
+    try {
+      window.sessionStorage.setItem('svcoer_alumni_session', JSON.stringify({ token, csrf }));
+    } catch {
+      // ignore storage quota/restrictions
+    }
+  };
+
+  const clearAlumniSessionStorage = () => {
+    setAlumniToken('');
+    setAlumniCsrf('');
+    setLoggedAlumni(null);
+    setDiscussions([]);
+    setDiscussionTopics([]);
+    try {
+      window.sessionStorage.removeItem('svcoer_alumni_session');
+    } catch {
+      // ignore
+    }
+  };
+
+  const getStoredAlumniToken = useCallback((): string => {
+    if (alumniTokenRef.current) return alumniTokenRef.current;
+    try {
+      const raw = window.sessionStorage.getItem('svcoer_alumni_session');
+      if (!raw) return '';
+      const parsed = JSON.parse(raw) as { token?: string };
+      return parsed.token || '';
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const fetchDiscussions = useCallback(
+    async (topicOverride?: number | 'All', searchOverride?: string) => {
+      const tok = getStoredAlumniToken();
+      if (!tok) return;
+      setDiscussionsLoading(true);
+      try {
+        const params = new URLSearchParams();
+        const tId = topicOverride !== undefined ? topicOverride : selectedTopicFilter;
+        const q = searchOverride !== undefined ? searchOverride : discussionSearch;
+        if (tId !== 'All') params.set('topicId', String(tId));
+        if (q.trim()) params.set('q', q.trim());
+        const headers: Record<string, string> = {};
+        if (tok) headers['X-Alumni-Token'] = tok;
+        const resp = await fetch(`/api/alumni/discussions?${params.toString()}`, {
+          credentials: 'include',
+          headers,
+        });
+        if (resp.status === 401) {
+          clearAlumniSessionStorage();
+          return;
+        }
+        const data = (await resp.json().catch(() => ({}))) as {
+          enableDiscussions?: boolean;
+          topics?: AlumniDiscussionTopic[];
+          posts?: AlumniDiscussionPost[];
+        };
+        if (resp.ok) {
+          setDiscussionsEnabled(data.enableDiscussions !== false);
+          const list = data.topics || [];
+          setDiscussionTopics(list);
+          setDiscussions(data.posts || []);
+          if (list[0]) {
+            setNewPostTopicId((prev) => (list.some((x) => x.id === prev) ? prev : list[0].id));
+          }
+        }
+      } finally {
+        setDiscussionsLoading(false);
+      }
+    },
+    [discussionSearch, getStoredAlumniToken, selectedTopicFilter],
+  );
+
+  useEffect(() => {
+    (async () => {
+      try {
+        let tok = '';
+        try {
+          const raw = window.sessionStorage.getItem('svcoer_alumni_session');
+          if (raw) {
+            const parsed = JSON.parse(raw) as { token?: string; csrf?: string };
+            tok = parsed.token || '';
+            if (tok) setAlumniToken(tok);
+            if (parsed.csrf) setAlumniCsrf(parsed.csrf);
+          }
+        } catch {
+          // ignore
+        }
+        const headers: Record<string, string> = {};
+        if (tok) headers['X-Alumni-Token'] = tok;
+        const resp = await fetch('/api/alumni/me', { credentials: 'include', headers });
+        const data = (await resp.json().catch(() => ({}))) as {
+          authenticated?: boolean;
+          alumni?: Omit<AlumniProfile, 'passwordHash'>;
+          csrfToken?: string;
+        };
+        if (resp.ok && data.authenticated && data.alumni) {
+          setLoggedAlumni(data.alumni);
+          if (data.csrfToken) setAlumniCsrf(data.csrfToken);
+        } else if (tok) {
+          clearAlumniSessionStorage();
+        }
+      } finally {
+        setAuthChecking(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'discussions' && loggedAlumni) {
+      fetchDiscussions();
+    }
+  }, [activeTab, loggedAlumni, fetchDiscussions]);
 
   const batchYears = useMemo(() => {
     const set = new Set<number>(alumni.profiles.map((p) => p.graduationYear));
@@ -163,9 +334,66 @@ export function AlumniPortal({
     return data.url;
   };
 
+  const handleAlumniLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBanner(null);
+    setLoginBusy(true);
+    try {
+      const resp = await fetch('/api/alumni/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: loginEmail,
+          password: loginPassword,
+          captchaId: loginCaptchaId,
+          captchaAnswer: loginCaptchaAnswer,
+        }),
+      });
+      const data = (await resp.json().catch(() => ({}))) as {
+        alumni?: Omit<AlumniProfile, 'passwordHash'>;
+        csrfToken?: string;
+        sessionToken?: string;
+        error?: string;
+      };
+      if (!resp.ok || !data.alumni || !data.sessionToken) {
+        setLoginCaptchaRefresh((k) => k + 1);
+        throw new Error(data.error || 'Alumni sign in failed.');
+      }
+      saveAlumniSessionStorage(data.sessionToken, data.csrfToken || '');
+      setLoggedAlumni(data.alumni);
+      setLoginPassword('');
+      setLoginCaptchaAnswer('');
+      setBanner({
+        type: 'ok',
+        text: `Welcome back, ${data.alumni.fullName} (${data.alumni.graduationYear} ${data.alumni.departmentCode}). You can now post job referrals and join Members-Only Discussions.`,
+      });
+      setActiveTab('discussions');
+    } catch (err) {
+      setBanner({ type: 'err', text: (err as Error).message });
+    } finally {
+      setLoginBusy(false);
+    }
+  };
+
+  const handleAlumniLogout = async () => {
+    await fetch('/api/alumni/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    clearAlumniSessionStorage();
+    setShowPostJobForm(false);
+    setBanner({ type: 'ok', text: 'Signed out of Alumni Member Portal.' });
+  };
+
   const handleRegistrationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBanner(null);
+    if (regPassword.length < 6) {
+      setBanner({ type: 'err', text: 'Account password must be at least 6 characters.' });
+      return;
+    }
+    if (regPassword !== regPasswordConfirm) {
+      setBanner({ type: 'err', text: 'Password and Confirm Password do not match.' });
+      return;
+    }
     setSubmittingReg(true);
     try {
       const resp = await fetch('/api/public/alumni/register', {
@@ -174,6 +402,7 @@ export function AlumniPortal({
         body: JSON.stringify({
           fullName: regName,
           email: regEmail,
+          password: regPassword,
           phone: regPhone,
           graduationYear: Number(regYear),
           departmentCode: regDeptCode,
@@ -186,16 +415,23 @@ export function AlumniPortal({
           photoUrl: regPhotoUrl,
           bio: regBio,
           openToMentorship: regMentor,
+          captchaId: regCaptchaId,
+          captchaAnswer: regCaptchaAnswer,
         }),
       });
       const data = (await resp.json().catch(() => ({}))) as { message?: string; error?: string };
+      setRegCaptchaRefresh((k) => k + 1);
       if (!resp.ok) throw new Error(data.error || 'Registration failed.');
       setBanner({
         type: 'ok',
-        text: data.message || 'Registration submitted for verification.',
+        text:
+          data.message ||
+          'Registration submitted with your login password. Once approved by the Alumni Coordinator, sign in to post jobs and access discussions.',
       });
       setRegName('');
       setRegEmail('');
+      setRegPassword('');
+      setRegPasswordConfirm('');
       setRegPhone('');
       setRegCompany('');
       setRegDesignation('');
@@ -211,14 +447,25 @@ export function AlumniPortal({
     }
   };
 
-  const handlePublicJobSubmit = async (e: React.FormEvent) => {
+  const handleAuthenticatedJobSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loggedAlumni) {
+      setBanner({ type: 'err', text: 'Please sign in as a verified Alumni to post jobs.' });
+      return;
+    }
     setBanner(null);
     setSubmittingJob(true);
     try {
-      const resp = await fetch('/api/public/alumni/jobs', {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': alumniCsrfRef.current,
+      };
+      const tok = getStoredAlumniToken();
+      if (tok) headers['X-Alumni-Token'] = tok;
+      const resp = await fetch('/api/alumni/jobs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers,
         body: JSON.stringify({
           title: jobTitle,
           company: jobCompany,
@@ -229,12 +476,17 @@ export function AlumniPortal({
           compensation: jobComp,
           description: jobDesc,
           applyUrlOrEmail: jobApplyUrl,
-          postedByAlumniName: jobPosterName,
-          postedByBatch: jobPosterBatch,
           deadlineDate: jobDeadline,
+          captchaId: jobCaptchaId,
+          captchaAnswer: jobCaptchaAnswer,
         }),
       });
       const data = (await resp.json().catch(() => ({}))) as { message?: string; error?: string };
+      setJobCaptchaRefresh((k) => k + 1);
+      if (resp.status === 401) {
+        clearAlumniSessionStorage();
+        throw new Error(data.error || 'Your alumni session expired. Please sign in again.');
+      }
       if (!resp.ok) throw new Error(data.error || 'Job submission failed.');
       setBanner({
         type: 'ok',
@@ -246,8 +498,6 @@ export function AlumniPortal({
       setJobComp('');
       setJobDesc('');
       setJobApplyUrl('');
-      setJobPosterName('');
-      setJobPosterBatch('');
       setJobDeadline('');
       setShowPostJobForm(false);
       await onAlumniDataChanged();
@@ -255,6 +505,71 @@ export function AlumniPortal({
       setBanner({ type: 'err', text: (err as Error).message });
     } finally {
       setSubmittingJob(false);
+    }
+  };
+
+  const handleCreateDiscussionPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loggedAlumni) return;
+    setBanner(null);
+    setPublishingPost(true);
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': alumniCsrfRef.current,
+      };
+      const tok = getStoredAlumniToken();
+      if (tok) headers['X-Alumni-Token'] = tok;
+      const resp = await fetch('/api/alumni/discussions', {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({
+          topicId: newPostTopicId,
+          title: newPostTitle,
+          content: newPostContent,
+        }),
+      });
+      const data = (await resp.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!resp.ok) throw new Error(data.error || 'Could not publish discussion post.');
+      setBanner({ type: 'ok', text: data.message || 'Discussion post published.' });
+      setNewPostTitle('');
+      setNewPostContent('');
+      setShowNewPostComposer(false);
+      await fetchDiscussions();
+    } catch (err) {
+      setBanner({ type: 'err', text: (err as Error).message });
+    } finally {
+      setPublishingPost(false);
+    }
+  };
+
+  const handleAddDiscussionComment = async (postId: number) => {
+    const text = (replyDrafts[postId] || '').trim();
+    if (!text || !loggedAlumni) return;
+    setReplyBusyId(postId);
+    setBanner(null);
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': alumniCsrfRef.current,
+      };
+      const tok = getStoredAlumniToken();
+      if (tok) headers['X-Alumni-Token'] = tok;
+      const resp = await fetch(`/api/alumni/discussions/${postId}/comments`, {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({ content: text }),
+      });
+      const data = (await resp.json().catch(() => ({}))) as { error?: string };
+      if (!resp.ok) throw new Error(data.error || 'Failed to post reply.');
+      setReplyDrafts((prev) => ({ ...prev, [postId]: '' }));
+      await fetchDiscussions();
+    } catch (err) {
+      setBanner({ type: 'err', text: (err as Error).message });
+    } finally {
+      setReplyBusyId(null);
     }
   };
 
@@ -294,11 +609,30 @@ export function AlumniPortal({
               {alumni.settings.heroSubtitle}
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-1">
-              {alumni.settings.allowSelfRegistration && (
+              {!loggedAlumni ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('login')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Alumni Member Sign In</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('discussions')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Open Member Discussions</span>
+                </button>
+              )}
+              {alumni.settings.allowSelfRegistration && !loggedAlumni && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('register')}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border border-white/30 bg-white/10 hover:bg-white/20 transition-colors"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Register as Alumni</span>
@@ -336,14 +670,18 @@ export function AlumniPortal({
         </div>
       </section>
 
-      {/* Portal Sub-Navigation Tabs */}
+      {/* Portal Sub-Navigation Tabs + Member Status */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 dark:border-slate-800 pb-3">
         <div role="tablist" aria-label="Alumni Portal Sections" className="flex flex-wrap gap-2">
           {[
             { id: 'directory' as const, label: `Alumni Directory (${alumni.profiles.length})`, icon: <Users className="w-4 h-4" /> },
             { id: 'jobs' as const, label: `Jobs & Internships (${alumni.jobs.length})`, icon: <Briefcase className="w-4 h-4" /> },
             { id: 'events' as const, label: `Chapters & Reunions (${alumni.events.length})`, icon: <Calendar className="w-4 h-4" /> },
+            { id: 'discussions' as const, label: 'Discussions (Members Only)', icon: <Lock className="w-3.5 h-3.5" /> },
             { id: 'register' as const, label: 'Alumni Registration', icon: <UserPlus className="w-4 h-4" /> },
+            ...(!loggedAlumni
+              ? [{ id: 'login' as const, label: 'Alumni Login', icon: <LogIn className="w-4 h-4" /> }]
+              : []),
           ].map((t) => (
             <button
               key={t.id}
@@ -351,7 +689,7 @@ export function AlumniPortal({
               role="tab"
               aria-selected={activeTab === t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors ${
+              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors ${
                 activeTab === t.id
                   ? 'text-white'
                   : 'border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-stone-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800'
@@ -364,9 +702,24 @@ export function AlumniPortal({
           ))}
         </div>
 
-        <p className="text-xs text-stone-500 dark:text-slate-400">
-          Coordinator: <strong className="text-stone-700 dark:text-slate-200">{alumni.settings.coordinatorName}</strong> ({alumni.settings.coordinatorEmail})
-        </p>
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+          {loggedAlumni ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-semibold">
+              <span>{loggedAlumni.fullName} ({loggedAlumni.graduationYear} {loggedAlumni.departmentCode})</span>
+              <button
+                type="button"
+                onClick={handleAlumniLogout}
+                className="inline-flex items-center gap-1 text-rose-700 dark:text-rose-400 hover:underline ml-1"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Sign Out
+              </button>
+            </div>
+          ) : (
+            <p className="text-stone-500 dark:text-slate-400">
+              Coordinator: <strong className="text-stone-700 dark:text-slate-200">{alumni.settings.coordinatorName}</strong> ({alumni.settings.coordinatorEmail})
+            </p>
+          )}
+        </div>
       </div>
 
       {banner && (
@@ -599,11 +952,46 @@ export function AlumniPortal({
           </div>
 
           {showPostJobForm && alumni.settings.allowPublicJobPosting && (
+            !loggedAlumni ? (
+              <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 p-6 space-y-3">
+                <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-base">
+                  <Lock className="w-4 h-4" />
+                  <span>Alumni Member Login Required to Post Jobs</span>
+                </div>
+                <p className="text-xs sm:text-sm text-stone-600 dark:text-slate-300">
+                  Direct unauthenticated job posting is disabled to prevent spam. Please sign in with your verified Alumni credentials to submit a job or internship referral.
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('login')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Sign In as Alumni</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('register')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Register Account</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
             <form
-              onSubmit={handlePublicJobSubmit}
+              onSubmit={handleAuthenticatedJobSubmit}
               className="rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-5 space-y-4"
             >
-              <h2 className="text-base font-bold">Share Job Opening / Alumni Referral with Students &amp; Graduates</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-bold">Share Job Opening / Alumni Referral with Students &amp; Graduates</h2>
+                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                  Posting as: {loggedAlumni.fullName} ({loggedAlumni.graduationYear} {loggedAlumni.departmentCode})
+                </span>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold mb-1">Role / Position Title *</label>
@@ -705,27 +1093,6 @@ export function AlumniPortal({
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Your Name (Alumni) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={jobPosterName}
-                    onChange={(e) => setJobPosterName(e.target.value)}
-                    placeholder="Rohan Deshmukh"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1">Your Batch &amp; Branch</label>
-                  <input
-                    type="text"
-                    value={jobPosterBatch}
-                    onChange={(e) => setJobPosterBatch(e.target.value)}
-                    placeholder="2018 CSE"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1">Role Description &amp; Required Skills</label>
@@ -736,6 +1103,15 @@ export function AlumniPortal({
                   className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
               </div>
+              <CaptchaWidget
+                idPrefix="alumni-job"
+                captchaId={jobCaptchaId}
+                captchaAnswer={jobCaptchaAnswer}
+                onCaptchaIdChange={setJobCaptchaId}
+                onCaptchaAnswerChange={setJobCaptchaAnswer}
+                refreshSignal={jobCaptchaRefresh}
+                label="Job Posting CAPTCHA Challenge *"
+              />
               <button
                 type="submit"
                 disabled={submittingJob}
@@ -745,6 +1121,7 @@ export function AlumniPortal({
                 {submittingJob ? 'Submitting...' : 'Submit Job for Admin Verification'}
               </button>
             </form>
+            )
           )}
 
           {filteredJobs.length === 0 ? (
@@ -935,6 +1312,32 @@ export function AlumniPortal({
                   />
                 </div>
                 <div>
+                  <label htmlFor="reg-password" className="block text-xs font-semibold mb-1">Portal Login Password * (min 6 chars)</label>
+                  <input
+                    id="reg-password"
+                    type="password"
+                    required
+                    minLength={6}
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    placeholder="Create your alumni login password"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="reg-password-confirm" className="block text-xs font-semibold mb-1">Confirm Login Password *</label>
+                  <input
+                    id="reg-password-confirm"
+                    type="password"
+                    required
+                    minLength={6}
+                    value={regPasswordConfirm}
+                    onChange={(e) => setRegPasswordConfirm(e.target.value)}
+                    placeholder="Re-enter password"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div>
                   <label htmlFor="reg-phone" className="block text-xs font-semibold mb-1">Phone / WhatsApp</label>
                   <input
                     id="reg-phone"
@@ -1081,6 +1484,16 @@ export function AlumniPortal({
                 <span>Available to mentor final-year students &amp; provide mock interviews</span>
               </label>
 
+              <CaptchaWidget
+                idPrefix="alumni-reg"
+                captchaId={regCaptchaId}
+                captchaAnswer={regCaptchaAnswer}
+                onCaptchaIdChange={setRegCaptchaId}
+                onCaptchaAnswerChange={setRegCaptchaAnswer}
+                refreshSignal={regCaptchaRefresh}
+                label="Registration Security CAPTCHA *"
+              />
+
               <div>
                 <button
                   type="submit"
@@ -1093,6 +1506,373 @@ export function AlumniPortal({
               </div>
             </form>
           )}
+        </div>
+      )}
+
+      {/* TAB 5: MEMBERS-ONLY BLOGGER DISCUSSION PANEL */}
+      {activeTab === 'discussions' && (
+        <div className="space-y-5">
+          {authChecking ? (
+            <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-stone-500">
+              Checking verified alumni membership...
+            </div>
+          ) : !loggedAlumni ? (
+            <div className="max-w-2xl mx-auto rounded-2xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-8 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center mx-auto">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white">
+                Members-Only Alumni Discussion Panel
+              </h2>
+              <p className="text-xs sm:text-sm text-stone-600 dark:text-slate-300 leading-relaxed">
+                This topic-wise blogger &amp; peer discussion space is strictly private for signed-in, administrator-approved {settings.shortCode} Alumni members and is never exposed publicly.
+              </p>
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('login')}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-xs font-bold text-white"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In to Read &amp; Discuss</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('register')}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Register as Alumni</span>
+                </button>
+              </div>
+            </div>
+          ) : !discussionsEnabled ? (
+            <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-stone-500">
+              The Alumni Discussion Panel is currently paused by the Portal Administrator.
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Filter Bar + Topic Pills */}
+              <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[220px]">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        type="search"
+                        value={discussionSearch}
+                        onChange={(e) => {
+                          setDiscussionSearch(e.target.value);
+                          fetchDiscussions(selectedTopicFilter, e.target.value);
+                        }}
+                        placeholder="Search member blog posts & topics..."
+                        className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPostComposer((v) => !v)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>{showNewPostComposer ? 'Close Article Composer' : '+ Publish Topic Article'}</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTopicFilter('All');
+                      fetchDiscussions('All', discussionSearch);
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      selectedTopicFilter === 'All'
+                        ? 'text-white border-transparent'
+                        : 'border-stone-200 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800'
+                    }`}
+                    style={selectedTopicFilter === 'All' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                  >
+                    All Topics
+                  </button>
+                  {discussionTopics.map((topic) => (
+                    <button
+                      key={topic.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTopicFilter(topic.id);
+                        fetchDiscussions(topic.id, discussionSearch);
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                        selectedTopicFilter === topic.id
+                          ? 'text-white border-transparent'
+                          : 'border-stone-200 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800'
+                      }`}
+                      style={selectedTopicFilter === topic.id ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                    >
+                      {topic.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Blogger Article Composer */}
+              {showNewPostComposer && (
+                <form
+                  onSubmit={handleCreateDiscussionPost}
+                  className="rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-5 space-y-3.5"
+                >
+                  <h2 className="text-base font-bold">Write a Topic Article / Peer Discussion Post</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label htmlFor="disc-topic" className="block text-xs font-semibold mb-1">Topic Category *</label>
+                      <select
+                        id="disc-topic"
+                        value={newPostTopicId}
+                        onChange={(e) => setNewPostTopicId(Number(e.target.value))}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      >
+                        {discussionTopics.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label htmlFor="disc-title" className="block text-xs font-semibold mb-1">Article / Thread Title *</label>
+                      <input
+                        id="disc-title"
+                        type="text"
+                        required
+                        minLength={4}
+                        value={newPostTitle}
+                        onChange={(e) => setNewPostTitle(e.target.value)}
+                        placeholder="e.g. System Design Preparation Roadmap for Final-Year Students"
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="disc-body" className="block text-xs font-semibold mb-1">Article Body *</label>
+                    <textarea
+                      id="disc-body"
+                      rows={5}
+                      required
+                      minLength={10}
+                      value={newPostContent}
+                      onChange={(e) => setNewPostContent(e.target.value)}
+                      placeholder="Share actionable guidance, industry lessons, syllabus ideas, or meetup proposals with fellow alumni..."
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPostComposer(false)}
+                      className="px-4 py-2 rounded-lg text-xs border border-stone-300 dark:border-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={publishingPost}
+                      className="px-5 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                      style={{ backgroundColor: 'var(--primary-color)' }}
+                    >
+                      {publishingPost ? 'Publishing...' : 'Publish Discussion Article'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Posts Feed */}
+              {discussionsLoading ? (
+                <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-stone-500">
+                  Loading members-only discussions...
+                </div>
+              ) : discussions.length === 0 ? (
+                <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-stone-500">
+                  No discussion posts in this topic yet. Start the conversation above!
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {discussions.map((post) => {
+                    const topicObj = discussionTopics.find((t) => t.id === post.topicId);
+                    return (
+                      <article
+                        key={post.id}
+                        className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 space-y-4"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                            {topicObj && (
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 font-bold">
+                                {topicObj.title}
+                              </span>
+                            )}
+                            {post.isPinned && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 font-bold">
+                                <Pin className="w-3 h-3" /> Pinned
+                              </span>
+                            )}
+                            {post.status !== 'approved' && (
+                              <span className="px-2 py-0.5 rounded bg-stone-200 dark:bg-slate-800 text-stone-700 dark:text-slate-300 font-bold uppercase">
+                                {post.status}
+                              </span>
+                            )}
+                            <span className="text-stone-400 font-mono-tabular ml-auto">{post.createdAt}</span>
+                          </div>
+                          <h3 className="font-display text-lg sm:text-xl font-bold text-stone-900 dark:text-white leading-snug">
+                            {post.title}
+                          </h3>
+                          <p className="text-xs text-stone-500 dark:text-slate-400">
+                            By <strong className="text-stone-800 dark:text-slate-200">{post.authorName}</strong> ({post.authorBatch}) · {post.authorDesignation}
+                          </p>
+                        </div>
+
+                        <div className="text-sm text-stone-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                          {post.content}
+                        </div>
+
+                        {/* Member Replies */}
+                        <div className="pt-4 border-t border-stone-100 dark:border-slate-800 space-y-3">
+                          <p className="text-xs font-bold text-stone-700 dark:text-slate-300">
+                            Member Replies ({post.comments.length})
+                          </p>
+                          {post.comments.length > 0 && (
+                            <div className="space-y-2.5 pl-3 border-l-2 border-amber-300 dark:border-amber-700">
+                              {post.comments.map((cm) => (
+                                <div key={cm.id} className="text-xs space-y-0.5">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <strong className="text-stone-900 dark:text-white">{cm.authorName}</strong>
+                                    <span className="text-[11px] text-stone-500">({cm.authorBatch})</span>
+                                    <span className="text-[10px] text-stone-400 font-mono-tabular">{cm.createdAt}</span>
+                                  </div>
+                                  <p className="text-stone-700 dark:text-slate-300 leading-relaxed">{cm.content}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {post.status === 'approved' && (
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleAddDiscussionComment(post.id);
+                              }}
+                              className="flex flex-wrap items-center gap-2 pt-1"
+                            >
+                              <input
+                                type="text"
+                                value={replyDrafts[post.id] ?? ''}
+                                onChange={(e) =>
+                                  setReplyDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))
+                                }
+                                placeholder="Write a reply to this thread..."
+                                className="flex-1 min-w-[200px] px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <button
+                                type="submit"
+                                disabled={replyBusyId === post.id || !(replyDrafts[post.id] || '').trim()}
+                                className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                                style={{ backgroundColor: 'var(--primary-color)' }}
+                              >
+                                <Send className="w-3 h-3" />
+                                <span>{replyBusyId === post.id ? 'Posting...' : 'Reply'}</span>
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 6: ALUMNI MEMBER LOGIN WITH CAPTCHA */}
+      {activeTab === 'login' && (
+        <div className="max-w-md mx-auto rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5">
+          <div>
+            <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white">
+              Alumni Member Sign In
+            </h2>
+            <p className="text-xs text-stone-500 mt-1">
+              Sign in with your approved alumni credentials to post job referrals and participate in Members-Only Topic Discussions.
+            </p>
+          </div>
+
+          <form onSubmit={handleAlumniLogin} className="space-y-4">
+            <div>
+              <label htmlFor="alumni-login-email" className="block text-xs font-semibold mb-1">Registered Alumni Email</label>
+              <input
+                id="alumni-login-email"
+                type="email"
+                required
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="rohan.deshmukh@alumni.svcoer.edu.in"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+            </div>
+            <div>
+              <label htmlFor="alumni-login-password" className="block text-xs font-semibold mb-1">Password</label>
+              <input
+                id="alumni-login-password"
+                type="password"
+                required
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+            </div>
+            <CaptchaWidget
+              idPrefix="alumni-login"
+              captchaId={loginCaptchaId}
+              captchaAnswer={loginCaptchaAnswer}
+              onCaptchaIdChange={setLoginCaptchaId}
+              onCaptchaAnswerChange={setLoginCaptchaAnswer}
+              refreshSignal={loginCaptchaRefresh}
+              label="Alumni Login Security CAPTCHA *"
+            />
+            <button
+              type="submit"
+              disabled={loginBusy}
+              className="w-full py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: 'var(--primary-color)' }}
+            >
+              {loginBusy ? 'Signing In...' : 'Sign In to Alumni Portal'}
+            </button>
+          </form>
+
+          <div className="pt-4 border-t border-stone-200 dark:border-slate-800 space-y-2">
+            <p className="text-xs font-semibold text-stone-500 dark:text-slate-400">
+              Demo Approved Alumni Account (Click to Fill):
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginEmail('rohan.deshmukh@alumni.svcoer.edu.in');
+                setLoginPassword('Alumni@123');
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg border border-stone-200 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800 text-xs"
+            >
+              <span className="font-bold block text-stone-800 dark:text-slate-100">
+                Rohan Deshmukh (Senior Cloud Architect, Class of 2016 CSE)
+              </span>
+              <span className="text-[11px] text-stone-500">
+                rohan.deshmukh@alumni.svcoer.edu.in · Pass: Alumni@123
+              </span>
+            </button>
+          </div>
         </div>
       )}
     </div>

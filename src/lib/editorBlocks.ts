@@ -256,6 +256,23 @@ export const EDITOR_COMPONENT_BLOCKS: EditorComponentBlock[] = [
 </div><p></p>`,
   },
   {
+    id: 'photo-profile-card',
+    title: 'Photo Profile Card (Statutory / Faculty)',
+    category: 'Academic & UGC',
+    description: 'Portrait photo with statutory role, qualification, department & contact details',
+    accentColor: '#0F294A',
+    html: buildPhotoProfileCardHtml({
+      roleBadge: 'Statutory Officer / Faculty Profile',
+      name: 'Dr. Prashant M. Pawar',
+      designation: 'Principal & Professor (Ph.D., IIT Bombay)',
+      department: 'Governing Body / Civil Engineering',
+      email: 'principal@coe.sveri.ac.in',
+      phone: '+91-02186-216063',
+      bio: '24+ years of academic leadership, autonomous curriculum design, and sponsored R&D.',
+      photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+    }),
+  },
+  {
     id: 'cta-buttons-row',
     title: 'Colorful Button Group',
     category: 'Interactive',
@@ -283,6 +300,66 @@ export const EDITOR_COMPONENT_BLOCKS: EditorComponentBlock[] = [
 </div><p></p>`,
   },
 ];
+
+function escapeHtmlText(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function buildPhotoProfileCardHtml(input: {
+  roleBadge: string;
+  name: string;
+  designation: string;
+  department?: string;
+  email?: string;
+  phone?: string;
+  profileUrl?: string;
+  bio?: string;
+  photoUrl?: string;
+  columns?: 1 | 2;
+}): string {
+  const safePhoto =
+    input.photoUrl && !/^(javascript|data:text|vbscript):/i.test(input.photoUrl.trim())
+      ? input.photoUrl.trim()
+      : '/src/assets/images/leadership_principal_1794512597061.jpg';
+  const contactParts: string[] = [];
+  if (input.email?.trim()) {
+    contactParts.push(
+      `<span><strong>Email:</strong> ${escapeHtmlText(input.email.trim())}</span>`,
+    );
+  }
+  if (input.phone?.trim()) {
+    contactParts.push(
+      `<span><strong>Phone:</strong> ${escapeHtmlText(input.phone.trim())}</span>`,
+    );
+  }
+  const safeLink =
+    input.profileUrl && !/^(javascript|data|vbscript):/i.test(input.profileUrl.trim())
+      ? input.profileUrl.trim()
+      : '';
+  const cardInner = `<div class="cms-photo-profile-card">
+  <div class="cms-photo-profile-media">
+    <img src="${escapeHtmlText(safePhoto)}" alt="${escapeHtmlText(input.name || 'Profile Photo')}" />
+  </div>
+  <div class="cms-photo-profile-body">
+    <p class="cms-profile-role">${escapeHtmlText(input.roleBadge || 'Statutory / Faculty Profile')}</p>
+    <h4>${escapeHtmlText(input.name || 'Faculty / Officer Name')}</h4>
+    <p class="cms-photo-profile-desig">${escapeHtmlText(input.designation || 'Professor & Officer')}</p>
+    ${input.department?.trim() ? `<p class="cms-photo-profile-dept">${escapeHtmlText(input.department.trim())}</p>` : ''}
+    ${input.bio?.trim() ? `<p class="cms-photo-profile-bio">${escapeHtmlText(input.bio.trim())}</p>` : ''}
+    ${contactParts.length > 0 ? `<div class="cms-photo-profile-meta">${contactParts.join('')}</div>` : ''}
+    ${safeLink ? `<p class="cms-photo-profile-link"><a class="cms-btn cms-btn-outline" href="${escapeHtmlText(safeLink)}" target="_blank" rel="noopener noreferrer">View Full Profile &rarr;</a></p>` : ''}
+  </div>
+</div>`;
+
+  if (input.columns === 2) {
+    return `<div class="cms-block cms-grid-2" data-block="photo-profile-card">${cardInner}${cardInner}</div><p></p>`;
+  }
+  return `<div class="cms-block" data-block="photo-profile-card">${cardInner}</div><p></p>`;
+}
 
 export function swapTableThemeInHtml(tableHtml: string, nextThemeId: TableThemeId): string {
   const theme = TABLE_THEMES.find((t) => t.id === nextThemeId) || TABLE_THEMES[0];

@@ -38,9 +38,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'export_full_site') {
         $sourceOrigin = trim((string)($_POST['source_origin'] ?? $currentTargetBase));
-        $rec = createFullSiteMigrationZip($pdo, $user['email'], $sourceOrigin);
-        logAudit($pdo, $user, 'EXPORT_SITE_MIGRATION_ZIP', 'SiteMigration', $rec['fileName']);
-        $msg = 'Complete Website Migration Archive created: ' . $rec['fileName'] . ' (' . (int)$rec['codeCount'] . ' code files, ' . (int)$rec['mediaCount'] . ' media/photos, MySQL DB & SQL dump). Download it from Archive History below.';
+        $includeData = isset($_POST['include_data']);
+        $includeMedia = isset($_POST['include_media']);
+        $includeCode = isset($_POST['include_code']);
+        $exportDest = (string)($_POST['export_destination'] ?? 'local');
+        if (!$includeData && !$includeMedia && !$includeCode) {
+            $err = 'Please select at least one export component (Data + Credentials, Media/Photos, or Source Code).';
+        } else {
+            $rec = createFullSiteMigrationZip($pdo, $user['email'], $sourceOrigin, $includeData, $includeMedia, $includeCode, $exportDest);
+            logAudit($pdo, $user, 'EXPORT_SITE_MIGRATION_ZIP', 'SiteMigration', $rec['fileName'] . ' -> ' . $exportDest);
+            if ($exportDest === 'download') {
+                $fullZip = dirname(__DIR__) . '/backups/' . basename($rec['fileName']);
+                if (is_file($fullZip)) {
+                    header('Content-Type: application/zip');
+                    header('Content-Disposition: attachment; filename="' . basename($rec['fileName']) . '"');
+                    header('Content-Length: ' . filesize($fullZip));
+                    readfile($fullZip);
+                    exit;
+                }
+            }
+            $msg = 'Website Migration Archive created: ' . $rec['fileName'] . ' (' . $rec['transferStatus'] . ').';
+        }
+    } elseif ($action === 'push_remote' && !empty($_POST['file_name'])) {
+        $target = basename((string)$_POST['file_name']);
+        $remoteDest = ($_POST['remote_dest'] ?? '') === 'scp' ? 'scp' : 'gdrive_webhook';
+        $fullPath = dirname(__DIR__) . '/backups/' . $target;
+        if (is_file($fullPath)) {
+            $schedule = getBackupSchedule($pdo);
+            $res = pushBackupToDestination($fullPath, $target, $remoteDest, $schedule, [
+                'mode'      => str_ends_with(strtolower($target), '.zip') ? 'full_site_migration' : 'full',
+                'createdAt' => gmdate('Y-m-d\TH:i:s\Z'),
+            ]);
+            if (!empty($res['ok'])) {
+                logAudit($pdo, $user, 'PUSH_BACKUP_REMOTE', 'Backup', $target . ' -> ' . $remoteDest);
+                $msg = $target . ': ' . $res['status'];
+            } else {
+                $err = $res['status'];
+            }
+        } else {
+            $err = 'Archive file not found on server disk.';
+        }
     } elseif ($action === 'create_backup') {
         $mode = ($_POST['mode'] ?? 'full') === 'incremental' ? 'incremental' : 'full';
         $dest = in_array($_POST['destination'] ?? 'local', ['local', 'scp', 'gdrive_webhook'], true)
@@ -192,21 +229,29 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
   <!-- Complete Website Migration Bundle Card -->
   <div class="card" style="margin-bottom:1.5rem;border:1px solid #BFDBFE;background:#EFF6FF;">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
-      <div style="max-width:740px;">
-        <small style="text-transform:uppercase;letter-spacing:0.08em;font-weight:700;color:#1D4ED8;display:block;font-size:0.72rem;">Cross-Domain Site Migration Bundle</small>
-        <h2 style="margin:0.2rem 0 0.35rem;color:#0F294A;">Export Complete Website Package (.zip — Code + Data + Photos/Media)</h2>
+    <form method="post" style="display:grid;gap:0.85rem;">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="export_full_site">
+      <input type="hidden" name="source_origin" value="<?= e($currentTargetBase) ?>">
+      <div>
+        <small style="text-transform:uppercase;letter-spacing:0.08em;font-weight:700;color:#1D4ED8;display:block;font-size:0.72rem;">Cross-Domain Site Migration &amp; Selective Archive Export</small>
+        <h2 style="margin:0.2rem 0 0.35rem;color:#0F294A;">Export Website Archive (.zip — Data + Credentials + Photos/Media + Code)</h2>
         <p style="margin:0;font-size:0.84rem;color:#334155;">
-          Packages the entire PHP codebase (excluding secrets), all uploaded photographs &amp; documents (<code>uploads/</code>, <code>assets/images/</code>), full MySQL JSON snapshot, SQL dump, and origin manifest so you can migrate seamlessly to a new domain.
+          Choose which parts to include (hashed staff &amp; alumni credentials are preserved securely across migrations; secrets like <code>config.local.php</code> are excluded) and choose local download, server disk, or remote disk destination.
         </p>
       </div>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-        <input type="hidden" name="action" value="export_full_site">
-        <input type="hidden" name="source_origin" value="<?= e($currentTargetBase) ?>">
-        <button type="submit" class="btn-primary">Export Complete Website (.zip)</button>
-      </form>
-    </div>
+      <div style="display:flex;flex-wrap:wrap;gap:1.1rem;font-size:0.84rem;font-weight:600;color:#0F294A;">
+        <label><input type="checkbox" name="include_data" checked> Database Snapshot &amp; Hashed Credentials (JSON + SQL)</label>
+        <label><input type="checkbox" name="include_media" checked> Uploaded Images, Photographs &amp; Files</label>
+        <label><input type="checkbox" name="include_code" checked> Complete Website Source Code</label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.55rem;">
+        <button type="submit" name="export_destination" value="download" class="btn-primary">Download to Local Computer (.zip)</button>
+        <button type="submit" name="export_destination" value="local" class="btn-secondary">Save Archive to Server Disk</button>
+        <button type="submit" name="export_destination" value="scp" class="btn-outline">Send to Remote Disk (SCP)</button>
+        <button type="submit" name="export_destination" value="gdrive_webhook" class="btn-outline">Send to Remote Drive / Webhook</button>
+      </div>
+    </form>
   </div>
 
   <div class="grid-2" style="margin-bottom:1.5rem;align-items:start;">
@@ -397,6 +442,20 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             <td><?= e((string)($b['createdAt'] ?? '')) ?></td>
             <td style="white-space:nowrap;">
               <a href="?download=<?= urlencode((string)$b['fileName']) ?>" class="btn-primary btn-sm">Download</a>
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                <input type="hidden" name="action" value="push_remote">
+                <input type="hidden" name="file_name" value="<?= e($b['fileName']) ?>">
+                <input type="hidden" name="remote_dest" value="scp">
+                <button type="submit" class="btn-outline btn-sm">Push SCP</button>
+              </form>
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                <input type="hidden" name="action" value="push_remote">
+                <input type="hidden" name="file_name" value="<?= e($b['fileName']) ?>">
+                <input type="hidden" name="remote_dest" value="gdrive_webhook">
+                <button type="submit" class="btn-outline btn-sm">Push Drive</button>
+              </form>
               <form method="post" style="display:inline;" onsubmit="return confirm('Restore website from this archive? A safety snapshot will be created first.');">
                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                 <input type="hidden" name="action" value="confirm_restore">

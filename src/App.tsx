@@ -185,7 +185,9 @@ export default function App() {
     if (pathname === '/alumni' || pathname.startsWith('/alumni/')) {
       const sub = pathname.replace('/alumni', '').replace(/^\//, '');
       const initialTab =
-        sub === 'register' || sub === 'jobs' || sub === 'events' ? sub : 'directory';
+        sub === 'register' || sub === 'jobs' || sub === 'events' || sub === 'discussions' || sub === 'login'
+          ? sub
+          : 'directory';
       return (
         <AlumniPortal
           alumni={
@@ -198,10 +200,14 @@ export default function App() {
                 coordinatorEmail: data.settings.email,
                 allowSelfRegistration: true,
                 allowPublicJobPosting: true,
+                enableDiscussions: true,
+                requireDiscussionApproval: false,
               },
               profiles: [],
               jobs: [],
               events: [],
+              discussionTopics: [],
+              discussions: [],
             }
           }
           departments={data.departments}

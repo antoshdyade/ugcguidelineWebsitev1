@@ -195,3 +195,128 @@ test('alumniLogic filters approved directory profiles, jobs, and validates publi
   assert.equal(canUserAccessResource({ role: 'iqac_officer', isActive: true }, 'alumni'), true);
   assert.equal(canUserAccessResource({ role: 'exam_controller', isActive: true }, 'alumni'), false);
 });
+
+import {
+  createCaptchaChallenge,
+  renderCaptchaSvg,
+  verifyCaptchaChallenge,
+} from './captchaLogic';
+import {
+  filterAlumniDiscussions,
+  stripAlumniCredentials,
+  validateDiscussionCommentInput,
+  validateDiscussionPostInput,
+} from './alumniLogic';
+
+test('rewriteDomainUrlsInValue preserves passwordHash and password_hash fields untouched', () => {
+  const input = {
+    url: 'https://old.edu/uploads/pic.jpg',
+    passwordHash: 'salt:https://old.edu/secret',
+    password_hash: '$2y$10$https://old.edu/hash',
+  };
+  const out = rewriteDomainUrlsInValue(input, 'https://old.edu', 'https://new.edu');
+  assert.equal(out.url, 'https://new.edu/uploads/pic.jpg');
+  assert.equal(out.passwordHash, input.passwordHash);
+  assert.equal(out.password_hash, input.password_hash);
+});
+
+test('captchaLogic generates SVG challenge and enforces case-insensitive single-use verification', () => {
+  const challenge = createCaptchaChallenge();
+  assert.ok(challenge.challengeId.length >= 16);
+  assert.ok(challenge.svgDataUrl.startsWith('data:image/svg+xml;base64,'));
+  const svgXml = Buffer.from(challenge.svgDataUrl.split(',')[1], 'base64').toString('utf8');
+  const code = Array.from(svgXml.matchAll(/<text[^>]*>([^<]+)<\/text>/g))
+    .map((m) => m[1])
+    .join('');
+  assert.equal(code.length, 5);
+
+  const ok = verifyCaptchaChallenge(challenge.challengeId, code.toLowerCase());
+  assert.equal(ok.valid, true);
+
+  // Replay attempt with same challengeId must be rejected
+  const replay = verifyCaptchaChallenge(challenge.challengeId, code);
+  assert.equal(replay.valid, false);
+
+  // Wrong answer consumes challenge immediately
+  const second = createCaptchaChallenge();
+  assert.equal(verifyCaptchaChallenge(second.challengeId, 'WRONG').valid, false);
+  assert.ok(renderCaptchaSvg('AB12C').includes('data:image/svg+xml;base64,'));
+});
+
+test('alumni discussions validation, filtering, and credential stripping work cleanly', () => {
+  assert.equal(
+    validateAlumniRegistrationInput({
+      fullName: 'Sneha Kulkarni',
+      email: 'sneha@example.com',
+      password: '123',
+      graduationYear: 2020,
+      departmentCode: 'ENTC',
+      currentCompany: 'Qualcomm',
+      designation: 'Engineer',
+      requirePassword: true,
+    }).valid,
+    false,
+  );
+  assert.equal(
+    validateDiscussionPostInput({ topicId: 1, title: 'Career Roadmap', content: 'Detailed insights for juniors.' }).valid,
+    true,
+  );
+  assert.equal(validateDiscussionCommentInput({ content: '' }).valid, false);
+
+  const filtered = filterAlumniDiscussions(
+    [
+      {
+        id: 1,
+        topicId: 2,
+        title: 'Pinned Post',
+        content: 'Important discussion thread',
+        authorName: 'Rohan',
+        authorBatch: '2016',
+        isPinned: true,
+        status: 'approved',
+        createdAt: '2026-01-01',
+        comments: [],
+      },
+      {
+        id: 2,
+        topicId: 2,
+        title: 'Pending Post',
+        content: 'Awaiting moderation',
+        authorName: 'Priya',
+        authorBatch: '2018',
+        isPinned: false,
+        status: 'pending',
+        createdAt: '2026-02-01',
+        comments: [],
+      },
+    ],
+    { topicId: 2 },
+  );
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].title, 'Pinned Post');
+
+  const safeProfiles = stripAlumniCredentials([
+    {
+      id: 1,
+      fullName: 'Test',
+      email: 't@example.com',
+      passwordHash: 'secret-hash',
+      graduationYear: 2020,
+      departmentCode: 'CSE',
+      departmentName: 'CSE',
+      degree: 'B.Tech',
+      currentCompany: 'Co',
+      designation: 'Dev',
+      location: 'Pune',
+      chapter: 'Pune Chapter',
+      photoUrl: '',
+      bio: '',
+      openToMentorship: true,
+      isFeatured: false,
+      status: 'approved',
+      sortOrder: 1,
+      registeredAt: '2026-01-01',
+    },
+  ]);
+  assert.equal('passwordHash' in safeProfiles[0], false);
+});

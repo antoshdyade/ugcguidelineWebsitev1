@@ -203,7 +203,11 @@ export function rewriteDomainUrlsInValue<T>(
     if (node && typeof node === 'object') {
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(node)) {
-        out[k] = visit(v);
+        if (k === 'passwordHash' || k === 'password_hash') {
+          out[k] = v;
+        } else {
+          out[k] = visit(v);
+        }
       }
       return out;
     }

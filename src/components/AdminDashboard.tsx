@@ -43,6 +43,7 @@ import {
 } from '../lib/imageCrop';
 import { AlumniAdminPanel } from './AlumniAdminPanel';
 import { BackupRestorePanel } from './BackupRestorePanel';
+import { CaptchaWidget } from './CaptchaWidget';
 import { ImageUploader } from './ImageUploader';
 import { PerPageRbacSelector } from './PerPageRbacSelector';
 import { RichTextEditor } from './RichTextEditor';
@@ -202,6 +203,9 @@ export function AdminDashboard({
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [captchaId, setCaptchaId] = useState('');
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [captchaRefreshSignal, setCaptchaRefreshSignal] = useState(0);
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
 
@@ -380,6 +384,7 @@ export function AdminDashboard({
   const [permDeptId, setPermDeptId] = useState<number>(1);
   const [permAllowedCats, setPermAllowedCats] = useState<string[]>([]);
   const [permAllowedPageIds, setPermAllowedPageIds] = useState<number[]>([]);
+  const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null);
 
   // Settings draft
   const [settingsDraft, setSettingsDraft] = useState<SiteSettings | null>(null);
@@ -489,6 +494,7 @@ export function AdminDashboard({
               setActiveTab('departments');
             } else if (
               data.user.role === 'exam_controller' ||
+              data.user.role === 'specific_page_editor' ||
               (data.user.role !== 'super_admin' &&
                 ((Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) ||
                   (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0)))
@@ -521,21 +527,24 @@ export function AdminDashboard({
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, captchaId, captchaAnswer }),
       });
       const data = await resp.json();
       if (!resp.ok) {
         setLoginError(data.error || 'Authentication failed.');
+        setCaptchaRefreshSignal((k) => k + 1);
         return;
       }
       const token = String(data.sessionToken || '');
       saveStoredSession(token, String(data.csrfToken || ''));
       setUser(data.user);
+      setCaptchaAnswer('');
       if (data.user.assignedDepartmentId) {
         setSelectedDeptId(data.user.assignedDepartmentId);
         setActiveTab('departments');
       } else if (
         data.user.role === 'exam_controller' ||
+        data.user.role === 'specific_page_editor' ||
         (data.user.role !== 'super_admin' &&
           ((Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) ||
             (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0)))
@@ -555,6 +564,7 @@ export function AdminDashboard({
       await fetchAdminState(token);
     } catch {
       setLoginError('Network error while connecting to CMS server.');
+      setCaptchaRefreshSignal((k) => k + 1);
     } finally {
       setLoginBusy(false);
     }
@@ -566,6 +576,9 @@ export function AdminDashboard({
     setUser(null);
     setState(null);
     setStateError('');
+    setLoginError('');
+    setCaptchaId('');
+    setCaptchaAnswer('');
   };
 
   const adminFetch = useCallback(
@@ -731,6 +744,15 @@ export function AdminDashboard({
                 className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
             </div>
+            <CaptchaWidget
+              idPrefix="admin-login"
+              captchaId={captchaId}
+              captchaAnswer={captchaAnswer}
+              onCaptchaIdChange={setCaptchaId}
+              onCaptchaAnswerChange={setCaptchaAnswer}
+              refreshSignal={captchaRefreshSignal}
+              label="Admin Login Security CAPTCHA *"
+            />
             <button
               type="submit"
               disabled={loginBusy}
@@ -1500,6 +1522,7 @@ export function AdminDashboard({
               : state.categories.filter((c) => c.slug === pageCat);
           const hasExplicitScope =
             user.role === 'exam_controller' ||
+            user.role === 'specific_page_editor' ||
             (user.allowedCategories && user.allowedCategories.length > 0) ||
             (user.allowedPageIds && user.allowedPageIds.length > 0);
           return (
@@ -1507,7 +1530,7 @@ export function AdminDashboard({
             {hasExplicitScope && (
               <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  <strong>Scoped RBAC Access Active ({user.role.replace('_', ' ')}):</strong>{' '}
+                  <strong>Scoped RBAC Access Active ({user.role.replace(/_/g, ' ')}):</strong>{' '}
                   Showing {permittedPages.length} authorized {permittedPages.length === 1 ? 'page' : 'pages'}{' '}
                   {permittedCategories.length > 0
                     ? `across ${permittedCategories.map((c) => c.shortLabel || c.name).join(', ')}`
@@ -1557,13 +1580,21 @@ export function AdminDashboard({
                 <h2 className="text-base font-bold text-stone-900 dark:text-white mb-2">
                   Individual Page-Wise Access Active
                 </h2>
-                <p className="text-sm text-stone-600 dark:text-slate-300 leading-relaxed mb-3">
-                  Your account is scoped strictly to {permittedPages.length} individually assigned{' '}
-                  {permittedPages.length === 1 ? 'page' : 'pages'} without category-wide creation privileges.
-                </p>
-                <p className="text-xs text-stone-500 dark:text-slate-400">
-                  Select <strong>Edit</strong> next to any authorized page in the panel on the right to open the visual editor and update its content or attached PDF.
-                </p>
+                {permittedPages.length === 0 ? (
+                  <p className="text-sm text-stone-600 dark:text-slate-300 leading-relaxed">
+                    No individual pages or categories have been assigned to this account yet. Please contact the Super Administrator to assign specific pages.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-stone-600 dark:text-slate-300 leading-relaxed mb-3">
+                      Your account is scoped strictly to {permittedPages.length} individually assigned{' '}
+                      {permittedPages.length === 1 ? 'page' : 'pages'} without category-wide creation privileges.
+                    </p>
+                    <p className="text-xs text-stone-500 dark:text-slate-400">
+                      Select <strong>Edit</strong> next to any authorized page in the panel on the right to open the visual editor and update its content or attached PDF.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
             <form
@@ -5590,23 +5621,33 @@ export function AdminDashboard({
                   placeholder="Temporary Password"
                   className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
-                <select
-                  value={newUserRole}
-                  onChange={(e) => {
-                    const roleVal = e.target.value as UserRole;
-                    setNewUserRole(roleVal);
-                    if (roleVal === 'exam_controller' && newUserAllowedCats.length === 0) {
-                      setNewUserAllowedCats(['examination']);
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                >
-                  <option value="super_admin">Super Admin</option>
-                  <option value="content_editor">Content Editor / PRO</option>
-                  <option value="department_admin">Department Admin</option>
-                  <option value="iqac_officer">IQAC / Compliance Officer</option>
-                  <option value="exam_controller">Controller of Examinations (CoE)</option>
-                </select>
+                <div>
+                  <label htmlFor="new-user-role" className="block text-xs font-semibold mb-1">Assigned Role</label>
+                  <select
+                    id="new-user-role"
+                    value={newUserRole}
+                    onChange={(e) => {
+                      const roleVal = e.target.value as UserRole;
+                      setNewUserRole(roleVal);
+                      if (roleVal === 'exam_controller' && newUserAllowedCats.length === 0) {
+                        setNewUserAllowedCats(['examination']);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  >
+                    <option value="super_admin">Super Admin</option>
+                    <option value="content_editor">Content Editor / PRO</option>
+                    <option value="department_admin">Department Admin</option>
+                    <option value="iqac_officer">IQAC / Compliance Officer</option>
+                    <option value="exam_controller">Controller of Examinations (CoE)</option>
+                    <option value="specific_page_editor">Specific Page / Category Access Only</option>
+                  </select>
+                </div>
+                {newUserRole === 'specific_page_editor' && (
+                  <p className="text-[11px] px-2.5 py-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+                    Strict Isolation: This account will only see <strong>Pages &amp; Portal Content</strong> for the exact categories or individual pages checked below (all other admin modules stay hidden).
+                  </p>
+                )}
                 {newUserRole === 'department_admin' && (
                   <select
                     value={newUserDept}
@@ -5665,13 +5706,28 @@ export function AdminDashboard({
                 <div className="divide-y divide-stone-100 dark:divide-slate-800">
                   {state.users.map((u) => {
                     const isEditing = editingPermsUserId === u.id;
+                    const activeSuperAdminsCount = state.users.filter((x) => x.role === 'super_admin' && x.isActive).length;
+                    const isDeleteBlocked =
+                      u.id === user.id || (u.role === 'super_admin' && u.isActive && activeSuperAdminsCount <= 1);
+                    const roleDisplay =
+                      u.role === 'specific_page_editor'
+                        ? 'Specific Page / Category Access Only'
+                        : u.role === 'super_admin'
+                          ? 'Super Admin'
+                          : u.role === 'content_editor'
+                            ? 'Content Editor / PRO'
+                            : u.role === 'department_admin'
+                              ? 'Department Admin'
+                              : u.role === 'iqac_officer'
+                                ? 'IQAC / Compliance Officer'
+                                : 'Controller of Examinations (CoE)';
                     return (
                       <div key={u.id} className="p-3.5 space-y-3 text-sm">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className="font-semibold">{u.fullName}</p>
                             <p className="text-xs text-stone-500">
-                              {u.email} · {u.role} {u.assignedDepartmentId ? `(Dept #${u.assignedDepartmentId})` : ''}
+                              {u.email} · {roleDisplay} {u.assignedDepartmentId ? `(Dept #${u.assignedDepartmentId})` : ''}
                               {u.allowedCategories && u.allowedCategories.length > 0
                                 ? ` · Cats: ${u.allowedCategories.join(', ')}`
                                 : ''}
@@ -5680,7 +5736,7 @@ export function AdminDashboard({
                                 : ''}
                             </p>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                             <button
                               type="button"
                               onClick={() => {
@@ -5707,6 +5763,46 @@ export function AdminDashboard({
                             >
                               {u.isActive ? 'Active' : 'Disabled'}
                             </button>
+                            {confirmDeleteUserId === u.id ? (
+                              <span className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  aria-label={`Confirm delete ${u.fullName}`}
+                                  onClick={async () => {
+                                    try {
+                                      await adminFetch(`/api/admin/users/${u.id}`, 'DELETE');
+                                      setConfirmDeleteUserId(null);
+                                      if (editingPermsUserId === u.id) setEditingPermsUserId(null);
+                                      notify('ok', `Revoked and deleted user account "${u.fullName}".`);
+                                    } catch (err) {
+                                      notify('err', (err as Error).message);
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded text-xs font-semibold bg-rose-700 text-white hover:bg-rose-800"
+                                >
+                                  Confirm
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteUserId(null)}
+                                  className="px-2 py-1 rounded text-xs border border-stone-300 dark:border-slate-700"
+                                >
+                                  Cancel
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isDeleteBlocked}
+                                title={isDeleteBlocked ? 'Cannot delete your own session or the last active Super Admin' : `Revoke & Delete ${u.fullName}`}
+                                aria-label={`Delete user ${u.fullName}`}
+                                onClick={() => setConfirmDeleteUserId(u.id)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-35 disabled:cursor-not-allowed"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -5728,6 +5824,7 @@ export function AdminDashboard({
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <select
+                                aria-label={`Edit Role for ${u.fullName}`}
                                 value={permRole}
                                 onChange={(e) => setPermRole(e.target.value as UserRole)}
                                 className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
@@ -5737,6 +5834,7 @@ export function AdminDashboard({
                                 <option value="department_admin">Department Admin</option>
                                 <option value="iqac_officer">IQAC Officer</option>
                                 <option value="exam_controller">Controller of Examinations (CoE)</option>
+                                <option value="specific_page_editor">Specific Page / Category Access Only</option>
                               </select>
                               {permRole === 'department_admin' && (
                                 <select
@@ -5752,6 +5850,11 @@ export function AdminDashboard({
                                 </select>
                               )}
                             </div>
+                            {permRole === 'specific_page_editor' && (
+                              <p className="text-[11px] px-2.5 py-1.5 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+                                Specific Page / Category Access Only: Account will only access the Pages module for the categories or individual pages checked below.
+                              </p>
+                            )}
                             <div>
                               <p className="font-semibold mb-1">Allowed Categories (uncheck all for default role behavior):</p>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">

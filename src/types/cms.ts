@@ -3,7 +3,8 @@ export type UserRole =
   | 'content_editor'
   | 'department_admin'
   | 'iqac_officer'
-  | 'exam_controller';
+  | 'exam_controller'
+  | 'specific_page_editor';
 
 export type UgcCategorySlug = string;
 
@@ -415,6 +416,7 @@ export interface AlumniProfile {
   id: number;
   fullName: string;
   email: string;
+  passwordHash?: string;
   phone?: string;
   graduationYear: number;
   departmentCode: string;
@@ -472,6 +474,41 @@ export interface AlumniEventChapter {
   sortOrder: number;
 }
 
+export interface AlumniDiscussionTopic {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface AlumniDiscussionComment {
+  id: number;
+  postId: number;
+  authorAlumniId?: number | null;
+  authorName: string;
+  authorBatch: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface AlumniDiscussionPost {
+  id: number;
+  topicId: number;
+  title: string;
+  content: string;
+  authorAlumniId?: number | null;
+  authorName: string;
+  authorBatch: string;
+  authorDesignation?: string;
+  isPinned: boolean;
+  status: AlumniApprovalStatus;
+  createdAt: string;
+  updatedAt?: string;
+  comments: AlumniDiscussionComment[];
+}
+
 export interface AlumniSettings {
   heroTitle: string;
   heroSubtitle: string;
@@ -480,6 +517,8 @@ export interface AlumniSettings {
   coordinatorEmail: string;
   allowSelfRegistration: boolean;
   allowPublicJobPosting: boolean;
+  enableDiscussions?: boolean;
+  requireDiscussionApproval?: boolean;
 }
 
 export interface AlumniData {
@@ -487,6 +526,8 @@ export interface AlumniData {
   profiles: AlumniProfile[];
   jobs: AlumniJob[];
   events: AlumniEventChapter[];
+  discussionTopics?: AlumniDiscussionTopic[];
+  discussions?: AlumniDiscussionPost[];
 }
 
 export interface CmsDatabase {

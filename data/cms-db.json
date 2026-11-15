@@ -1655,7 +1655,7 @@
       "assignedDepartmentId": null,
       "isActive": true,
       "passwordHash": "335e6ddf4ddc588b85ec23d250a58c44:a1263e80eb984bde57f804847c0500aa53f1d36ca07d151f067608e3878949b9917b20ba5b0bc8b143a8d992c737a5944c3aceb5dfa45a39b61f4e97481e3dce",
-      "lastLoginAt": "2026-11-14 12:33"
+      "lastLoginAt": "2026-11-15 13:55"
     },
     {
       "id": 2,
@@ -1705,6 +1705,555 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": 105,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_COMPLETE_SITE_ZIP",
+      "entityType": "Backup",
+      "entityTitle": "svcoer-full-site-2026-11-15T13-55-52.zip (104 code files + 8 media/photos + DB + hashed credentials)",
+      "timestamp": "2026-11-15 13:55:53"
+    },
+    {
+      "id": 104,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:55:51"
+    },
+    {
+      "id": 103,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:55:50"
+    },
+    {
+      "id": 102,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:55:49"
+    },
+    {
+      "id": 101,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:55:45"
+    },
+    {
+      "id": 100,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:55:44"
+    },
+    {
+      "id": 99,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_COMPLETE_SITE_ZIP",
+      "entityType": "Backup",
+      "entityTitle": "svcoer-full-site-2026-11-15T13-54-44.zip (104 code files + 8 media/photos + DB + hashed credentials)",
+      "timestamp": "2026-11-15 13:54:45"
+    },
+    {
+      "id": 98,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:54:44"
+    },
+    {
+      "id": 97,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:54:43"
+    },
+    {
+      "id": 96,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:54:42"
+    },
+    {
+      "id": 95,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:54:39"
+    },
+    {
+      "id": 94,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:54:38"
+    },
+    {
+      "id": 93,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_COMPLETE_SITE_ZIP",
+      "entityType": "Backup",
+      "entityTitle": "svcoer-full-site-2026-11-15T13-53-58.zip (104 code files + 8 media/photos + DB + hashed credentials)",
+      "timestamp": "2026-11-15 13:53:59"
+    },
+    {
+      "id": 92,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:53:58"
+    },
+    {
+      "id": 91,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:53:57"
+    },
+    {
+      "id": 90,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:53:56"
+    },
+    {
+      "id": 89,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:53:52"
+    },
+    {
+      "id": 88,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:53:52"
+    },
+    {
+      "id": 87,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:53:51"
+    },
+    {
+      "id": 86,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:52:59"
+    },
+    {
+      "id": 85,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:52:58"
+    },
+    {
+      "id": 84,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_COMPLETE_SITE_ZIP",
+      "entityType": "Backup",
+      "entityTitle": "svcoer-full-site-2026-11-15T13-51-39.zip (104 code files + 8 media/photos + DB + hashed credentials)",
+      "timestamp": "2026-11-15 13:51:40"
+    },
+    {
+      "id": 83,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:51:39"
+    },
+    {
+      "id": 82,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:51:38"
+    },
+    {
+      "id": 81,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:51:37"
+    },
+    {
+      "id": 80,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:51:34"
+    },
+    {
+      "id": 79,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:51:33"
+    },
+    {
+      "id": 78,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_COMPLETE_SITE_ZIP",
+      "entityType": "Backup",
+      "entityTitle": "svcoer-full-site-2026-11-15T13-50-57.zip (104 code files + 8 media/photos + DB + hashed credentials)",
+      "timestamp": "2026-11-15 13:50:59"
+    },
+    {
+      "id": 77,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:50:56"
+    },
+    {
+      "id": 76,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:50:56"
+    },
+    {
+      "id": 75,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:50:55"
+    },
+    {
+      "id": 74,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:50:51"
+    },
+    {
+      "id": 73,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:50:50"
+    },
+    {
+      "id": 72,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:50:49"
+    },
+    {
+      "id": 71,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:49:38"
+    },
+    {
+      "id": 70,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:49:37"
+    },
+    {
+      "id": 69,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_COMPLETE_SITE_ZIP",
+      "entityType": "Backup",
+      "entityTitle": "svcoer-full-site-2026-11-15T13-48-20.zip (104 code files + 8 media/photos + DB + hashed credentials)",
+      "timestamp": "2026-11-15 13:48:22"
+    },
+    {
+      "id": 68,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:48:20"
+    },
+    {
+      "id": 67,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:48:19"
+    },
+    {
+      "id": 66,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:48:18"
+    },
+    {
+      "id": 65,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:48:14"
+    },
+    {
+      "id": 64,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:48:13"
+    },
+    {
+      "id": 63,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:47:44"
+    },
+    {
+      "id": 62,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:47:43"
+    },
+    {
+      "id": 61,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:47:42"
+    },
+    {
+      "id": 60,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:47:39"
+    },
+    {
+      "id": 59,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:47:38"
+    },
+    {
+      "id": 58,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:47:03"
+    },
+    {
+      "id": 57,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:47:03"
+    },
+    {
+      "id": 56,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:47:02"
+    },
+    {
+      "id": 55,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:46:58"
+    },
+    {
+      "id": 54,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:46:57"
+    },
+    {
+      "id": 53,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:46:56"
+    },
+    {
+      "id": 52,
+      "actorEmail": "temp-editor-e2e@svcoer.edu.in",
+      "actorRole": "specific_page_editor",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:45:49"
+    },
+    {
+      "id": 51,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor-e2e@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:45:45"
+    },
+    {
+      "id": 50,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:45:44"
+    },
+    {
+      "id": 49,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:45:43"
+    },
+    {
+      "id": 48,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:44:47"
+    },
+    {
+      "id": 47,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp-editor@svcoer.edu.in (specific_page_editor)",
+      "timestamp": "2026-11-15 13:44:23"
+    },
+    {
+      "id": 46,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:44:22"
+    },
+    {
+      "id": 45,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-15 13:43:45"
+    },
     {
       "id": 44,
       "actorEmail": "admin@svcoer.edu.in",
@@ -2322,7 +2871,9 @@
       "coordinatorName": "Prof. D. B. Kulkarni",
       "coordinatorEmail": "alumni@coe.sveri.ac.in",
       "allowSelfRegistration": true,
-      "allowPublicJobPosting": true
+      "allowPublicJobPosting": true,
+      "enableDiscussions": true,
+      "requireDiscussionApproval": false
     },
     "profiles": [
       {
@@ -2345,7 +2896,8 @@
         "isFeatured": true,
         "status": "approved",
         "sortOrder": 1,
-        "registeredAt": "2026-01-12"
+        "registeredAt": "2026-01-12",
+        "passwordHash": "1bef134c57e59f60d5492d11c2b2380f:ca349d7d4d42b1d0f2830c97ed5ac4bc6169a6bb0784de6563ae22381439e99804f680ea0b9b3313870e43bcbc91b31c35f9cc02f4f1d85522397b8236159f9b"
       },
       {
         "id": 2,
@@ -2367,7 +2919,8 @@
         "isFeatured": true,
         "status": "approved",
         "sortOrder": 2,
-        "registeredAt": "2026-02-04"
+        "registeredAt": "2026-02-04",
+        "passwordHash": "1bef134c57e59f60d5492d11c2b2380f:ca349d7d4d42b1d0f2830c97ed5ac4bc6169a6bb0784de6563ae22381439e99804f680ea0b9b3313870e43bcbc91b31c35f9cc02f4f1d85522397b8236159f9b"
       },
       {
         "id": 3,
@@ -2388,7 +2941,8 @@
         "isFeatured": true,
         "status": "approved",
         "sortOrder": 3,
-        "registeredAt": "2026-03-19"
+        "registeredAt": "2026-03-19",
+        "passwordHash": "1bef134c57e59f60d5492d11c2b2380f:ca349d7d4d42b1d0f2830c97ed5ac4bc6169a6bb0784de6563ae22381439e99804f680ea0b9b3313870e43bcbc91b31c35f9cc02f4f1d85522397b8236159f9b"
       },
       {
         "id": 4,
@@ -2409,7 +2963,8 @@
         "isFeatured": false,
         "status": "approved",
         "sortOrder": 4,
-        "registeredAt": "2026-05-08"
+        "registeredAt": "2026-05-08",
+        "passwordHash": "1bef134c57e59f60d5492d11c2b2380f:ca349d7d4d42b1d0f2830c97ed5ac4bc6169a6bb0784de6563ae22381439e99804f680ea0b9b3313870e43bcbc91b31c35f9cc02f4f1d85522397b8236159f9b"
       },
       {
         "id": 5,
@@ -2430,7 +2985,8 @@
         "isFeatured": false,
         "status": "approved",
         "sortOrder": 5,
-        "registeredAt": "2026-07-14"
+        "registeredAt": "2026-07-14",
+        "passwordHash": "1bef134c57e59f60d5492d11c2b2380f:ca349d7d4d42b1d0f2830c97ed5ac4bc6169a6bb0784de6563ae22381439e99804f680ea0b9b3313870e43bcbc91b31c35f9cc02f4f1d85522397b8236159f9b"
       },
       {
         "id": 6,
@@ -2450,7 +3006,8 @@
         "isFeatured": false,
         "status": "pending",
         "sortOrder": 6,
-        "registeredAt": "2026-11-01"
+        "registeredAt": "2026-11-01",
+        "passwordHash": "1bef134c57e59f60d5492d11c2b2380f:ca349d7d4d42b1d0f2830c97ed5ac4bc6169a6bb0784de6563ae22381439e99804f680ea0b9b3313870e43bcbc91b31c35f9cc02f4f1d85522397b8236159f9b"
       }
     ],
     "jobs": [
@@ -2570,9 +3127,274 @@
         "isActive": true,
         "sortOrder": 3
       }
+    ],
+    "discussionTopics": [
+      {
+        "id": 1,
+        "slug": "career-guidance-placements",
+        "title": "Career Guidance & Placements",
+        "description": "Interview prep, resume reviews, and mentorship threads for graduating engineers.",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "slug": "industry-trends-referrals",
+        "title": "Industry Referrals & Tech Trends",
+        "description": "Insights on AI/Cloud, EV powertrains, VLSI verification, and smart infrastructure.",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "slug": "higher-studies-research",
+        "title": "Higher Studies, GATE & Research",
+        "description": "Peer advice on M.Tech, MS abroad, fellowships, and patent/paper publishing.",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "id": 4,
+        "slug": "campus-chapter-stories",
+        "title": "Pandharpur Campus & Chapter Stories",
+        "description": "Alumni reunions, endowment initiatives, and chapter meetup recaps.",
+        "isActive": true,
+        "sortOrder": 4
+      }
+    ],
+    "discussions": [
+      {
+        "id": 1,
+        "topicId": 1,
+        "title": "2026 Cloud & System Design Interview Roadmap for SVERI Juniors",
+        "content": "Over the past quarter I interviewed 30+ freshers and mid-level engineers. Strong fundamentals in Linux networking, SQL indexing, and clean REST API error handling matter far more than memorizing frameworks.\n\nIf any batchmates in Hyderabad or Pune would like to co-host mock interviews for our final-year CSE/E&TC students next month, drop a comment below!",
+        "authorAlumniId": 1,
+        "authorName": "Rohan Deshmukh",
+        "authorBatch": "2016 CSE",
+        "authorDesignation": "Principal Cloud Architect, Microsoft India",
+        "isPinned": true,
+        "status": "approved",
+        "createdAt": "2026-11-04 10:30",
+        "comments": [
+          {
+            "id": 1,
+            "postId": 1,
+            "authorAlumniId": 2,
+            "authorName": "Snehal Patwardhan",
+            "authorBatch": "2018 ENTC",
+            "content": "Count me in for weekend mock interviews—especially for embedded C and digital design tracks!",
+            "createdAt": "2026-11-04 14:15"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "topicId": 2,
+        "title": "EV Thermal & Powertrain Engineering Trends in Pune Manufacturing Hub",
+        "content": "Tier-1 automotive suppliers around Chakan and Pimpri-Chinchwad are actively hiring mechanical & electrical graduates skilled in battery thermal modeling, BMS calibration, and DFMEA.\n\nHappy to review resumes from verified alumni looking to transition into EV R&D teams.",
+        "authorAlumniId": 3,
+        "authorName": "Aditya Kulkarni",
+        "authorBatch": "2015 MECH",
+        "authorDesignation": "DGM - EV Powertrain, Bharat Forge Ltd.",
+        "isPinned": false,
+        "status": "approved",
+        "createdAt": "2026-11-06 09:45",
+        "comments": [
+          {
+            "id": 2,
+            "postId": 2,
+            "authorAlumniId": 5,
+            "authorName": "Omkar Shinde",
+            "authorBatch": "2022 ELEC",
+            "content": "Great perspective, Aditya sir. High-voltage safety and CAN-bus diagnostics skills are also in huge demand.",
+            "createdAt": "2026-11-06 18:20"
+          }
+        ]
+      }
     ]
   },
-  "backups": [],
+  "backups": [
+    {
+      "id": "site-1794750953492-35b2",
+      "createdAt": "2026-11-15T13:55:52.226Z",
+      "createdBy": "admin@svcoer.edu.in",
+      "mode": "full",
+      "destination": "local",
+      "filename": "svcoer-full-site-2026-11-15T13-55-52.zip",
+      "sizeBytes": 16504245,
+      "sha256": "42427f48521626e2c83e74f1af7b9430fb1d696a0c0bb00d0804e786ea9ee857",
+      "notes": "Migration ZIP (104 code files + 8 media/photos + DB + hashed credentials)",
+      "entityCounts": {
+        "categories": 9,
+        "pages": 40,
+        "leadership": 6,
+        "departments": 6,
+        "sliders": 3,
+        "ticker": 4,
+        "events": 4,
+        "documents": 9,
+        "gallery": 3,
+        "telephoneDirectory": 7,
+        "alumni": 13,
+        "users": 5,
+        "auditLogs": 104,
+        "settings": 1
+      },
+      "archiveType": "site-zip",
+      "mediaCount": 8,
+      "codeCount": 104
+    },
+    {
+      "id": "site-1794750885966-9139",
+      "createdAt": "2026-11-15T13:54:44.948Z",
+      "createdBy": "admin@svcoer.edu.in",
+      "mode": "full",
+      "destination": "local",
+      "filename": "svcoer-full-site-2026-11-15T13-54-44.zip",
+      "sizeBytes": 16504181,
+      "sha256": "b405d589dee0e6b80c2bc932ac29dddd98d13868a880403580190d3f88ca341f",
+      "notes": "Migration ZIP (104 code files + 8 media/photos + DB + hashed credentials)",
+      "entityCounts": {
+        "categories": 9,
+        "pages": 40,
+        "leadership": 6,
+        "departments": 6,
+        "sliders": 3,
+        "ticker": 4,
+        "events": 4,
+        "documents": 9,
+        "gallery": 3,
+        "telephoneDirectory": 7,
+        "alumni": 13,
+        "users": 5,
+        "auditLogs": 98,
+        "settings": 1
+      },
+      "archiveType": "site-zip",
+      "mediaCount": 8,
+      "codeCount": 104
+    },
+    {
+      "id": "site-1794750839784-c850",
+      "createdAt": "2026-11-15T13:53:58.832Z",
+      "createdBy": "admin@svcoer.edu.in",
+      "mode": "full",
+      "destination": "local",
+      "filename": "svcoer-full-site-2026-11-15T13-53-58.zip",
+      "sizeBytes": 16504073,
+      "sha256": "b6d9d62767b017c2193aa90999d8276140f7c7b1f40750c1eb274f37656da966",
+      "notes": "Migration ZIP (104 code files + 8 media/photos + DB + hashed credentials)",
+      "entityCounts": {
+        "categories": 9,
+        "pages": 40,
+        "leadership": 6,
+        "departments": 6,
+        "sliders": 3,
+        "ticker": 4,
+        "events": 4,
+        "documents": 9,
+        "gallery": 3,
+        "telephoneDirectory": 7,
+        "alumni": 13,
+        "users": 5,
+        "auditLogs": 92,
+        "settings": 1
+      },
+      "archiveType": "site-zip",
+      "mediaCount": 8,
+      "codeCount": 104
+    },
+    {
+      "id": "site-1794750700996-3ab1",
+      "createdAt": "2026-11-15T13:51:39.898Z",
+      "createdBy": "admin@svcoer.edu.in",
+      "mode": "full",
+      "destination": "local",
+      "filename": "svcoer-full-site-2026-11-15T13-51-39.zip",
+      "sizeBytes": 16503903,
+      "sha256": "cc32f0104bb3df24bf98f8c82b48329a389286093fede04c0e6378f6581ca2b3",
+      "notes": "Migration ZIP (104 code files + 8 media/photos + DB + hashed credentials)",
+      "entityCounts": {
+        "categories": 9,
+        "pages": 40,
+        "leadership": 6,
+        "departments": 6,
+        "sliders": 3,
+        "ticker": 4,
+        "events": 4,
+        "documents": 9,
+        "gallery": 3,
+        "telephoneDirectory": 7,
+        "alumni": 13,
+        "users": 5,
+        "auditLogs": 83,
+        "settings": 1
+      },
+      "archiveType": "site-zip",
+      "mediaCount": 8,
+      "codeCount": 104
+    },
+    {
+      "id": "site-1794750659013-76dc",
+      "createdAt": "2026-11-15T13:50:57.597Z",
+      "createdBy": "admin@svcoer.edu.in",
+      "mode": "full",
+      "destination": "local",
+      "filename": "svcoer-full-site-2026-11-15T13-50-57.zip",
+      "sizeBytes": 16503815,
+      "sha256": "8300af6791105a1d068d83216bebc5d86347214b1a02d967520109556b2ea078",
+      "notes": "Migration ZIP (104 code files + 8 media/photos + DB + hashed credentials)",
+      "entityCounts": {
+        "categories": 9,
+        "pages": 40,
+        "leadership": 6,
+        "departments": 6,
+        "sliders": 3,
+        "ticker": 4,
+        "events": 4,
+        "documents": 9,
+        "gallery": 3,
+        "telephoneDirectory": 7,
+        "alumni": 13,
+        "users": 5,
+        "auditLogs": 77,
+        "settings": 1
+      },
+      "archiveType": "site-zip",
+      "mediaCount": 8,
+      "codeCount": 104
+    },
+    {
+      "id": "site-1794750502137-5f2b",
+      "createdAt": "2026-11-15T13:48:20.754Z",
+      "createdBy": "admin@svcoer.edu.in",
+      "mode": "full",
+      "destination": "local",
+      "filename": "svcoer-full-site-2026-11-15T13-48-20.zip",
+      "sizeBytes": 16503672,
+      "sha256": "f1e6c13a729ac08cac1c7c98aea048a1efee172548b85a3bd3bacecc27fc4100",
+      "notes": "Migration ZIP (104 code files + 8 media/photos + DB + hashed credentials)",
+      "entityCounts": {
+        "categories": 9,
+        "pages": 40,
+        "leadership": 6,
+        "departments": 6,
+        "sliders": 3,
+        "ticker": 4,
+        "events": 4,
+        "documents": 9,
+        "gallery": 3,
+        "telephoneDirectory": 7,
+        "alumni": 13,
+        "users": 5,
+        "auditLogs": 68,
+        "settings": 1
+      },
+      "archiveType": "site-zip",
+      "mediaCount": 8,
+      "codeCount": 104
+    }
+  ],
   "backupSchedule": {
     "enabled": false,
     "frequency": "daily",

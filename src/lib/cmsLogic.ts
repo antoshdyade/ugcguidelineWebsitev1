@@ -207,6 +207,7 @@ export function canUserAccessResource(
         role === 'content_editor' ||
         role === 'iqac_officer' ||
         role === 'exam_controller' ||
+        role === 'specific_page_editor' ||
         hasExplicitPageScope
       );
     case 'documents':

@@ -168,9 +168,9 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <?php endif; ?>
   </div>
 
-  <?php if (!empty($user['allowed_page_ids'])): ?>
+  <?php if (!empty($user['allowed_page_ids']) || $user['role'] === 'specific_page_editor'): ?>
     <div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;padding:0.65rem 0.9rem;border-radius:8px;font-size:0.82rem;margin-bottom:1rem;">
-      <strong>Per-Page RBAC Active:</strong> You are authorized to edit <?= count($pages) ?> specifically assigned disclosure page(s).
+      <strong>Per-Page / Category RBAC Active:</strong> You are authorized to edit <?= count($pages) ?> specifically assigned disclosure page(s)<?= !empty($cats) ? ' across ' . count($cats) . ' permitted category(ies)' : '' ?>.
     </div>
   <?php elseif ($user['role'] === 'exam_controller'): ?>
     <div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:0.65rem 0.9rem;border-radius:8px;font-size:0.82rem;margin-bottom:1rem;">

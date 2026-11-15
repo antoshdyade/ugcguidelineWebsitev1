@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         $alters = [
             "ALTER TABLE departments ADD COLUMN library_json TEXT NULL",
             "ALTER TABLE departments ADD COLUMN faculty_field_schema_json TEXT NULL",
-            "ALTER TABLE users MODIFY COLUMN role ENUM('super_admin','content_editor','department_admin','iqac_officer','exam_controller') NOT NULL",
+            "ALTER TABLE users MODIFY COLUMN role ENUM('super_admin','content_editor','department_admin','iqac_officer','exam_controller','specific_page_editor') NOT NULL",
             "ALTER TABLE users ADD COLUMN allowed_categories_json TEXT NULL",
             "ALTER TABLE users ADD COLUMN allowed_page_ids_json TEXT NULL",
             "ALTER TABLE pages MODIFY COLUMN attached_pdf_url VARCHAR(500) NULL",
@@ -121,6 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
                 // Column already exists
             }
         }
+        require_once __DIR__ . '/includes/auth.php';
+        ensureCmsSchemaUpgraded($pdo);
         $hasHomeComponents = true;
         $actionMsg = 'Database schema upgraded cleanly with new tables and columns.';
     }

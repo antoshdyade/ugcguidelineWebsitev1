@@ -9,6 +9,7 @@ function backupTablesList(): array
 {
     return [
         'site_settings',
+        'users',
         'categories',
         'pages',
         'departments',
@@ -27,6 +28,9 @@ function backupTablesList(): array
         'alumni_profiles',
         'alumni_jobs',
         'alumni_events',
+        'alumni_discussion_topics',
+        'alumni_discussion_posts',
+        'alumni_discussion_comments',
     ];
 }
 
@@ -200,9 +204,10 @@ function pushBackupToDestination(string $localPath, string $fileName, string $de
             return ['ok' => false, 'status' => 'HTTPS Google Apps Script / Drive Webhook URL is required'];
         }
         $rawContent = (string)@file_get_contents($localPath);
+        $isZipFile = str_ends_with(strtolower($fileName), '.zip');
         $payload = json_encode([
             'filename'      => $fileName,
-            'mimeType'      => 'application/json',
+            'mimeType'      => $isZipFile ? 'application/zip' : 'application/json',
             'mode'          => $meta['mode'] ?? 'full',
             'createdAt'     => $meta['createdAt'] ?? gmdate('c'),
             'checksum'      => $meta['checksum'] ?? '',
@@ -753,34 +758,48 @@ function collectPhpCmsFilesForMigration(): array
     return ['code' => $codeEntries, 'media' => $mediaEntries];
 }
 
-function createFullSiteMigrationZip(PDO $pdo, string $actorEmail, string $sourceOrigin = ''): array
-{
+function createFullSiteMigrationZip(
+    PDO $pdo,
+    string $actorEmail,
+    string $sourceOrigin = '',
+    bool $includeData = true,
+    bool $includeMedia = true,
+    bool $includeCode = true,
+    string $destination = 'local'
+): array {
     $dir = ensureBackupsStorage();
-    $snapshot = captureCmsSnapshot($pdo);
-    $kvExtras = [
-        'alumni_settings' => kvGet($pdo, 'alumni_settings', defaultAlumniSettings()),
-        'upload_policy'   => kvGet($pdo, 'upload_policy', null),
-    ];
+    $schedule = getBackupSchedule($pdo);
+    $snapshot = $includeData ? captureCmsSnapshot($pdo) : [];
+    $kvExtras = $includeData
+        ? [
+            'alumni_settings' => kvGet($pdo, 'alumni_settings', defaultAlumniSettings()),
+            'upload_policy'   => kvGet($pdo, 'upload_policy', null),
+        ]
+        : [];
 
     $id = 'mig-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(3));
     $fileName = 'svcoer-site-migration-' . gmdate('Ymd-His') . '.zip';
     $createdAt = gmdate('Y-m-d\TH:i:s\Z');
     $dataPayload = [
-        'format'       => 'svcoer-cms-backup',
-        'version'      => 2,
-        'id'           => $id,
-        'mode'         => 'full',
-        'archiveType'  => 'full_site_migration',
-        'createdAt'    => $createdAt,
-        'createdBy'    => $actorEmail,
-        'entityCounts' => countSnapshotEntities($snapshot),
-        'kvSettings'   => $kvExtras,
-        'data'         => $snapshot,
+        'format'                 => 'svcoer-cms-backup',
+        'version'                => 2,
+        'id'                     => $id,
+        'mode'                   => 'full',
+        'archiveType'            => 'full_site_migration',
+        'includesHashedSecrets'  => $includeData,
+        'createdAt'              => $createdAt,
+        'createdBy'              => $actorEmail,
+        'entityCounts'           => $includeData ? countSnapshotEntities($snapshot) : [],
+        'kvSettings'             => $kvExtras,
+        'data'                   => $snapshot,
     ];
     $dataJson = json_encode($dataPayload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $checksum = hash('sha256', (string)$dataJson);
 
     $files = collectPhpCmsFilesForMigration();
+    $selectedCode = $includeCode ? $files['code'] : [];
+    $selectedMedia = $includeMedia ? $files['media'] : [];
+
     $manifest = [
         'format'        => 'svcoer-site-migration',
         'version'       => 1,
@@ -790,16 +809,21 @@ function createFullSiteMigrationZip(PDO $pdo, string $actorEmail, string $source
         'sourceOrigin'  => $sourceOrigin,
         'sourceBaseUrl' => getBaseUrl(),
         'dataChecksum'  => $checksum,
-        'mediaCount'    => count($files['media']),
-        'codeCount'     => count($files['code']),
+        'includeData'   => $includeData,
+        'includeMedia'  => $includeMedia,
+        'includeCode'   => $includeCode,
+        'mediaCount'    => count($selectedMedia),
+        'codeCount'     => count($selectedCode),
         'entityCounts'  => $dataPayload['entityCounts'],
     ];
 
-    $allEntries = array_merge($files['code'], $files['media'], [
+    $allEntries = array_merge($selectedCode, $selectedMedia, [
         'migration-manifest.json' => json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        'migration-data.json'     => $dataJson,
-        'database-dump.sql'       => buildMigrationSqlDump($pdo, $snapshot),
     ]);
+    if ($includeData) {
+        $allEntries['migration-data.json'] = $dataJson;
+        $allEntries['database-dump.sql'] = buildMigrationSqlDump($pdo, $snapshot);
+    }
 
     $filePath = $dir . '/' . $fileName;
     if (class_exists('ZipArchive')) {
@@ -816,21 +840,37 @@ function createFullSiteMigrationZip(PDO $pdo, string $actorEmail, string $source
         SvcoerMiniZip::writeFile($filePath, $allEntries);
     }
 
+    $destNormalized = in_array($destination, ['local', 'download', 'scp', 'gdrive_webhook'], true) ? $destination : 'local';
+    if ($destNormalized === 'scp' || $destNormalized === 'gdrive_webhook') {
+        $pushResult = pushBackupToDestination($filePath, $fileName, $destNormalized, $schedule, [
+            'mode'      => 'full_site_migration',
+            'createdAt' => $createdAt,
+            'checksum'  => $checksum,
+        ]);
+    } else {
+        $pushResult = [
+            'ok'     => true,
+            'status' => $destNormalized === 'download'
+                ? 'Generated & downloaded to local computer (.zip)'
+                : 'Saved to server disk (' . count($selectedCode) . ' code, ' . count($selectedMedia) . ' media)',
+        ];
+    }
+
     $record = [
         'id'             => $id,
         'fileName'       => $fileName,
         'mode'           => 'full',
         'archiveType'    => 'full_site_migration',
-        'destination'    => 'local',
+        'destination'    => $destNormalized,
         'createdAt'      => $createdAt,
         'createdBy'      => $actorEmail,
         'sizeBytes'      => (int)@filesize($filePath),
         'checksum'       => $checksum,
-        'mediaCount'     => count($files['media']),
-        'codeCount'      => count($files['code']),
+        'mediaCount'     => count($selectedMedia),
+        'codeCount'      => count($selectedCode),
         'entityCounts'   => $dataPayload['entityCounts'],
-        'transferStatus' => 'Full Site Migration Package (Code + Data + Media)',
-        'transferOk'     => true,
+        'transferStatus' => $pushResult['status'],
+        'transferOk'     => $pushResult['ok'],
     ];
 
     $index = kvGet($pdo, 'backup_index', []);

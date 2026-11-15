@@ -9,7 +9,7 @@ $pdo = getDB();
 ensureCmsSchemaUpgraded($pdo);
 
 $subTab = $_GET['sub'] ?? 'profiles';
-if (!in_array($subTab, ['profiles', 'jobs', 'events', 'settings'], true)) {
+if (!in_array($subTab, ['profiles', 'jobs', 'events', 'discussions', 'settings'], true)) {
     $subTab = 'profiles';
 }
 
@@ -46,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = in_array($_POST['status'] ?? 'approved', ['approved', 'pending', 'rejected'], true) ? $_POST['status'] : 'approved';
         $mentor = isset($_POST['open_to_mentorship']) ? 1 : 0;
         $featured = isset($_POST['is_featured']) ? 1 : 0;
+        $portalPw = trim((string)($_POST['portal_password'] ?? ''));
         $photoUrl = trim((string)($_POST['existing_photo_url'] ?? 'assets/images/principal.jpg')) ?: 'assets/images/principal.jpg';
 
         if (!empty($_FILES['photo']['name'])) {
@@ -60,6 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($err === '') {
             if ($fullName === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $err = 'Full name and valid email are required.';
+            } elseif ($portalPw !== '' && strlen($portalPw) < 6) {
+                $err = 'Alumni portal password must be at least 6 characters.';
             } elseif ($editId > 0) {
                 $pdo->prepare(
                     'UPDATE alumni_profiles SET full_name=?, email=?, phone=?, graduation_year=?, department_code=?, department_name=?, degree=?, current_company=?, designation=?, location=?, chapter=?, linkedin_url=?, photo_url=?, bio=?, open_to_mentorship=?, is_featured=?, status=? WHERE id=?'
@@ -69,14 +72,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $location !== '' ? $location : null, $chapter, $linkedin !== '' ? $linkedin : null,
                     $photoUrl, $bio !== '' ? $bio : null, $mentor, $featured, $status, $editId,
                 ]);
+                if ($portalPw !== '') {
+                    $pdo->prepare('UPDATE alumni_profiles SET password_hash = ? WHERE id = ?')
+                        ->execute([password_hash($portalPw, PASSWORD_DEFAULT), $editId]);
+                }
                 logAudit($pdo, $user, 'UPDATE_ALUMNI_PROFILE', 'AlumniProfile', $fullName);
                 $msg = 'Alumni profile updated: ' . $fullName;
             } else {
                 $nextSort = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order),0) FROM alumni_profiles')->fetchColumn()) + 1;
+                $pwHash = password_hash($portalPw !== '' ? $portalPw : 'Alumni@123', PASSWORD_DEFAULT);
                 $pdo->prepare(
-                    'INSERT INTO alumni_profiles (full_name, email, phone, graduation_year, department_code, department_name, degree, current_company, designation, location, chapter, linkedin_url, photo_url, bio, open_to_mentorship, is_featured, status, sort_order, registered_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURDATE())'
+                    'INSERT INTO alumni_profiles (full_name, email, password_hash, phone, graduation_year, department_code, department_name, degree, current_company, designation, location, chapter, linkedin_url, photo_url, bio, open_to_mentorship, is_featured, status, sort_order, registered_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURDATE())'
                 )->execute([
-                    $fullName, $email, $phone !== '' ? $phone : null, $gradYear, $deptCode, $deptName, $degree,
+                    $fullName, $email, $pwHash, $phone !== '' ? $phone : null, $gradYear, $deptCode, $deptName, $degree,
                     $company !== '' ? $company : null, $designation !== '' ? $designation : null,
                     $location !== '' ? $location : null, $chapter, $linkedin !== '' ? $linkedin : null,
                     $photoUrl, $bio !== '' ? $bio : null, $mentor, $featured, $status, $nextSort,
@@ -190,16 +198,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)($_POST['id'] ?? 0);
         $pdo->prepare('DELETE FROM alumni_events WHERE id = ?')->execute([$id]);
         $msg = 'Chapter event deleted.';
+    } elseif ($action === 'save_topic') {
+        $subTab = 'discussions';
+        $topicId = (int)($_POST['edit_topic_id'] ?? 0);
+        $title = trim((string)($_POST['topic_title'] ?? ''));
+        $desc = trim((string)($_POST['topic_description'] ?? ''));
+        $isActive = isset($_POST['topic_active']) ? 1 : 0;
+        if ($title === '') {
+            $err = 'Discussion topic title is required.';
+        } elseif ($topicId > 0) {
+            $pdo->prepare('UPDATE alumni_discussion_topics SET title = ?, description = ?, is_active = ? WHERE id = ?')
+                ->execute([$title, $desc, $isActive, $topicId]);
+            logAudit($pdo, $user, 'UPDATE_ALUMNI_TOPIC', 'AlumniTopic', $title);
+            $msg = 'Discussion topic updated.';
+        } else {
+            $slug = trim((string)preg_replace('/[^a-z0-9]+/', '-', strtolower($title)), '-') ?: ('topic-' . time());
+            $nextSort = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order),0) FROM alumni_discussion_topics')->fetchColumn()) + 1;
+            $pdo->prepare('INSERT INTO alumni_discussion_topics (slug, title, description, is_active, sort_order) VALUES (?,?,?,?,?)')
+                ->execute([$slug . '-' . substr(bin2hex(random_bytes(2)), 0, 3), $title, $desc, $isActive, $nextSort]);
+            logAudit($pdo, $user, 'CREATE_ALUMNI_TOPIC', 'AlumniTopic', $title);
+            $msg = 'Discussion topic created: ' . $title;
+        }
+    } elseif ($action === 'toggle_topic') {
+        $subTab = 'discussions';
+        $pdo->prepare('UPDATE alumni_discussion_topics SET is_active = NOT is_active WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
+        $msg = 'Discussion topic visibility updated.';
+    } elseif ($action === 'delete_topic') {
+        $subTab = 'discussions';
+        $tid = (int)($_POST['id'] ?? 0);
+        $pdo->prepare('DELETE FROM alumni_discussion_posts WHERE topic_id = ?')->execute([$tid]);
+        $pdo->prepare('DELETE FROM alumni_discussion_topics WHERE id = ?')->execute([$tid]);
+        logAudit($pdo, $user, 'DELETE_ALUMNI_TOPIC', 'AlumniTopic', "#$tid");
+        $msg = 'Discussion topic deleted.';
+    } elseif ($action === 'moderate_post') {
+        $subTab = 'discussions';
+        $pid = (int)($_POST['id'] ?? 0);
+        $modOp = $_POST['mod_op'] ?? '';
+        if ($modOp === 'approve') {
+            $pdo->prepare("UPDATE alumni_discussion_posts SET status = 'approved' WHERE id = ?")->execute([$pid]);
+            $msg = 'Discussion article approved.';
+        } elseif ($modOp === 'reject') {
+            $pdo->prepare("UPDATE alumni_discussion_posts SET status = 'rejected' WHERE id = ?")->execute([$pid]);
+            $msg = 'Discussion article hidden.';
+        } elseif ($modOp === 'pin') {
+            $pdo->prepare('UPDATE alumni_discussion_posts SET is_pinned = NOT is_pinned WHERE id = ?')->execute([$pid]);
+            $msg = 'Pin state toggled.';
+        } elseif ($modOp === 'delete') {
+            $pdo->prepare('DELETE FROM alumni_discussion_comments WHERE post_id = ?')->execute([$pid]);
+            $pdo->prepare('DELETE FROM alumni_discussion_posts WHERE id = ?')->execute([$pid]);
+            logAudit($pdo, $user, 'DELETE_ALUMNI_POST', 'AlumniDiscussion', "#$pid");
+            $msg = 'Discussion article deleted.';
+        }
+    } elseif ($action === 'delete_comment') {
+        $subTab = 'discussions';
+        $cid = (int)($_POST['comment_id'] ?? 0);
+        $pdo->prepare('DELETE FROM alumni_discussion_comments WHERE id = ?')->execute([$cid]);
+        $msg = 'Reply deleted.';
     } elseif ($action === 'save_alumni_settings') {
         $subTab = 'settings';
         $newSettings = [
-            'heroTitle'             => trim((string)($_POST['hero_title'] ?? '')),
-            'heroSubtitle'          => trim((string)($_POST['hero_subtitle'] ?? '')),
-            'associationRegNo'      => trim((string)($_POST['assoc_reg_no'] ?? '')),
-            'coordinatorName'       => trim((string)($_POST['coordinator_name'] ?? '')),
-            'coordinatorEmail'      => trim((string)($_POST['coordinator_email'] ?? '')),
-            'allowSelfRegistration' => isset($_POST['allow_self_reg']),
-            'allowPublicJobPosting' => isset($_POST['allow_public_jobs']),
+            'heroTitle'                 => trim((string)($_POST['hero_title'] ?? '')),
+            'heroSubtitle'              => trim((string)($_POST['hero_subtitle'] ?? '')),
+            'associationRegNo'          => trim((string)($_POST['assoc_reg_no'] ?? '')),
+            'coordinatorName'           => trim((string)($_POST['coordinator_name'] ?? '')),
+            'coordinatorEmail'          => trim((string)($_POST['coordinator_email'] ?? '')),
+            'allowSelfRegistration'     => isset($_POST['allow_self_reg']),
+            'allowPublicJobPosting'     => isset($_POST['allow_public_jobs']),
+            'enableDiscussions'         => isset($_POST['enable_discussions']),
+            'requireDiscussionApproval' => isset($_POST['require_discussion_approval']),
         ];
         kvSet($pdo, 'alumni_settings', $newSettings);
         logAudit($pdo, $user, 'UPDATE_ALUMNI_SETTINGS', 'AlumniSettings', 'Portal settings saved');
@@ -210,6 +276,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $profiles = $pdo->query('SELECT * FROM alumni_profiles ORDER BY sort_order ASC, id ASC')->fetchAll();
 $jobs = $pdo->query('SELECT * FROM alumni_jobs ORDER BY sort_order ASC, id DESC')->fetchAll();
 $events = $pdo->query('SELECT * FROM alumni_events ORDER BY sort_order ASC, event_date ASC')->fetchAll();
+$discussionTopics = $pdo->query('SELECT * FROM alumni_discussion_topics ORDER BY sort_order ASC, id ASC')->fetchAll();
+$discussionPosts = $pdo->query('SELECT * FROM alumni_discussion_posts ORDER BY is_pinned DESC, id DESC')->fetchAll();
+$discussionComments = $pdo->query('SELECT * FROM alumni_discussion_comments ORDER BY id ASC')->fetchAll();
+$commentsByPost = [];
+foreach ($discussionComments as $dc) {
+    $commentsByPost[(int)$dc['post_id']][] = $dc;
+}
 $departmentsList = $pdo->query('SELECT code, name FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $alumniSettings = getAlumniSettings($pdo);
 
@@ -234,11 +307,19 @@ if (!empty($_GET['edit_event'])) {
         if ((int)$ev['id'] === $eeId) { $editEvent = $ev; break; }
     }
 }
+$editTopic = null;
+if (!empty($_GET['edit_topic'])) {
+    $etId = (int)$_GET['edit_topic'];
+    foreach ($discussionTopics as $tp) {
+        if ((int)$tp['id'] === $etId) { $editTopic = $tp; break; }
+    }
+}
 
 $pendingProfilesCount = count(array_filter($profiles, static fn($r) => ($r['status'] ?? '') === 'pending'));
 $pendingJobsCount = count(array_filter($jobs, static fn($r) => ($r['status'] ?? '') === 'pending'));
+$pendingPostsCount = count(array_filter($discussionPosts, static fn($r) => ($r['status'] ?? '') === 'pending'));
 
-$adminPageTitle = 'Alumni Network, Jobs & Chapters';
+$adminPageTitle = 'Alumni Network, Jobs & Discussions';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
 
@@ -251,6 +332,9 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
   </a>
   <a href="?sub=events" class="admin-subtab <?= $subTab === 'events' ? 'is-active' : '' ?>">
     Chapters &amp; Reunions (<?= count($events) ?>)
+  </a>
+  <a href="?sub=discussions" class="admin-subtab <?= $subTab === 'discussions' ? 'is-active' : '' ?>">
+    Discussions &amp; Topics (<?= count($discussionPosts) ?><?= $pendingPostsCount > 0 ? " · {$pendingPostsCount} Pending" : '' ?>)
   </a>
   <a href="?sub=settings" class="admin-subtab <?= $subTab === 'settings' ? 'is-active' : '' ?>">
     Portal Settings
@@ -291,6 +375,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         </select>
       </label>
       <label>LinkedIn URL<input type="url" name="linkedin_url" value="<?= e($editProfile['linkedin_url'] ?? '') ?>" style="width:100%;"></label>
+      <label><?= $editProfile ? 'Reset Portal Password (Optional)' : 'Portal Login Password (Default: Alumni@123)' ?><input type="password" name="portal_password" minlength="6" placeholder="Min 6 characters" style="width:100%;"></label>
       <label>Profile Photo (1:1 Auto-Crop)<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" data-aspect="1:1" style="display:block;margin-top:4px;"></label>
     </div>
     <label style="display:block;margin-bottom:0.75rem;">Bio
@@ -466,6 +551,91 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <?php endforeach; ?>
   </div>
 
+<?php elseif ($subTab === 'discussions'): ?>
+  <div class="grid-2" style="margin-bottom:1.5rem;align-items:start;">
+    <form method="post" class="card">
+      <h2 style="margin-top:0;"><?= $editTopic ? 'Edit Discussion Topic' : 'Create Discussion Topic' ?></h2>
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="save_topic">
+      <input type="hidden" name="edit_topic_id" value="<?= (int)($editTopic['id'] ?? 0) ?>">
+      <label style="display:block;margin-bottom:0.65rem;">Topic Title *
+        <input type="text" name="topic_title" required value="<?= e($editTopic['title'] ?? '') ?>" placeholder="e.g., AI &amp; Cloud System Design" style="width:100%;">
+      </label>
+      <label style="display:block;margin-bottom:0.65rem;">Description &amp; Guidelines
+        <textarea name="topic_description" rows="2" style="width:100%;"><?= e($editTopic['description'] ?? '') ?></textarea>
+      </label>
+      <label style="display:block;margin-bottom:0.8rem;">
+        <input type="checkbox" name="topic_active" <?= !isset($editTopic) || !empty($editTopic['is_active']) ? 'checked' : '' ?>> Active (Visible to Logged-In Alumni)
+      </label>
+      <div style="display:flex;gap:0.5rem;">
+        <button type="submit" class="btn-primary"><?= $editTopic ? 'Update Topic' : 'Add Discussion Topic' ?></button>
+        <?php if ($editTopic): ?><a href="?sub=discussions" class="btn-outline">Cancel</a><?php endif; ?>
+      </div>
+    </form>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Discussion Topics (<?= count($discussionTopics) ?>)</h2>
+      <?php foreach ($discussionTopics as $tp): ?>
+        <div class="admin-list-row">
+          <div>
+            <strong><?= e($tp['title']) ?></strong>
+            <span class="badge <?= !empty($tp['is_active']) ? 'badge-ok' : 'badge-warn' ?>"><?= !empty($tp['is_active']) ? 'Active' : 'Hidden' ?></span>
+            <?php if (!empty($tp['description'])): ?><div style="font-size:0.78rem;color:#57534E;"><?= e($tp['description']) ?></div><?php endif; ?>
+          </div>
+          <div style="display:flex;gap:0.35rem;">
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="toggle_topic"><input type="hidden" name="id" value="<?= (int)$tp['id'] ?>"><button type="submit" class="btn-outline btn-sm"><?= !empty($tp['is_active']) ? 'Hide' : 'Show' ?></button></form>
+            <a href="?sub=discussions&edit_topic=<?= (int)$tp['id'] ?>" class="btn-outline btn-sm">Edit</a>
+            <form method="post" style="display:inline;" onsubmit="return confirm('Delete this topic and its articles?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_topic"><input type="hidden" name="id" value="<?= (int)$tp['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Members-Only Blogger Articles &amp; Thread Moderation (<?= count($discussionPosts) ?>)</h2>
+    <?php foreach ($discussionPosts as $dp):
+      $st = $dp['status'] ?? 'approved';
+      $badgeCls = $st === 'approved' ? 'badge-ok' : ($st === 'pending' ? 'badge-warn' : 'badge-err');
+      $postComments = $commentsByPost[(int)$dp['id']] ?? [];
+    ?>
+      <div class="card" style="margin-bottom:0.85rem;background:#FAFAF9;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.75rem;">
+          <div style="flex:1;min-width:250px;">
+            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.35rem;">
+              <?php if (!empty($dp['is_pinned'])): ?><span class="badge badge-warn">PINNED</span><?php endif; ?>
+              <span class="badge <?= $badgeCls ?>"><?= strtoupper(e($st)) ?></span>
+            </div>
+            <h3 style="margin:0 0 0.25rem;"><?= e($dp['title']) ?></h3>
+            <div style="font-size:0.76rem;color:#57534E;margin-bottom:0.4rem;">By <?= e($dp['author_name']) ?> (<?= e($dp['author_batch']) ?>) · <?= e($dp['created_at']) ?></div>
+            <p style="font-size:0.84rem;margin:0;white-space:pre-line;"><?= e($dp['content']) ?></p>
+          </div>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+            <?php if ($st !== 'approved'): ?>
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="moderate_post"><input type="hidden" name="id" value="<?= (int)$dp['id'] ?>"><input type="hidden" name="mod_op" value="approve"><button type="submit" class="btn-primary btn-sm">Approve</button></form>
+            <?php endif; ?>
+            <?php if ($st !== 'rejected'): ?>
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="moderate_post"><input type="hidden" name="id" value="<?= (int)$dp['id'] ?>"><input type="hidden" name="mod_op" value="reject"><button type="submit" class="btn-outline btn-sm">Hide</button></form>
+            <?php endif; ?>
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="moderate_post"><input type="hidden" name="id" value="<?= (int)$dp['id'] ?>"><input type="hidden" name="mod_op" value="pin"><button type="submit" class="btn-outline btn-sm"><?= !empty($dp['is_pinned']) ? 'Unpin' : 'Pin' ?></button></form>
+            <form method="post" style="display:inline;" onsubmit="return confirm('Delete this discussion post?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="moderate_post"><input type="hidden" name="id" value="<?= (int)$dp['id'] ?>"><input type="hidden" name="mod_op" value="delete"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
+          </div>
+        </div>
+        <?php if (!empty($postComments)): ?>
+          <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid #E7E5E4;display:grid;gap:0.4rem;">
+            <strong style="font-size:0.75rem;">Replies (<?= count($postComments) ?>)</strong>
+            <?php foreach ($postComments as $cm): ?>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;background:#fff;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #E7E5E4;font-size:0.78rem;">
+                <div><strong><?= e($cm['author_name']) ?> (<?= e($cm['author_batch']) ?>):</strong> <?= e($cm['body']) ?></div>
+                <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_comment"><input type="hidden" name="comment_id" value="<?= (int)$cm['id'] ?>"><button type="submit" class="btn-danger btn-sm">Remove</button></form>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </div>
+    <?php endforeach; ?>
+  </div>
+
 <?php else: ?>
   <form method="post" class="card" style="max-width:780px;">
     <h2 style="margin-top:0;">Alumni Portal Governance &amp; Intake Settings</h2>
@@ -479,9 +649,11 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <label>Coordinator Name<input type="text" name="coordinator_name" value="<?= e($alumniSettings['coordinatorName']) ?>" style="width:100%;"></label>
         <label>Coordinator Email<input type="email" name="coordinator_email" value="<?= e($alumniSettings['coordinatorEmail']) ?>" style="width:100%;"></label>
       </div>
-      <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0.65rem;">
         <label><input type="checkbox" name="allow_self_reg" <?= !empty($alumniSettings['allowSelfRegistration']) ? 'checked' : '' ?>> Allow Self-Service Alumni Registration</label>
-        <label><input type="checkbox" name="allow_public_jobs" <?= !empty($alumniSettings['allowPublicJobPosting']) ? 'checked' : '' ?>> Allow Public Alumni Job Referrals</label>
+        <label><input type="checkbox" name="allow_public_jobs" <?= !empty($alumniSettings['allowPublicJobPosting']) ? 'checked' : '' ?>> Allow Logged-In Alumni to Post Jobs</label>
+        <label><input type="checkbox" name="enable_discussions" <?= !isset($alumniSettings['enableDiscussions']) || !empty($alumniSettings['enableDiscussions']) ? 'checked' : '' ?>> Enable Members-Only Discussion Panel</label>
+        <label><input type="checkbox" name="require_discussion_approval" <?= !empty($alumniSettings['requireDiscussionApproval']) ? 'checked' : '' ?>> Require Admin Approval for Discussion Posts</label>
       </div>
       <div><button type="submit" class="btn-primary">Save Portal Settings</button></div>
     </div>

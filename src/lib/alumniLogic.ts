@@ -85,10 +85,12 @@ export function filterAlumniJobs(
 export function validateAlumniRegistrationInput(input: {
   fullName?: string;
   email?: string;
+  password?: string;
   graduationYear?: number;
   departmentCode?: string;
   currentCompany?: string;
   designation?: string;
+  requirePassword?: boolean;
 }): { valid: boolean; reason?: string } {
   const name = (input.fullName || '').trim();
   const email = (input.email || '').trim();
@@ -100,6 +102,12 @@ export function validateAlumniRegistrationInput(input: {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { valid: false, reason: 'Please enter a valid email address.' };
+  }
+  if (input.requirePassword || (input.password !== undefined && input.password !== '')) {
+    const pw = String(input.password || '');
+    if (pw.length < 6) {
+      return { valid: false, reason: 'Account password must be at least 6 characters.' };
+    }
   }
   if (!Number.isInteger(year) || year < 1998 || year > new Date().getFullYear() + 2) {
     return { valid: false, reason: 'Please enter a valid graduation year (1998–present).' };
@@ -136,4 +144,61 @@ export function validateAlumniJobInput(input: {
     return { valid: false, reason: 'Alumni poster name is required.' };
   }
   return { valid: true };
+}
+
+export function validateDiscussionPostInput(input: {
+  topicId?: number;
+  title?: string;
+  content?: string;
+}): { valid: boolean; reason?: string } {
+  if (!Number.isInteger(Number(input.topicId)) || Number(input.topicId) <= 0) {
+    return { valid: false, reason: 'Please select a discussion topic.' };
+  }
+  if ((input.title || '').trim().length < 4) {
+    return { valid: false, reason: 'Discussion title must be at least 4 characters.' };
+  }
+  if ((input.content || '').trim().length < 10) {
+    return { valid: false, reason: 'Discussion post content must be at least 10 characters.' };
+  }
+  return { valid: true };
+}
+
+export function validateDiscussionCommentInput(input: {
+  content?: string;
+}): { valid: boolean; reason?: string } {
+  if ((input.content || '').trim().length < 2) {
+    return { valid: false, reason: 'Reply comment cannot be empty.' };
+  }
+  return { valid: true };
+}
+
+export function filterAlumniDiscussions(
+  posts: import('../types/cms').AlumniDiscussionPost[],
+  options: { topicId?: number | 'All'; query?: string; includeUnapproved?: boolean },
+): import('../types/cms').AlumniDiscussionPost[] {
+  const q = (options.query || '').trim().toLowerCase();
+  return [...posts]
+    .filter((p) => {
+      if (!options.includeUnapproved && p.status !== 'approved') return false;
+      if (options.topicId && options.topicId !== 'All' && p.topicId !== options.topicId) return false;
+      if (!q) return true;
+      return (
+        p.title.toLowerCase().includes(q) ||
+        p.content.toLowerCase().includes(q) ||
+        p.authorName.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return b.createdAt.localeCompare(a.createdAt) || b.id - a.id;
+    });
+}
+
+export function stripAlumniCredentials(
+  profiles: AlumniProfile[],
+): Omit<AlumniProfile, 'passwordHash'>[] {
+  return profiles.map((profile) => {
+    const { passwordHash: _omitted, ...safeProfile } = profile;
+    return safeProfile;
+  });
 }
