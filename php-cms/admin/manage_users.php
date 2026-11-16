@@ -9,28 +9,34 @@ $msg = '';
 $err = '';
 
 $cats = $pdo->query('SELECT id, slug, name FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
-$allPages = $pdo->query('SELECT p.id, p.title, p.slug, c.id AS cat_id, c.name AS cat_name FROM pages p JOIN categories c ON p.category_id = c.id ORDER BY c.sort_order ASC, p.sort_order ASC')->fetchAll();
+$allPages = $pdo->query("SELECT p.id, p.title, p.slug, c.id AS cat_id, COALESCE(c.name, 'Standalone / Uncategorized') AS cat_name FROM pages p LEFT JOIN categories c ON p.category_id = c.id ORDER BY COALESCE(c.sort_order, 999) ASC, p.sort_order ASC")->fetchAll();
 $pagesGrouped = [];
 foreach ($allPages as $pg) {
     $pagesGrouped[$pg['cat_name']][] = $pg;
 }
+$moduleOptions = rbacModuleOptions();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
     if ($action === 'create') {
         $role = $_POST['role'] ?? 'content_editor';
-        $deptId = ($role === 'department_admin') ? (int)$_POST['assigned_department_id'] : null;
+        $selDepts = array_values(array_unique(array_filter(array_map('intval', $_POST['allowed_department_ids'] ?? []))));
+        $deptId = ($role === 'department_admin') ? (!empty($_POST['assigned_department_id']) ? (int)$_POST['assigned_department_id'] : ($selDepts[0] ?? null)) : (!empty($selDepts) ? $selDepts[0] : null);
+        if ($deptId && !in_array($deptId, $selDepts, true) && $role === 'department_admin') {
+            array_unshift($selDepts, $deptId);
+        }
         $selCats = array_values(array_filter(array_map('strval', $_POST['allowed_categories'] ?? [])));
         $selPages = array_values(array_filter(array_map('intval', $_POST['allowed_page_ids'] ?? [])));
+        $selModules = array_values(array_filter(array_map('strval', $_POST['allowed_modules'] ?? [])));
         if ($role === 'exam_controller' && empty($selCats) && empty($selPages)) {
             $selCats = ['examination'];
         }
-        if ($role === 'specific_page_editor' && empty($selCats) && empty($selPages)) {
-            $err = 'Please select at least one individual page or category for Specific Page / Category Access Only.';
+        if ($role === 'specific_page_editor' && empty($selCats) && empty($selPages) && empty($selModules)) {
+            $err = 'Please select at least one individual page, category, or admin module for Specific Page / Category Access Only.';
         } else {
             $hash = password_hash($_POST['password'], PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare('INSERT INTO users (full_name, email, password_hash, role, assigned_department_id, allowed_categories_json, allowed_page_ids_json) VALUES (?, ?, ?, ?, ?, ?, ?)');
+            $stmt = $pdo->prepare('INSERT INTO users (full_name, email, password_hash, role, assigned_department_id, allowed_categories_json, allowed_page_ids_json, allowed_modules_json, allowed_department_ids_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
                 trim($_POST['full_name']),
                 strtolower(trim($_POST['email'])),
@@ -39,6 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $deptId,
                 !empty($selCats) ? json_encode($selCats) : null,
                 !empty($selPages) ? json_encode($selPages) : null,
+                !empty($selModules) ? json_encode($selModules) : null,
+                !empty($selDepts) ? json_encode($selDepts) : null,
             ]);
             logAudit($pdo, $user, 'CREATE_USER', 'User', $_POST['email']);
             $msg = 'RBAC user created with granular permissions.';
@@ -46,22 +54,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'update_rbac' && !empty($_POST['user_id'])) {
         $targetId = (int)$_POST['user_id'];
         $role = $_POST['role'] ?? 'content_editor';
-        $deptId = ($role === 'department_admin') ? (int)$_POST['assigned_department_id'] : null;
+        $selDepts = array_values(array_unique(array_filter(array_map('intval', $_POST['allowed_department_ids'] ?? []))));
+        $deptId = ($role === 'department_admin') ? (!empty($_POST['assigned_department_id']) ? (int)$_POST['assigned_department_id'] : ($selDepts[0] ?? null)) : (!empty($selDepts) ? $selDepts[0] : null);
+        if ($deptId && !in_array($deptId, $selDepts, true) && $role === 'department_admin') {
+            array_unshift($selDepts, $deptId);
+        }
         $selCats = array_values(array_filter(array_map('strval', $_POST['allowed_categories'] ?? [])));
         $selPages = array_values(array_filter(array_map('intval', $_POST['allowed_page_ids'] ?? [])));
-        if ($role === 'specific_page_editor' && empty($selCats) && empty($selPages)) {
-            $err = 'Please select at least one individual page or category for Specific Page / Category Access Only.';
+        $selModules = array_values(array_filter(array_map('strval', $_POST['allowed_modules'] ?? [])));
+        if ($role === 'specific_page_editor' && empty($selCats) && empty($selPages) && empty($selModules)) {
+            $err = 'Please select at least one individual page, category, or admin module for Specific Page / Category Access Only.';
         } else {
-            $pdo->prepare('UPDATE users SET role = ?, assigned_department_id = ?, allowed_categories_json = ?, allowed_page_ids_json = ? WHERE id = ?')
+            $pdo->prepare('UPDATE users SET role = ?, assigned_department_id = ?, allowed_categories_json = ?, allowed_page_ids_json = ?, allowed_modules_json = ?, allowed_department_ids_json = ? WHERE id = ?')
                 ->execute([
                     $role,
                     $deptId,
                     !empty($selCats) ? json_encode($selCats) : null,
                     !empty($selPages) ? json_encode($selPages) : null,
+                    !empty($selModules) ? json_encode($selModules) : null,
+                    !empty($selDepts) ? json_encode($selDepts) : null,
                     $targetId,
                 ]);
             logAudit($pdo, $user, 'UPDATE_RBAC_SCOPE', 'User', 'User #' . $targetId . ' (' . $role . ')');
-            $msg = 'Per-page & category RBAC permissions updated.';
+            $msg = 'Per-page, category & module RBAC permissions updated.';
         }
     } elseif ($action === 'toggle') {
         $pdo->prepare('UPDATE users SET is_active = NOT is_active WHERE id = ? AND id != ?')->execute([(int)$_POST['user_id'], $user['id']]);
@@ -99,7 +114,7 @@ if (!empty($_GET['edit_rbac'])) {
 }
 
 $users = $pdo->query('SELECT u.*, d.short_name AS dept_name FROM users u LEFT JOIN departments d ON u.assigned_department_id = d.id ORDER BY u.id ASC')->fetchAll();
-$depts = $pdo->query('SELECT id, name FROM departments ORDER BY sort_order ASC')->fetchAll();
+$depts = $pdo->query('SELECT id, name, short_name FROM departments ORDER BY sort_order ASC')->fetchAll();
 $logs  = $pdo->query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 25')->fetchAll();
 
 $adminPageTitle = 'Users, Per-Page RBAC & Security Audit Logs';
@@ -144,9 +159,16 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
     if (!is_array($uCats)) $uCats = [];
     $uPages = !empty($editingUser['allowed_page_ids_json']) ? json_decode((string)$editingUser['allowed_page_ids_json'], true) : [];
     if (!is_array($uPages)) $uPages = [];
+    $uMods = !empty($editingUser['allowed_modules_json']) ? json_decode((string)$editingUser['allowed_modules_json'], true) : [];
+    if (!is_array($uMods)) $uMods = [];
+    $uDepts = !empty($editingUser['allowed_department_ids_json']) ? json_decode((string)$editingUser['allowed_department_ids_json'], true) : [];
+    if (!is_array($uDepts)) $uDepts = [];
+    if (!empty($editingUser['assigned_department_id']) && !in_array((int)$editingUser['assigned_department_id'], $uDepts, true)) {
+        $uDepts[] = (int)$editingUser['assigned_department_id'];
+    }
   ?>
     <form method="post" class="card" style="margin-bottom:1.5rem;border:2px solid var(--secondary-color);">
-      <h2 style="margin-top:0;">Edit Per-Page &amp; Category RBAC: <?= e($editingUser['full_name']) ?> (<?= e($editingUser['email']) ?>)</h2>
+      <h2 style="margin-top:0;">Edit Per-Page, Category &amp; Module RBAC: <?= e($editingUser['full_name']) ?> (<?= e($editingUser['email']) ?>)</h2>
       <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
       <input type="hidden" name="action" value="update_rbac">
       <input type="hidden" name="user_id" value="<?= (int)$editingUser['id'] ?>">
@@ -159,13 +181,31 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
             <?php endforeach; ?>
           </select>
         </label>
-        <label>Assigned Department (for Department Admin)
+        <label>Primary Department (for Department Admin)
           <select name="assigned_department_id" style="width:100%;padding:0.5rem;">
             <?php foreach ($depts as $d): ?>
               <option value="<?= (int)$d['id'] ?>" <?= (int)$editingUser['assigned_department_id'] === (int)$d['id'] ? 'selected' : '' ?>><?= e($d['name']) ?></option>
             <?php endforeach; ?>
           </select>
         </label>
+      </div>
+
+      <div style="margin-bottom:0.85rem;">
+        <strong style="display:block;font-size:0.85rem;margin-bottom:0.35rem;">Explicit Allowed Admin Modules (optional override — leave all unchecked for role defaults):</strong>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:0.45rem;font-size:0.82rem;background:#FAF9F6;padding:0.6rem;border:1px solid var(--border-color);border-radius:8px;">
+          <?php foreach ($moduleOptions as $mk => $ml): ?>
+            <label><input type="checkbox" name="allowed_modules[]" value="<?= e($mk) ?>" <?= in_array($mk, $uMods, true) ? 'checked' : '' ?>> <?= e($ml) ?></label>
+          <?php endforeach; ?>
+        </div>
+      </div>
+
+      <div style="margin-bottom:0.85rem;">
+        <strong style="display:block;font-size:0.85rem;margin-bottom:0.35rem;">Allowed Department Microsites (Multi-Dept Scope):</strong>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;font-size:0.82rem;">
+          <?php foreach ($depts as $d): ?>
+            <label><input type="checkbox" name="allowed_department_ids[]" value="<?= (int)$d['id'] ?>" <?= in_array((int)$d['id'], $uDepts, true) ? 'checked' : '' ?>> <?= e($d['short_name'] ?: $d['name']) ?></label>
+          <?php endforeach; ?>
+        </div>
       </div>
 
       <div style="margin-bottom:0.85rem;">
@@ -203,6 +243,22 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
       <select name="assigned_department_id" style="width:100%;padding:0.5rem;margin-bottom:0.65rem;">
         <?php foreach ($depts as $d): ?><option value="<?= (int)$d['id'] ?>"><?= e($d['name']) ?></option><?php endforeach; ?>
       </select>
+      <div style="margin-bottom:0.75rem;font-size:0.8rem;">
+        <strong style="display:block;margin-bottom:0.25rem;">Allowed Admin Modules (Optional):</strong>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:0.3rem;padding:0.5rem;border:1px solid var(--border-color);border-radius:6px;">
+          <?php foreach ($moduleOptions as $mk => $ml): ?>
+            <label><input type="checkbox" name="allowed_modules[]" value="<?= e($mk) ?>"> <?= e($ml) ?></label>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      <div style="margin-bottom:0.75rem;font-size:0.8rem;">
+        <strong style="display:block;margin-bottom:0.25rem;">Allowed Departments (Optional Multi-Dept):</strong>
+        <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+          <?php foreach ($depts as $d): ?>
+            <label><input type="checkbox" name="allowed_department_ids[]" value="<?= (int)$d['id'] ?>"> <?= e($d['short_name'] ?: $d['name']) ?></label>
+          <?php endforeach; ?>
+        </div>
+      </div>
       <div style="margin-bottom:0.75rem;font-size:0.82rem;">
         <strong style="display:block;margin-bottom:0.25rem;">Allowed Categories (Optional):</strong>
         <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
@@ -225,12 +281,14 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
             foreach ($users as $u):
               $uc = !empty($u['allowed_categories_json']) ? json_decode((string)$u['allowed_categories_json'], true) : [];
               $up = !empty($u['allowed_page_ids_json']) ? json_decode((string)$u['allowed_page_ids_json'], true) : [];
+              $um = !empty($u['allowed_modules_json']) ? json_decode((string)$u['allowed_modules_json'], true) : [];
               $canDelete = ((int)$u['id'] !== (int)$user['id']) && !($u['role'] === 'super_admin' && !empty($u['is_active']) && $activeSuperCount <= 1);
           ?>
             <tr>
               <td><?= e($u['full_name']) ?><br><small><?= e($u['email']) ?></small></td>
               <td>
                 <strong><?= e($u['role'] === 'specific_page_editor' ? 'Specific Page / Category Access' : $u['role']) ?></strong> <?= $u['dept_name'] ? '(' . e($u['dept_name']) . ')' : '' ?>
+                <?php if (is_array($um) && $um): ?><br><small style="color:#0F294A;">Modules: <?= e(implode(', ', $um)) ?></small><?php endif; ?>
                 <?php if (is_array($uc) && $uc): ?><br><small style="color:var(--text-muted);">Cats: <?= e(implode(', ', $uc)) ?></small><?php endif; ?>
                 <?php if (is_array($up) && $up): ?><br><small style="color:var(--secondary-color);"><?= count($up) ?> specific page(s)</small><?php endif; ?>
               </td>

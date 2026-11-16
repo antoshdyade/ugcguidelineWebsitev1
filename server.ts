@@ -3660,6 +3660,19 @@ async function startServer() {
       contactEmail: String(b.contactEmail || 'conference@coe.sveri.ac.in').trim(),
       contactPhone: String(b.contactPhone || '+91-02186-216063').trim(),
       bannerUrl: String(b.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg').trim(),
+      heroSlides:
+        Array.isArray(b.heroSlides) && b.heroSlides.length > 0
+          ? b.heroSlides
+          : [
+              {
+                id: 1,
+                title: String(b.title).trim(),
+                caption: String(b.theme || b.venue || 'Research Program & Technical Sessions').trim(),
+                imageUrl: String(b.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg').trim(),
+                ctaLabel: 'Register / Submit Paper',
+                ctaLink: `#register`,
+              },
+            ],
       brochureUrl: b.brochureUrl ? String(b.brochureUrl).trim() : '',
       templateUrl: b.templateUrl ? String(b.templateUrl).trim() : '',
       overviewHtml: String(b.overviewHtml || '<p>Conference overview and technical scope.</p>'),
@@ -3677,6 +3690,30 @@ async function startServer() {
     addAudit(actor, 'CREATE_CONFERENCE', 'Conference', `${created.shortName} (${created.scope})`);
     saveDatabase();
     res.status(201).json(created);
+  });
+
+  app.put('/api/admin/conferences/research-slider', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const incoming = req.body as { researchSliderSlides?: unknown[] };
+    if (!Array.isArray(incoming.researchSliderSlides)) {
+      res.status(400).json({ error: 'researchSliderSlides array is required.' });
+      return;
+    }
+    const cleanSlides = incoming.researchSliderSlides.map((s: any, idx: number) => ({
+      id: Number(s?.id) || idx + 1,
+      title: String(s?.title || '').trim(),
+      caption: String(s?.caption || '').trim(),
+      imageUrl: String(s?.imageUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg').trim(),
+      ctaLabel: s?.ctaLabel ? String(s.ctaLabel).trim() : '',
+      ctaLink: s?.ctaLink ? String(s.ctaLink).trim() : '',
+    }));
+    db.settings = {
+      ...db.settings,
+      researchSliderSlides: cleanSlides,
+    };
+    addAudit(actor, 'UPDATE_RESEARCH_SLIDER', 'Settings', `${cleanSlides.length} slides`);
+    saveDatabase();
+    res.json({ ok: true, researchSliderSlides: cleanSlides });
   });
 
   app.put('/api/admin/conferences/:id', requireAdmin('conferences'), (req, res) => {

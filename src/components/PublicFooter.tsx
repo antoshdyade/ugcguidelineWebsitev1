@@ -65,7 +65,21 @@ export function PublicFooter({ settings, onNavigate }: PublicFooterProps) {
           <p>
             © {new Date().getFullYear()} {settings.institutionName}. Compliant with UGC Guidelines on Public Self-Disclosure (NEP 2020).
           </p>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              onClick={() => onNavigate('/conferences')}
+              className="hover:text-white"
+            >
+              Conferences &amp; Events
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('/placements')}
+              className="hover:text-white"
+            >
+              Training &amp; Placements
+            </button>
             <button
               type="button"
               onClick={() => onNavigate('/alumni')}
@@ -82,7 +96,7 @@ export function PublicFooter({ settings, onNavigate }: PublicFooterProps) {
             </button>
             <button
               type="button"
-              onClick={() => onNavigate('/page/sgrc')}
+              onClick={() => onNavigate('/grievance')}
               className="hover:text-white"
             >
               Grievance Redressal

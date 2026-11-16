@@ -220,4 +220,53 @@
       }
     });
   }
+
+  // Interactive Custom Image Slider Component (.cms-prose .cms-slider)
+  function initCmsSliders() {
+    var sliders = document.querySelectorAll('.cms-prose .cms-slider');
+    for (var sIdx = 0; sIdx < sliders.length; sIdx++) {
+      (function (slider) {
+        if (slider.dataset.sliderBound === '1') return;
+        slider.dataset.sliderBound = '1';
+        var slides = slider.querySelectorAll('.cms-slide');
+        var dots = slider.querySelectorAll('.cms-slider-dot');
+        if (!slides.length) return;
+        var current = 0;
+        var timer = null;
+        var paused = false;
+        var autoplaySec = Math.max(0, parseInt(slider.getAttribute('data-autoplay') || '5', 10) || 0);
+
+        function show(idx) {
+          current = ((idx % slides.length) + slides.length) % slides.length;
+          for (var i = 0; i < slides.length; i++) {
+            slides[i].classList.toggle('is-active', i === current);
+          }
+          for (var j = 0; j < dots.length; j++) {
+            dots[j].classList.toggle('is-active', j === current);
+          }
+        }
+        function resetTimer() {
+          if (timer) { clearInterval(timer); timer = null; }
+          if (slides.length > 1 && autoplaySec > 0) {
+            timer = setInterval(function () { if (!paused) show(current + 1); }, autoplaySec * 1000);
+          }
+        }
+        var prevBtn = slider.querySelector('.cms-slider-prev');
+        var nextBtn = slider.querySelector('.cms-slider-next');
+        if (prevBtn) prevBtn.addEventListener('click', function () { show(current - 1); resetTimer(); });
+        if (nextBtn) nextBtn.addEventListener('click', function () { show(current + 1); resetTimer(); });
+        for (var dIdx = 0; dIdx < dots.length; dIdx++) {
+          (function (idxVal) {
+            dots[dIdx].addEventListener('click', function () { show(idxVal); resetTimer(); });
+          })(dIdx);
+        }
+        slider.addEventListener('mouseenter', function () { paused = true; });
+        slider.addEventListener('mouseleave', function () { paused = false; });
+        show(0);
+        resetTimer();
+      })(sliders[sIdx]);
+    }
+  }
+  initCmsSliders();
+  window.svcoerInitCmsSliders = initCmsSliders;
 })();

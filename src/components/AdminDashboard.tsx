@@ -10,6 +10,7 @@ import {
   FilePlus2,
   FileText,
   FolderOpen,
+  Globe2,
   GraduationCap,
   Image as ImageIcon,
   Layers,
@@ -19,12 +20,15 @@ import {
   Plus,
   Settings,
   Shield,
+  ShieldAlert,
   Trash2,
+  TrendingUp,
   Upload,
   UserCheck,
   Users,
 } from 'lucide-react';
 import {
+  ALL_RBAC_MODULE_OPTIONS,
   canUserAccessCategory,
   canUserAccessPage,
   canUserAccessResource,
@@ -37,6 +41,13 @@ import {
   validateUploadMeta,
 } from '../lib/cmsLogic';
 import {
+  DEPT_SUBPAGE_TYPE_PRESETS,
+  DESIGN_PRESETS,
+  DOCUMENT_CATEGORY_PRESETS,
+  EVENT_CATEGORY_PRESETS,
+  TELEPHONE_SECTION_PRESETS,
+} from '../lib/collegeFeaturesLogic';
+import {
   getUploadSizeLimitBytes,
   getUploadSizeLimitMb,
   isImageFileMeta,
@@ -44,10 +55,14 @@ import {
 import { AlumniAdminPanel } from './AlumniAdminPanel';
 import { BackupRestorePanel } from './BackupRestorePanel';
 import { CaptchaWidget } from './CaptchaWidget';
+import { ConferenceAdminPanel } from './ConferenceAdminPanel';
+import { CustomSelectInput } from './CustomSelectInput';
+import { EngineeringPortalsAdmin } from './EngineeringPortalsAdmin';
 import { ImageUploader } from './ImageUploader';
 import { PerPageRbacSelector } from './PerPageRbacSelector';
 import { RichTextEditor } from './RichTextEditor';
 import type {
+  AdminModuleKey,
   AlumniData,
   AuditLogEntry,
   CampusEvent,
@@ -55,6 +70,9 @@ import type {
   CmsDocument,
   CmsPage,
   CmsUser,
+  Conference,
+  ConferenceRegistration,
+  ConferenceSubmission,
   CustomHomeComponent,
   Department,
   DepartmentSubPage,
@@ -65,9 +83,11 @@ import type {
   FacultyCustomField,
   FacultyMember,
   GalleryAlbum,
+  GrievanceTicket,
   HeroSlide,
   HomeComponentPlacement,
   LeadershipProfile,
+  PlacementsData,
   SiteSettings,
   TelephoneEntry,
   TickerItem,
@@ -87,6 +107,11 @@ interface AdminStatePayload {
   leadership: LeadershipProfile[];
   telephoneDirectory: TelephoneEntry[];
   alumni?: AlumniData;
+  conferences?: Conference[];
+  conferenceSubmissions?: ConferenceSubmission[];
+  conferenceRegistrations?: ConferenceRegistration[];
+  placements?: PlacementsData;
+  grievances?: GrievanceTicket[];
   settings: SiteSettings;
   users: CmsUser[];
   auditLogs: AuditLogEntry[];
@@ -99,6 +124,9 @@ type AdminTab =
   | 'departments'
   | 'homepage'
   | 'leadership'
+  | 'conferences'
+  | 'placements'
+  | 'grievances'
   | 'alumni'
   | 'gallery'
   | 'documents'
@@ -124,10 +152,13 @@ function LinkTargetPicker({
 }) {
   const builtinTargets = [
     { label: 'Home Page (/)', url: '/' },
+    { label: 'Research Conferences, Workshops & Events (/conferences)', url: '/conferences' },
+    { label: 'Training & Placement (T&P) Hub (/placements)', url: '/placements' },
+    { label: 'Online Grievance & Anti-Ragging Helpdesk (/grievance)', url: '/grievance' },
     { label: 'Alumni Network, Jobs & Registration (/alumni)', url: '/alumni' },
-    { label: 'Quick Links & Document Repository', url: '/quick-links' },
-    { label: 'Picture Gallery', url: '/gallery' },
-    { label: 'Contact & Telephone Directory', url: '/contact' },
+    { label: 'Quick Links & Document Repository (/quick-links)', url: '/quick-links' },
+    { label: 'Picture Gallery (/gallery)', url: '/gallery' },
+    { label: 'Contact & Telephone Directory (/contact)', url: '/contact' },
   ];
   const allUrls = new Set([
     ...builtinTargets.map((b) => b.url),
@@ -240,7 +271,7 @@ export function AdminDashboard({
   const [pagePdfMode, setPagePdfMode] = useState<'upload' | 'external'>('upload');
   const [pagePublished, setPagePublished] = useState(true);
   const [homepageMode, setHomepageMode] = useState<'sliders' | 'sections' | 'components'>('sliders');
-  const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics'>('identity');
+  const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics' | 'design'>('identity');
 
   // Homepage Custom HTML Components state
   const [editingHomeCompId, setEditingHomeCompId] = useState<number | null>(null);
@@ -330,7 +361,7 @@ export function AdminDashboard({
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [eventTitle, setEventTitle] = useState('');
   const [eventDate, setEventDate] = useState('2026-11-20');
-  const [eventCat, setEventCat] = useState<'Event' | 'Notice' | 'Achievement' | 'Circular' | 'Placement'>('Notice');
+  const [eventCat, setEventCat] = useState<string>('Notice');
   const [eventSummary, setEventSummary] = useState('');
   const [eventImage, setEventImage] = useState('');
 
@@ -371,7 +402,7 @@ export function AdminDashboard({
   const [dirPhone, setDirPhone] = useState('');
   const [dirEmail, setDirEmail] = useState('');
 
-  // Users & Per-Page RBAC state
+  // Users & Per-Page / Per-Module RBAC state
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
@@ -379,11 +410,15 @@ export function AdminDashboard({
   const [newUserDept, setNewUserDept] = useState<number>(1);
   const [newUserAllowedCats, setNewUserAllowedCats] = useState<string[]>([]);
   const [newUserAllowedPageIds, setNewUserAllowedPageIds] = useState<number[]>([]);
+  const [newUserAllowedModules, setNewUserAllowedModules] = useState<AdminModuleKey[]>([]);
+  const [newUserAllowedDeptIds, setNewUserAllowedDeptIds] = useState<number[]>([]);
   const [editingPermsUserId, setEditingPermsUserId] = useState<number | null>(null);
   const [permRole, setPermRole] = useState<UserRole>('content_editor');
   const [permDeptId, setPermDeptId] = useState<number>(1);
   const [permAllowedCats, setPermAllowedCats] = useState<string[]>([]);
   const [permAllowedPageIds, setPermAllowedPageIds] = useState<number[]>([]);
+  const [permAllowedModules, setPermAllowedModules] = useState<AdminModuleKey[]>([]);
+  const [permAllowedDeptIds, setPermAllowedDeptIds] = useState<number[]>([]);
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null);
 
   // Settings draft
@@ -802,6 +837,9 @@ export function AdminDashboard({
   const canDepts = canUserAccessResource(user, 'departments');
   const canHomepage = canUserAccessResource(user, 'sliders_events');
   const canLeadership = canUserAccessResource(user, 'leadership');
+  const canConferences = canUserAccessResource(user, 'conferences');
+  const canPlacements = canUserAccessResource(user, 'placements');
+  const canGrievances = canUserAccessResource(user, 'grievances');
   const canAlumni = canUserAccessResource(user, 'alumni');
   const canGallery = canUserAccessResource(user, 'gallery');
   const canDocs = canUserAccessResource(user, 'documents');
@@ -816,11 +854,14 @@ export function AdminDashboard({
     { id: 'departments', label: 'Departments & Micro-Pages', icon: <Building2 className="w-4 h-4" />, allowed: canDepts },
     { id: 'homepage', label: 'Homepage, Sliders & Events', icon: <ImageIcon className="w-4 h-4" />, allowed: canHomepage },
     { id: 'leadership', label: 'Leadership & Governance', icon: <UserCheck className="w-4 h-4" />, allowed: canLeadership },
+    { id: 'conferences', label: 'Research: Conferences & Events', icon: <Globe2 className="w-4 h-4" />, allowed: canConferences },
+    { id: 'placements', label: 'Training & Placements', icon: <TrendingUp className="w-4 h-4" />, allowed: canPlacements },
+    { id: 'grievances', label: 'Grievance & Anti-Ragging', icon: <ShieldAlert className="w-4 h-4" />, allowed: canGrievances },
     { id: 'alumni', label: 'Alumni Network & Jobs', icon: <GraduationCap className="w-4 h-4" />, allowed: canAlumni },
     { id: 'gallery', label: 'Picture Gallery', icon: <ImageIcon className="w-4 h-4" />, allowed: canGallery },
     { id: 'documents', label: 'Document Repository', icon: <FolderOpen className="w-4 h-4" />, allowed: canDocs },
     { id: 'directory', label: 'Telephone Directory', icon: <Phone className="w-4 h-4" />, allowed: canDirectory },
-    { id: 'settings', label: 'Site Settings, Vision & Theme', icon: <Settings className="w-4 h-4" />, allowed: canSettings },
+    { id: 'settings', label: 'Site Settings, Vision & Design', icon: <Settings className="w-4 h-4" />, allowed: canSettings },
     { id: 'users', label: 'Users, RBAC & Audit', icon: <Users className="w-4 h-4" />, allowed: canUsers },
     { id: 'backups', label: 'Backup, Export & Restore', icon: <Archive className="w-4 h-4" />, allowed: canUsers },
   ];
@@ -2227,46 +2268,23 @@ export function AdminDashboard({
                         )}
                       </div>
 
-                      {/* 1-Click Micro-Page Type Presets */}
+                      {/* Micro-Page Template / Section Type with Custom Entry Support */}
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold text-stone-600 dark:text-slate-300">
-                          Micro-Page Template / Section Type
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(
-                            [
-                              ['general', 'General Page'],
-                              ['gallery', 'Photo Gallery'],
-                              ['notice_board', 'Notice Board'],
-                              ['events', 'Events'],
-                              ['notes_syllabus', 'Notes & Syllabus'],
-                              ['celebrations', 'Celebrations'],
-                              ['library', 'Dept Library'],
-                              ['achievements_students', 'Student Achievements'],
-                              ['achievements_faculty', 'Faculty Achievements'],
-                            ] as const
-                          ).map(([tVal, tLbl]) => (
-                            <button
-                              key={tVal}
-                              type="button"
-                              onClick={() => {
-                                setSubPageType(tVal);
-                                if (!editingSubId && !subTitle) {
-                                  setSubTitle(tLbl);
-                                  setSubSlug(tLbl.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
-                                }
-                              }}
-                              className={`px-2.5 py-1 rounded border text-[11px] font-semibold transition-colors ${
-                                subPageType === tVal
-                                  ? 'text-white border-transparent'
-                                  : 'border-stone-300 dark:border-slate-700 text-stone-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
-                              }`}
-                              style={subPageType === tVal ? { backgroundColor: 'var(--primary-color)' } : undefined}
-                            >
-                              {tLbl}
-                            </button>
-                          ))}
-                        </div>
+                        <CustomSelectInput
+                          label="Micro-Page Template / Section Type"
+                          value={subPageType}
+                          onChange={(val) => {
+                            setSubPageType(val);
+                            if (!editingSubId && !subTitle && val) {
+                              const match = DEPT_SUBPAGE_TYPE_PRESETS.find((p) => p.value === val);
+                              const lbl = match?.label || val;
+                              setSubTitle(lbl);
+                              setSubSlug(lbl.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+                            }
+                          }}
+                          options={DEPT_SUBPAGE_TYPE_PRESETS}
+                          customPlaceholder="Enter custom micro-page type..."
+                        />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4319,25 +4337,27 @@ export function AdminDashboard({
                   placeholder="Notice or Event Title"
                   className="w-full px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="date"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-700 dark:text-slate-300 mb-1">
+                      Event / Circular Date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                      className="w-full px-2.5 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                  </div>
+                  <CustomSelectInput
+                    label="Category"
                     required
-                    value={eventDate}
-                    onChange={(e) => setEventDate(e.target.value)}
-                    className="px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
-                  <select
                     value={eventCat}
-                    onChange={(e) => setEventCat(e.target.value as CampusEvent['category'])}
-                    className="px-2.5 py-1.5 text-sm rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  >
-                    <option value="Notice">Notice</option>
-                    <option value="Circular">Circular</option>
-                    <option value="Event">Event</option>
-                    <option value="Achievement">Achievement</option>
-                    <option value="Placement">Placement</option>
-                  </select>
+                    onChange={setEventCat}
+                    options={[...EVENT_CATEGORY_PRESETS]}
+                    customPlaceholder="Enter custom event category..."
+                  />
                 </div>
                 <textarea
                   rows={2}
@@ -4462,48 +4482,27 @@ export function AdminDashboard({
                 placeholder="Full Name"
                 className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={leadQual}
-                  onChange={(e) => setLeadQual(e.target.value)}
-                  placeholder="Qualification"
-                  className="px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
                 <div>
+                  <label className="block text-xs font-semibold text-stone-700 dark:text-slate-300 mb-1">
+                    Qualification
+                  </label>
                   <input
                     type="text"
-                    required
-                    value={leadGroup}
-                    onChange={(e) => setLeadGroup(e.target.value)}
-                    list="leadership-group-presets"
-                    placeholder="Committee / Custom Group Name"
-                    aria-label="Committee or Leadership Group"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    value={leadQual}
+                    onChange={(e) => setLeadQual(e.target.value)}
+                    placeholder="Qualification (e.g. Ph.D., M.Tech)"
+                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                   />
-                  <datalist id="leadership-group-presets">
-                    {LEADERSHIP_GROUP_PRESETS.map((preset) => (
-                      <option key={preset} value={preset} />
-                    ))}
-                  </datalist>
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {LEADERSHIP_GROUP_PRESETS.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setLeadGroup(preset)}
-                    className={`px-2 py-0.5 rounded text-[11px] border transition-colors ${
-                      leadGroup === preset
-                        ? 'text-white border-transparent'
-                        : 'border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 hover:bg-stone-100'
-                    }`}
-                    style={leadGroup === preset ? { backgroundColor: 'var(--secondary-color)' } : undefined}
-                  >
-                    {preset}
-                  </button>
-                ))}
+                <CustomSelectInput
+                  label="Committee / Leadership Group"
+                  required
+                  value={leadGroup}
+                  onChange={setLeadGroup}
+                  options={[...LEADERSHIP_GROUP_PRESETS]}
+                  customPlaceholder="Enter custom committee name..."
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input
@@ -4909,22 +4908,14 @@ export function AdminDashboard({
                   className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Repository Category</label>
-                <select
-                  value={docCategory}
-                  onChange={(e) => setDocCategory(e.target.value as DocumentCategory)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                >
-                  <option value="Fee Structure">Fee Structure</option>
-                  <option value="Academic Calendar">Academic Calendar</option>
-                  <option value="Syllabus">Syllabus</option>
-                  <option value="UGC & AICTE Approvals">UGC &amp; AICTE Approvals</option>
-                  <option value="NAAC / NBA / NIRF">NAAC / NBA / NIRF</option>
-                  <option value="Annual Reports & Audits">Annual Reports &amp; Audits</option>
-                  <option value="Circulars & Forms">Circulars &amp; Forms</option>
-                </select>
-              </div>
+              <CustomSelectInput
+                label="Repository Category"
+                required
+                value={docCategory}
+                onChange={(val) => setDocCategory(val as DocumentCategory)}
+                options={[...DOCUMENT_CATEGORY_PRESETS]}
+                customPlaceholder="Enter custom repository category..."
+              />
               {docSourceType === 'upload' ? (
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1">
@@ -5066,13 +5057,14 @@ export function AdminDashboard({
               className="lg:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
             >
               <h2 className="text-base font-bold">Add Telephone Directory Entry</h2>
-              <input
-                type="text"
+              <CustomSelectInput
+                label="Office / Section"
                 required
                 value={dirSection}
-                onChange={(e) => setDirSection(e.target.value)}
-                placeholder="Office / Section (e.g. Scholarship Cell)"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                onChange={setDirSection}
+                options={[...TELEPHONE_SECTION_PRESETS]}
+                placeholder="Select office or cell..."
+                customPlaceholder="Enter custom office / section (e.g. Scholarship Cell)"
               />
               <input
                 type="text"
@@ -5197,6 +5189,7 @@ export function AdminDashboard({
                     [
                       ['identity', 'Identity & Branding'],
                       ['sections', 'Homepage Sections'],
+                      ['design', 'Design & Theme'],
                       ['metrics', 'Recognitions & Recruiters'],
                     ] as const
                   ).map(([id, label]) => (
@@ -5505,6 +5498,140 @@ export function AdminDashboard({
                 </div>
               )}
 
+              {settingsSection === 'design' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-stone-500 dark:text-slate-400">
+                    Customize site colors, typography, card geometry, header compactness, and safe CSS overrides without affecting any uploaded data.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {DESIGN_PRESETS.map((preset) => {
+                      const active = settingsDraft.designPreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() =>
+                            setSettingsDraft({
+                              ...settingsDraft,
+                              designPreset: preset.id,
+                              primaryColor: preset.primary,
+                              secondaryColor: preset.secondary,
+                              fontHeading: preset.fontHeading,
+                              fontBody: preset.fontBody,
+                            })
+                          }
+                          className={`p-3 rounded-xl border text-left transition-colors ${
+                            active
+                              ? 'border-amber-600 bg-amber-50/70 dark:bg-amber-950/30'
+                              : 'border-stone-200 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold">{preset.label}</span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-3.5 h-3.5 rounded-full border" style={{ backgroundColor: preset.primary }} />
+                              <span className="w-3.5 h-3.5 rounded-full border" style={{ backgroundColor: preset.secondary }} />
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Primary Color (Hex)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={settingsDraft.primaryColor || '#0F294A'}
+                          onChange={(e) => setSettingsDraft({ ...settingsDraft, primaryColor: e.target.value })}
+                          className="w-9 h-9 rounded border border-stone-300 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={settingsDraft.primaryColor || '#0F294A'}
+                          onChange={(e) => setSettingsDraft({ ...settingsDraft, primaryColor: e.target.value })}
+                          className="flex-1 px-3 py-2 text-xs font-mono rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Secondary / Accent Color (Hex)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={settingsDraft.secondaryColor || '#B45309'}
+                          onChange={(e) => setSettingsDraft({ ...settingsDraft, secondaryColor: e.target.value })}
+                          className="w-9 h-9 rounded border border-stone-300 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={settingsDraft.secondaryColor || '#B45309'}
+                          onChange={(e) => setSettingsDraft({ ...settingsDraft, secondaryColor: e.target.value })}
+                          className="flex-1 px-3 py-2 text-xs font-mono rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                    </div>
+                    <CustomSelectInput
+                      label="Heading Typography Font"
+                      value={settingsDraft.fontHeading || "'Playfair Display', Georgia, serif"}
+                      onChange={(val) => setSettingsDraft({ ...settingsDraft, fontHeading: val })}
+                      options={[
+                        { value: "'Playfair Display', Georgia, serif", label: 'Playfair Display (Academic Serif)' },
+                        { value: "'Plus Jakarta Sans', system-ui, sans-serif", label: 'Plus Jakarta Sans (Modern Geometric)' },
+                        { value: "'Merriweather', Georgia, serif", label: 'Merriweather (Editorial Serif)' },
+                        { value: "'Inter', system-ui, sans-serif", label: 'Inter Clean Sans' },
+                      ]}
+                      customPlaceholder="Enter custom CSS font-family..."
+                    />
+                    <CustomSelectInput
+                      label="Body Typography Font"
+                      value={settingsDraft.fontBody || "'Plus Jakarta Sans', system-ui, sans-serif"}
+                      onChange={(val) => setSettingsDraft({ ...settingsDraft, fontBody: val })}
+                      options={[
+                        { value: "'Plus Jakarta Sans', system-ui, sans-serif", label: 'Plus Jakarta Sans (Default)' },
+                        { value: "'Inter', system-ui, sans-serif", label: 'Inter Clean Sans' },
+                        { value: "Georgia, 'Times New Roman', serif", label: 'Georgia Institutional Serif' },
+                      ]}
+                      customPlaceholder="Enter custom CSS font-family..."
+                    />
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Card Corner Radius</label>
+                      <select
+                        value={settingsDraft.cardRadius || 'rounded'}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, cardRadius: e.target.value as SiteSettings['cardRadius'] })}
+                        className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      >
+                        <option value="rounded">Standard Rounded (12px)</option>
+                        <option value="soft">Soft Pill-Card (20px)</option>
+                        <option value="sharp">Formal Sharp (4px)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Header Layout Style</label>
+                      <select
+                        value={settingsDraft.headerStyle || 'classic'}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, headerStyle: e.target.value as SiteSettings['headerStyle'] })}
+                        className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      >
+                        <option value="classic">Classic Institutional Header</option>
+                        <option value="compact">Compact Sticky Header</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Custom Safe CSS Overrides (Optional)</label>
+                    <textarea
+                      rows={3}
+                      value={settingsDraft.customCss || ''}
+                      onChange={(e) => setSettingsDraft({ ...settingsDraft, customCss: e.target.value })}
+                      placeholder="/* e.g. .cms-prose h2 { border-left: 4px solid var(--secondary-color); padding-left: 10px; } */"
+                      className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                </div>
+              )}
+
               {settingsSection === 'metrics' && (
                 <div className="space-y-4">
                   <div>
@@ -5581,15 +5708,19 @@ export function AdminDashboard({
                       password: newUserPass,
                       role: newUserRole,
                       assignedDepartmentId: newUserRole === 'department_admin' ? newUserDept : null,
+                      allowedModules: newUserAllowedModules,
+                      allowedDepartmentIds: newUserAllowedDeptIds,
                       allowedCategories: newUserAllowedCats,
                       allowedPageIds: newUserAllowedPageIds,
                     });
                     setNewUserName('');
                     setNewUserEmail('');
                     setNewUserPass('');
+                    setNewUserAllowedModules([]);
+                    setNewUserAllowedDeptIds([]);
                     setNewUserAllowedCats([]);
                     setNewUserAllowedPageIds([]);
-                    notify('ok', 'Created RBAC user account with page-wise permissions.');
+                    notify('ok', 'Created RBAC user account with module & page-wise permissions.');
                   } catch (err) {
                     notify('err', (err as Error).message);
                   }
@@ -5664,6 +5795,25 @@ export function AdminDashboard({
                 {newUserRole !== 'super_admin' && (
                   <div className="space-y-3">
                     <div className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-1.5">
+                      <p className="text-xs font-semibold">Allowed Admin Modules (Explicit Per-Module RBAC):</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] max-h-40 overflow-y-auto">
+                        {ALL_RBAC_MODULE_OPTIONS.map((mod) => (
+                          <label key={mod.id} className="inline-flex items-center gap-1.5 truncate" title={mod.description}>
+                            <input
+                              type="checkbox"
+                              checked={newUserAllowedModules.includes(mod.id)}
+                              onChange={(e) =>
+                                setNewUserAllowedModules((prev) =>
+                                  e.target.checked ? [...prev, mod.id] : prev.filter((m) => m !== mod.id),
+                                )
+                              }
+                            />
+                            <span className="truncate">{mod.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-1.5">
                       <p className="text-xs font-semibold">Allowed Portal Categories (Optional Scoping):</p>
                       <div className="grid grid-cols-2 gap-1 text-[11px]">
                         {state.categories.map((c) => (
@@ -5678,6 +5828,25 @@ export function AdminDashboard({
                               }
                             />
                             <span className="truncate">{c.shortLabel || c.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/40 space-y-1.5">
+                      <p className="text-xs font-semibold">Allowed Departments (Multi-Department Scoping):</p>
+                      <div className="grid grid-cols-2 gap-1 text-[11px]">
+                        {state.departments.map((d) => (
+                          <label key={d.id} className="inline-flex items-center gap-1.5 truncate">
+                            <input
+                              type="checkbox"
+                              checked={newUserAllowedDeptIds.includes(d.id)}
+                              onChange={(e) =>
+                                setNewUserAllowedDeptIds((prev) =>
+                                  e.target.checked ? [...prev, d.id] : prev.filter((id) => id !== d.id),
+                                )
+                              }
+                            />
+                            <span className="truncate">{d.shortName || d.name}</span>
                           </label>
                         ))}
                       </div>
@@ -5728,6 +5897,9 @@ export function AdminDashboard({
                             <p className="font-semibold">{u.fullName}</p>
                             <p className="text-xs text-stone-500">
                               {u.email} · {roleDisplay} {u.assignedDepartmentId ? `(Dept #${u.assignedDepartmentId})` : ''}
+                              {u.allowedModules && u.allowedModules.length > 0
+                                ? ` · Modules: ${u.allowedModules.length}`
+                                : ''}
                               {u.allowedCategories && u.allowedCategories.length > 0
                                 ? ` · Cats: ${u.allowedCategories.join(', ')}`
                                 : ''}
@@ -5747,6 +5919,8 @@ export function AdminDashboard({
                                 setEditingPermsUserId(u.id);
                                 setPermRole(u.role);
                                 setPermDeptId(u.assignedDepartmentId || state.departments[0]?.id || 1);
+                                setPermAllowedModules(u.allowedModules || []);
+                                setPermAllowedDeptIds(u.allowedDepartmentIds || []);
                                 setPermAllowedCats(u.allowedCategories || []);
                                 setPermAllowedPageIds(u.allowedPageIds || []);
                               }}
@@ -5856,6 +6030,25 @@ export function AdminDashboard({
                               </p>
                             )}
                             <div>
+                              <p className="font-semibold mb-1">Allowed Admin Modules (Explicit Per-Module Checkboxes):</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-40 overflow-y-auto">
+                                {ALL_RBAC_MODULE_OPTIONS.map((mod) => (
+                                  <label key={mod.id} className="inline-flex items-center gap-1.5 truncate" title={mod.description}>
+                                    <input
+                                      type="checkbox"
+                                      checked={permAllowedModules.includes(mod.id)}
+                                      onChange={(e) =>
+                                        setPermAllowedModules((prev) =>
+                                          e.target.checked ? [...prev, mod.id] : prev.filter((m) => m !== mod.id),
+                                        )
+                                      }
+                                    />
+                                    <span className="truncate">{mod.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
                               <p className="font-semibold mb-1">Allowed Categories (uncheck all for default role behavior):</p>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                                 {state.categories.map((c) => (
@@ -5874,6 +6067,25 @@ export function AdminDashboard({
                                 ))}
                               </div>
                             </div>
+                            <div>
+                              <p className="font-semibold mb-1">Allowed Departments (Multi-Department):</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                {state.departments.map((d) => (
+                                  <label key={d.id} className="inline-flex items-center gap-1.5 truncate">
+                                    <input
+                                      type="checkbox"
+                                      checked={permAllowedDeptIds.includes(d.id)}
+                                      onChange={(e) =>
+                                        setPermAllowedDeptIds((prev) =>
+                                          e.target.checked ? [...prev, d.id] : prev.filter((id) => id !== d.id),
+                                        )
+                                      }
+                                    />
+                                    <span className="truncate">{d.shortName || d.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
                             <PerPageRbacSelector
                               categories={state.categories}
                               pages={state.pages}
@@ -5887,6 +6099,8 @@ export function AdminDashboard({
                                   await adminFetch(`/api/admin/users/${u.id}/permissions`, 'PUT', {
                                     role: permRole,
                                     assignedDepartmentId: permRole === 'department_admin' ? permDeptId : null,
+                                    allowedModules: permAllowedModules,
+                                    allowedDepartmentIds: permAllowedDeptIds,
                                     allowedCategories: permAllowedCats,
                                     allowedPageIds: permAllowedPageIds,
                                   });
@@ -5944,7 +6158,67 @@ export function AdminDashboard({
           </div>
         )}
 
-        {/* 10B. ALUMNI NETWORK, REGISTRATION MODERATION & JOB BOARD */}
+        {/* 10A. RESEARCH CONFERENCES, WORKSHOPS, FDPs & EVENTS */}
+        {activeTab === 'conferences' && canConferences && state && (
+          <ConferenceAdminPanel
+            conferences={state.conferences || []}
+            submissions={state.conferenceSubmissions || []}
+            registrations={state.conferenceRegistrations || []}
+            departments={state.departments}
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
+        {/* 10B. TRAINING & PLACEMENT HUB ADMIN */}
+        {activeTab === 'placements' && canPlacements && state && (
+          <EngineeringPortalsAdmin
+            mode="placements"
+            placements={
+              state.placements || {
+                summaryNote: '',
+                coordinatorName: '',
+                coordinatorEmail: '',
+                coordinatorPhone: '',
+                stats: [],
+                stories: [],
+              }
+            }
+            grievances={state.grievances || []}
+            departments={state.departments}
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
+        {/* 10C. GRIEVANCE & ANTI-RAGGING HELPDESK ADMIN */}
+        {activeTab === 'grievances' && canGrievances && state && (
+          <EngineeringPortalsAdmin
+            mode="grievances"
+            placements={
+              state.placements || {
+                summaryNote: '',
+                coordinatorName: '',
+                coordinatorEmail: '',
+                coordinatorPhone: '',
+                stats: [],
+                stories: [],
+              }
+            }
+            grievances={state.grievances || []}
+            departments={state.departments}
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
+        {/* 10D. ALUMNI NETWORK, REGISTRATION MODERATION & JOB BOARD */}
         {activeTab === 'alumni' && canAlumni && state && state.alumni && (
           <AlumniAdminPanel
             alumni={state.alumni}

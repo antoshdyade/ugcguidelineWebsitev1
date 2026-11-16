@@ -34,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_regenerate_id(true);
             $allowedCats = !empty($user['allowed_categories_json']) ? json_decode((string)$user['allowed_categories_json'], true) : null;
             $allowedPages = !empty($user['allowed_page_ids_json']) ? json_decode((string)$user['allowed_page_ids_json'], true) : null;
+            $allowedModules = !empty($user['allowed_modules_json']) ? json_decode((string)$user['allowed_modules_json'], true) : null;
+            $allowedDepts = !empty($user['allowed_department_ids_json']) ? json_decode((string)$user['allowed_department_ids_json'], true) : null;
             $_SESSION['cms_user'] = [
                 'id'                     => (int)$user['id'],
                 'full_name'              => $user['full_name'],
@@ -42,6 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'assigned_department_id' => $user['assigned_department_id'] ? (int)$user['assigned_department_id'] : null,
                 'allowed_categories'     => is_array($allowedCats) ? $allowedCats : null,
                 'allowed_page_ids'       => is_array($allowedPages) ? array_map('intval', $allowedPages) : null,
+                'allowed_modules'        => is_array($allowedModules) ? $allowedModules : null,
+                'allowed_department_ids' => is_array($allowedDepts) ? array_map('intval', $allowedDepts) : null,
             ];
             $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
             logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', $user['email']);

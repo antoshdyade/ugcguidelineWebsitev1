@@ -23,6 +23,20 @@ export interface EditorComponentBlock {
   html: string;
 }
 
+export interface EditorSliderSlide {
+  id: string;
+  imageUrl: string;
+  title: string;
+  caption: string;
+  ctaLabel?: string;
+  ctaLink?: string;
+}
+
+export interface CustomSliderOptions {
+  heightPx?: number;
+  autoplaySec?: number;
+}
+
 export const TABLE_THEMES: TableThemeOption[] = [
   {
     id: 'navy',
@@ -299,6 +313,39 @@ export const EDITOR_COMPONENT_BLOCKS: EditorComponentBlock[] = [
   </ul>
 </div><p></p>`,
   },
+  {
+    id: 'custom-slider',
+    title: 'Customizable Image Slider',
+    category: 'Interactive',
+    description: 'Multi-slide photo carousel with custom titles, captions, buttons & autoplay',
+    accentColor: '#0284C7',
+    html: buildCustomSliderHtml([
+      {
+        id: 's1',
+        imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+        title: 'Autonomous Research & Innovation Showcase',
+        caption: 'Add custom slide photos, captions, and links from the Visual Editor Slider Designer.',
+        ctaLabel: 'Explore Conferences',
+        ctaLink: '/conferences',
+      },
+      {
+        id: 's2',
+        imageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+        title: 'Centres of Excellence & Industry Laboratories',
+        caption: 'Funded DST-SERB, AICTE-MODROBS, and robotics research facilities.',
+        ctaLabel: 'View R&D Cell',
+        ctaLink: '/page/research-development-cell',
+      },
+      {
+        id: 's3',
+        imageUrl: '/src/assets/images/campus_convocation_1794512597749.jpg',
+        title: 'National & International Technical Symposia',
+        caption: 'Host peer-reviewed conferences, workshops, FDPs, and academic events with full online workflow.',
+        ctaLabel: 'Host or Browse Events',
+        ctaLink: '/conferences',
+      },
+    ]),
+  },
 ];
 
 function escapeHtmlText(str: string): string {
@@ -364,6 +411,73 @@ export function buildPhotoProfileCardHtml(input: PhotoProfileCardInput): string 
     return `<div class="cms-block cms-grid-2" data-block="photo-profile-card">${cardInner}${cardInner}</div><p></p>`;
   }
   return `<div class="cms-block" data-block="photo-profile-card">${cardInner}</div><p></p>`;
+}
+
+export function buildCustomSliderHtml(
+  slidesInput: EditorSliderSlide[],
+  options?: CustomSliderOptions,
+): string {
+  const safeSlides = (slidesInput && slidesInput.length > 0
+    ? slidesInput
+    : [
+        {
+          id: 'default-1',
+          imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+          title: 'Campus & Institutional Highlight',
+          caption: 'Click this slider block in the Visual Editor to add images and customize captions.',
+          ctaLabel: 'Learn More',
+          ctaLink: '/quick-links',
+        },
+      ]
+  ).map((s) => ({
+    imageUrl:
+      s.imageUrl && !/^(javascript|data:text|vbscript):/i.test(s.imageUrl.trim())
+        ? s.imageUrl.trim()
+        : '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+    title: s.title?.trim() || 'Featured Highlight',
+    caption: s.caption?.trim() || '',
+    ctaLabel: s.ctaLabel?.trim() || '',
+    ctaLink:
+      s.ctaLink && !/^(javascript|data|vbscript):/i.test(s.ctaLink.trim())
+        ? s.ctaLink.trim()
+        : '',
+  }));
+
+  const heightPx = Math.max(240, Math.min(620, Math.round(options?.heightPx ?? 380)));
+  const autoplaySec = Math.max(0, Math.min(30, Math.round(options?.autoplaySec ?? 5)));
+
+  const slidesHtml = safeSlides
+    .map((s, idx) => {
+      const ctaHtml =
+        s.ctaLabel && s.ctaLink
+          ? `<p class="cms-slide-cta-row"><a class="cms-btn cms-btn-amber cms-slide-cta" href="${escapeHtmlText(s.ctaLink)}">${escapeHtmlText(s.ctaLabel)}</a></p>`
+          : '';
+      return `<div class="cms-slide${idx === 0 ? ' is-active' : ''}" data-slide-index="${idx}">
+  <img src="${escapeHtmlText(s.imageUrl)}" alt="${escapeHtmlText(s.title)}" />
+  <div class="cms-slide-overlay">
+    <h3 class="cms-slide-title">${escapeHtmlText(s.title)}</h3>
+    ${s.caption ? `<p class="cms-slide-caption">${escapeHtmlText(s.caption)}</p>` : ''}
+    ${ctaHtml}
+  </div>
+</div>`;
+    })
+    .join('\n');
+
+  const dotsHtml = safeSlides
+    .map(
+      (_, idx) =>
+        `<button type="button" class="cms-slider-dot${idx === 0 ? ' is-active' : ''}" data-slide-to="${idx}" aria-label="Go to slide ${idx + 1}"></button>`,
+    )
+    .join('');
+
+  return `<div class="cms-block cms-slider" data-block="custom-slider" data-autoplay="${autoplaySec}" data-height="${heightPx}">
+  <div class="cms-slider-viewport" style="height:${heightPx}px;">
+${slidesHtml}
+  </div>
+  <button type="button" class="cms-slider-prev" aria-label="Previous slide">&#8249;</button>
+  <button type="button" class="cms-slider-next" aria-label="Next slide">&#8250;</button>
+  <div class="cms-slider-dots">${dotsHtml}</div>
+</div><p></p>`;
 }
 
 export function swapTableThemeInHtml(tableHtml: string, nextThemeId: TableThemeId): string {

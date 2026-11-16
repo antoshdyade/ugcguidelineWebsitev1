@@ -66,13 +66,19 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
     :root {
       --primary-color: <?= e($settings['primary_color']) ?>;
       --secondary-color: <?= e($settings['secondary_color']) ?>;
+      --font-display: <?= (string)($settings['font_heading'] ?? "'Playfair Display', Georgia, serif") ?>;
+      --font-sans: <?= (string)($settings['font_body'] ?? "'Plus Jakarta Sans', system-ui, sans-serif") ?>;
     }
+    body { font-family: var(--font-sans); }
+    <?php if (!empty($settings['custom_css'])): ?>
+    <?= strip_tags((string)$settings['custom_css']) ?>
+    <?php endif; ?>
   </style>
 </head>
-<body>
+<body class="theme-radius-<?= e($settings['card_radius'] ?? 'rounded') ?>">
 <a href="#main-content" class="btn-primary sr-only-focus">Skip to main content</a>
 
-<header class="site-header">
+<header class="site-header<?= ($settings['header_style'] ?? 'classic') === 'compact' ? ' is-compact' : '' ?>">
   <!-- Top Accessibility, Audio Listener, Theme & CMS Admin Ribbon -->
   <div class="a11y-ribbon">
     <div class="container a11y-ribbon-inner">
@@ -154,6 +160,12 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
             <a class="nav-link" href="<?= e(baseUrl('page.php?cat=' . urlencode($cat['slug']))) ?>"><?= e(!empty($cat['short_label']) ? $cat['short_label'] : $cat['name']) ?></a>
             <div class="dropdown-menu">
               <a href="<?= e(baseUrl('page.php?cat=' . urlencode($cat['slug']))) ?>"><strong>Open <?= e($cat['name']) ?> Portal &rarr;</strong></a>
+              <?php if ($cat['slug'] === 'research'): ?>
+                <a href="<?= e(baseUrl('conferences.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Conferences, Workshops &amp; Events &rarr;</a>
+              <?php elseif ($cat['slug'] === 'student-life'): ?>
+                <a href="<?= e(baseUrl('placements.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Training &amp; Placement (T&amp;P) Hub &rarr;</a>
+                <a href="<?= e(baseUrl('grievance.php')) ?>" style="background:#FFFBEB;color:#92400E;font-weight:700;">Online Grievance Redressal &rarr;</a>
+              <?php endif; ?>
               <?php foreach ($pagesByCat[$cat['id']] ?? [] as $pg): ?>
                 <a href="<?= e(baseUrl('page.php?slug=' . urlencode($pg['slug']))) ?>"><?= e($pg['title']) ?></a>
               <?php endforeach; ?>
@@ -172,6 +184,12 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
             <div class="dropdown-menu">
               <?php foreach ($overflowCats as $ocat): ?>
                 <a href="<?= e(baseUrl('page.php?cat=' . urlencode($ocat['slug']))) ?>"><strong><?= e($ocat['name']) ?></strong></a>
+                <?php if ($ocat['slug'] === 'research'): ?>
+                  <a href="<?= e(baseUrl('conferences.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Conferences, Workshops &amp; Events</a>
+                <?php elseif ($ocat['slug'] === 'student-life'): ?>
+                  <a href="<?= e(baseUrl('placements.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Training &amp; Placement Hub</a>
+                  <a href="<?= e(baseUrl('grievance.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Grievance &amp; Anti-Ragging Helpdesk</a>
+                <?php endif; ?>
                 <?php foreach (array_slice($pagesByCat[$ocat['id']] ?? [], 0, 3) as $pg): ?>
                   <a href="<?= e(baseUrl('page.php?slug=' . urlencode($pg['slug']))) ?>" style="padding-left:1.25rem;font-size:0.8rem;"><?= e($pg['title']) ?></a>
                 <?php endforeach; ?>
@@ -179,7 +197,10 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
             </div>
           </li>
         <?php endif; ?>
+        <li class="nav-item"><a class="nav-link <?= ($currentScript === 'conferences.php' || $currentScript === 'conference.php') ? 'is-active' : '' ?>" href="<?= e(baseUrl('conferences.php')) ?>">Conferences</a></li>
+        <li class="nav-item"><a class="nav-link <?= $currentScript === 'placements.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('placements.php')) ?>">Placements</a></li>
         <li class="nav-item"><a class="nav-link <?= $currentScript === 'alumni.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('alumni.php')) ?>">Alumni</a></li>
+        <li class="nav-item"><a class="nav-link <?= $currentScript === 'grievance.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('grievance.php')) ?>">Grievance</a></li>
         <li class="nav-item"><a class="nav-link <?= $currentScript === 'gallery.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('gallery.php')) ?>">Gallery</a></li>
         <li class="nav-item"><a class="nav-link <?= $currentScript === 'contact.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('contact.php')) ?>">Contact Us</a></li>
       </ul>
@@ -192,19 +213,19 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
       <span class="statutory-label">Statutory &amp; Quick Access:</span>
       <a class="statutory-link" href="<?= e(baseUrl('quick-links.php')) ?>">Quick Links</a>
       <span class="statutory-sep">|</span>
+      <a class="statutory-link" href="<?= e(baseUrl('conferences.php')) ?>">Conferences &amp; Workshops</a>
+      <span class="statutory-sep">|</span>
       <a class="statutory-link" href="<?= e(baseUrl('page.php?cat=examination')) ?>">Examination Cell</a>
       <span class="statutory-sep">|</span>
       <a class="statutory-link" href="<?= e(baseUrl('alumni.php')) ?>">Alumni Network</a>
       <span class="statutory-sep">|</span>
+      <a class="statutory-link" href="<?= e(baseUrl('placements.php')) ?>">Placements</a>
+      <span class="statutory-sep">|</span>
+      <a class="statutory-link" href="<?= e(baseUrl('grievance.php')) ?>">Grievance Helpdesk</a>
+      <span class="statutory-sep">|</span>
       <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=prospectus-fee-structure')) ?>">FRA Fee Structure</a>
       <span class="statutory-sep">|</span>
       <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=rti-disclosure')) ?>">RTI Disclosure</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=about-overview')) ?>">Mandatory Disclosures</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=circulars-notices')) ?>">Circulars &amp; Notices</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=training-placement')) ?>">Placements</a>
     </div>
   </div>
 </header>

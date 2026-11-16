@@ -24,6 +24,8 @@
     <div>
       <h4 style="color:#fff;">Repositories &amp; Contact</h4>
       <p><a href="<?= e(baseUrl('quick-links.php')) ?>" style="color:#cbd5e1;">Downloadable Repository</a></p>
+      <p><a href="<?= e(baseUrl('conferences.php')) ?>" style="color:#cbd5e1;">Conferences &amp; Events</a></p>
+      <p><a href="<?= e(baseUrl('placements.php')) ?>" style="color:#cbd5e1;">Training &amp; Placements</a></p>
       <p><a href="<?= e(baseUrl('alumni.php')) ?>" style="color:#cbd5e1;">Alumni Network &amp; Jobs</a></p>
       <p><a href="<?= e(baseUrl('gallery.php')) ?>" style="color:#cbd5e1;">Picture Gallery</a></p>
       <p><a href="<?= e(baseUrl('contact.php')) ?>" style="color:#cbd5e1;">Telephone Directory</a></p>
@@ -32,7 +34,7 @@
   </div>
   <div class="container" style="border-top:1px solid #1e293b;margin-top:1.5rem;padding-top:1rem;font-size:0.8rem;display:flex;flex-wrap:wrap;justify-content:space-between;gap:0.5rem;">
     <span>&copy; <?= date('Y') ?> <?= e($settings['institution_name']) ?>. UGC NEP 2020 Public Self-Disclosure Compliant.</span>
-    <span><a href="<?= e(baseUrl('page.php?slug=rti-disclosure')) ?>" style="color:#cbd5e1;">RTI Cell</a> · <a href="<?= e(baseUrl('page.php?slug=grievance-redressal')) ?>" style="color:#cbd5e1;">Grievance Redressal</a></span>
+    <span><a href="<?= e(baseUrl('page.php?slug=rti-disclosure')) ?>" style="color:#cbd5e1;">RTI Cell</a> · <a href="<?= e(baseUrl('grievance.php')) ?>" style="color:#cbd5e1;">Grievance Redressal</a></span>
   </div>
 </footer>
 <script src="<?= e(assetUrl('assets/js/accessibility.js')) ?>"></script>

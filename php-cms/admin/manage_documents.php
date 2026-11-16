@@ -78,7 +78,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <input type="text" name="title" required placeholder="e.g. FRA Fee Structure 2026-27" style="width:100%;padding:0.5rem;">
       </label>
       <label>Category
-        <select name="category" style="width:100%;padding:0.5rem;">
+        <select name="category" data-custom-select="1" style="width:100%;padding:0.5rem;">
           <option value="Fee Structure">Fee Structure</option>
           <option value="Academic Calendar">Academic Calendar</option>
           <option value="Syllabus">Syllabus</option>

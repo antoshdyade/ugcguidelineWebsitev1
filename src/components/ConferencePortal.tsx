@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileText,
   Globe2,
@@ -14,11 +16,12 @@ import {
   Upload,
   UserCheck,
 } from 'lucide-react';
-import type { Conference, SiteSettings } from '../types/cms';
+import type { Conference, ConferenceSlide, SiteSettings } from '../types/cms';
 import { CONFERENCE_MODE_PRESETS } from '../lib/collegeFeaturesLogic';
 import { formatBytes, sortByOrder } from '../lib/cmsLogic';
 import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
 import { CaptchaWidget } from './CaptchaWidget';
+import { CmsHtmlContent } from './CmsHtmlContent';
 import { CustomSelectInput } from './CustomSelectInput';
 
 interface ConferencePortalProps {
@@ -67,11 +70,55 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
   const [regCaptchaRefresh, setRegCaptchaRefresh] = useState(0);
   const [regStatus, setRegStatus] = useState<{ ok: boolean; msg: string; code?: string } | null>(null);
   const [submittingReg, setSubmittingReg] = useState(false);
+  const [dirSlideIdx, setDirSlideIdx] = useState(0);
+  const [confSlideIdx, setConfSlideIdx] = useState(0);
+
+  const researchSlides: ConferenceSlide[] =
+    settings?.researchSliderSlides && settings.researchSliderSlides.length > 0
+      ? settings.researchSliderSlides
+      : ordered.map((c) => ({
+          id: c.id,
+          title: `${c.shortName}: ${c.title}`,
+          caption: `${c.scope} · ${c.theme || c.venue}`,
+          imageUrl: c.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+          ctaLabel: 'Explore Event Microsite',
+          ctaLink: `/conference/${c.slug}`,
+        }));
+
+  const confHeroSlides: ConferenceSlide[] = selectedConf
+    ? selectedConf.heroSlides && selectedConf.heroSlides.length > 0
+      ? selectedConf.heroSlides
+      : [
+          {
+            id: 1,
+            title: selectedConf.title,
+            caption: selectedConf.theme,
+            imageUrl: selectedConf.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+          },
+        ]
+    : [];
+
+  useEffect(() => {
+    if (researchSlides.length <= 1) return;
+    const t = window.setInterval(() => {
+      setDirSlideIdx((prev) => (prev + 1) % researchSlides.length);
+    }, 5500);
+    return () => window.clearInterval(t);
+  }, [researchSlides.length]);
+
+  useEffect(() => {
+    if (confHeroSlides.length <= 1) return;
+    const t = window.setInterval(() => {
+      setConfSlideIdx((prev) => (prev + 1) % confHeroSlides.length);
+    }, 5500);
+    return () => window.clearInterval(t);
+  }, [confHeroSlides.length]);
 
   useEffect(() => {
     setActiveSection('overview');
     setPaperStatus(null);
     setRegStatus(null);
+    setConfSlideIdx(0);
     if (selectedConf) {
       setTrackTitle(selectedConf.tracks[0]?.title || '');
       setFeeCategory(selectedConf.feeTiers[0]?.categoryLabel || 'Academician / Faculty Member');
@@ -211,21 +258,103 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
 
     return (
       <div className="max-w-[1380px] mx-auto px-4 py-8 space-y-6">
-        <div
-          className="rounded-2xl p-6 sm:p-8 text-white shadow-sm"
-          style={{
-            background: 'linear-gradient(135deg, var(--primary-color) 0%, #163C6B 65%, var(--secondary-color) 100%)',
-          }}
-        >
-          <p className="text-xs font-bold uppercase tracking-widest text-amber-300 mb-1">
-            Research, Symposia &amp; Academic Hosting
-          </p>
-          <h1 className="font-display text-2xl sm:text-4xl font-bold mb-2">
-            International &amp; National Conferences
-          </h1>
-          <p className="text-sm text-white/90 max-w-3xl leading-relaxed">
-            Dedicated conference microsites featuring Call for Papers (CFP), Technical Tracks, Keynote Speakers, Organizing Committees, Schedules, Fee Tiers, Online Manuscript Submission &amp; Delegate Registration.
-          </p>
+        {/* Research Tab Dedicated Interactive Slider */}
+        {researchSlides.length > 0 && (() => {
+          const activeDirSlide = researchSlides[dirSlideIdx % researchSlides.length];
+          return (
+            <section aria-label="Research & Conferences Highlights Slider" className="relative rounded-2xl overflow-hidden border border-stone-200 dark:border-slate-800 bg-slate-950 min-h-[300px] sm:min-h-[360px] flex items-end shadow-sm">
+              <img
+                src={activeDirSlide.imageUrl}
+                alt={activeDirSlide.title}
+                className="absolute inset-0 w-full h-full object-cover opacity-70 transition-opacity duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/50 to-slate-950/20" />
+              <div className="relative z-10 p-6 pt-14 sm:p-10 sm:pt-14 text-white w-full max-w-4xl">
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-300 mb-1.5">
+                  Research Portal · Conferences, Workshops &amp; Symposia
+                </p>
+                <h1 className="font-display text-2xl sm:text-4xl font-bold leading-tight mb-2">
+                  {activeDirSlide.title}
+                </h1>
+                {activeDirSlide.caption && (
+                  <p className="text-sm text-white/90 max-w-2xl leading-relaxed mb-4">
+                    {activeDirSlide.caption}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  {activeDirSlide.ctaLink && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(activeDirSlide.ctaLink!)}
+                      className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 text-xs font-bold hover:bg-amber-400"
+                    >
+                      {activeDirSlide.ctaLabel || 'Open Microsite'} &rarr;
+                    </button>
+                  )}
+                  <span className="text-[11px] text-white/75">
+                    National Conferences · International Conferences · Workshops · FDPs · Technical Events
+                  </span>
+                </div>
+              </div>
+              {researchSlides.length > 1 && (
+                <>
+                  <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-label="Previous research slide"
+                      onClick={() => setDirSlideIdx((prev) => (prev - 1 + researchSlides.length) % researchSlides.length)}
+                      className="p-1.5 rounded-full bg-slate-950/65 text-white border border-white/25 hover:bg-slate-950"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-[11px] font-mono-tabular px-2 py-0.5 rounded-full bg-slate-950/65 text-white/90 border border-white/20">
+                      {(dirSlideIdx % researchSlides.length) + 1}/{researchSlides.length}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Next research slide"
+                      onClick={() => setDirSlideIdx((prev) => (prev + 1) % researchSlides.length)}
+                      className="p-1.5 rounded-full bg-slate-950/65 text-white border border-white/25 hover:bg-slate-950"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="absolute bottom-4 right-6 z-10 flex items-center gap-1.5">
+                    {researchSlides.map((s, idx) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        aria-label={`Research banner slide ${idx + 1}`}
+                        onClick={() => setDirSlideIdx(idx)}
+                        className={`h-2 rounded-full transition-all ${
+                          idx === dirSlideIdx % researchSlides.length ? 'w-6 bg-amber-400' : 'w-2 bg-white/50'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </section>
+          );
+        })()}
+
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+          <div>
+            <h2 className="font-display text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">
+              National / International Conferences, Workshops &amp; Research Events
+            </h2>
+            <p className="text-xs text-stone-600 dark:text-slate-300">
+              Filter by program type or open any dedicated microsite for tracks, dates, photo committees, paper submissions, and registrations.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('/category/research')}
+            className="text-xs font-bold hover:underline self-start sm:self-auto"
+            style={{ color: 'var(--primary-color)' }}
+          >
+            Open R&amp;D Cell &amp; Funded Projects &rarr;
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -358,71 +487,122 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
         </div>
       </div>
 
-      {/* Dedicated Hero Header */}
+      {/* Dedicated Hero Header + Conference Own Interactive Slider */}
       <header className="rounded-2xl overflow-hidden border border-stone-200 dark:border-slate-800 bg-slate-950 text-white relative">
-        <img
-          src={selectedConf.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg'}
-          alt={selectedConf.title}
-          className="w-full h-64 sm:h-72 object-cover opacity-35"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/85 to-slate-900/70 p-6 sm:p-8 flex flex-col justify-between">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
-            <span className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 uppercase tracking-wider">
-              {selectedConf.scope}
-            </span>
-            <span className="px-2.5 py-1 rounded bg-white/15 text-white">{selectedConf.shortName}</span>
-            <span className="px-2.5 py-1 rounded bg-emerald-600/80 text-white">{selectedConf.mode}</span>
-          </div>
-          <div>
-            <h1 className="font-display text-2xl sm:text-4xl font-bold leading-tight max-w-4xl">
-              {selectedConf.title}
-            </h1>
-            <p className="text-sm text-amber-200 font-medium mt-2">{selectedConf.theme}</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-200">
-              <span className="inline-flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-amber-400" />
-                {selectedConf.startDate} to {selectedConf.endDate}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-amber-400" />
-                {selectedConf.venue}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Globe2 className="w-4 h-4 text-amber-400" />
-                Hosted by: {selectedConf.organizingDepartment}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setActiveSection('overview')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
-                activeSection === 'overview' ? 'bg-white text-slate-900' : 'bg-white/15 text-white hover:bg-white/25'
-              }`}
-            >
-              Program, Tracks &amp; Committee
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSection('submit')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
-                activeSection === 'submit' ? 'bg-amber-500 text-slate-950' : 'bg-white/15 text-white hover:bg-white/25'
-              }`}
-            >
-              Submit Paper / Abstract
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSection('register')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
-                activeSection === 'register' ? 'bg-emerald-500 text-slate-950' : 'bg-white/15 text-white hover:bg-white/25'
-              }`}
-            >
-              Delegate Registration
-            </button>
-          </div>
-        </div>
+        {(() => {
+          const activeHero = confHeroSlides[confSlideIdx % confHeroSlides.length];
+          return (
+            <>
+              <img
+                src={activeHero?.imageUrl || selectedConf.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg'}
+                alt={activeHero?.title || selectedConf.title}
+                className="w-full h-72 sm:h-80 object-cover opacity-45 transition-opacity duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/80 to-slate-900/55 p-6 sm:p-8 flex flex-col justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+                    <span className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 uppercase tracking-wider">
+                      {selectedConf.scope}
+                    </span>
+                    <span className="px-2.5 py-1 rounded bg-white/15 text-white">{selectedConf.shortName}</span>
+                    <span className="px-2.5 py-1 rounded bg-emerald-600/80 text-white">{selectedConf.mode}</span>
+                  </div>
+                  {confHeroSlides.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        aria-label="Previous slide"
+                        onClick={() => setConfSlideIdx((prev) => (prev - 1 + confHeroSlides.length) % confHeroSlides.length)}
+                        className="p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-[11px] font-mono text-white/80">
+                        {(confSlideIdx % confHeroSlides.length) + 1}/{confHeroSlides.length}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Next slide"
+                        onClick={() => setConfSlideIdx((prev) => (prev + 1) % confHeroSlides.length)}
+                        className="p-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h1 className="font-display text-2xl sm:text-4xl font-bold leading-tight max-w-4xl">
+                    {selectedConf.title}
+                  </h1>
+                  <p className="text-sm text-amber-200 font-medium mt-1.5">
+                    {activeHero?.caption || selectedConf.theme}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-200">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-amber-400" />
+                      {selectedConf.startDate} to {selectedConf.endDate}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-amber-400" />
+                      {selectedConf.venue}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Globe2 className="w-4 h-4 text-amber-400" />
+                      Hosted by: {selectedConf.organizingDepartment}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection('overview')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
+                        activeSection === 'overview' ? 'bg-white text-slate-900' : 'bg-white/15 text-white hover:bg-white/25'
+                      }`}
+                    >
+                      Program, Tracks &amp; Committee
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection('submit')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
+                        activeSection === 'submit' ? 'bg-amber-500 text-slate-950' : 'bg-white/15 text-white hover:bg-white/25'
+                      }`}
+                    >
+                      Submit Paper / Abstract
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection('register')}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
+                        activeSection === 'register' ? 'bg-emerald-500 text-slate-950' : 'bg-white/15 text-white hover:bg-white/25'
+                      }`}
+                    >
+                      Delegate Registration
+                    </button>
+                  </div>
+                  {confHeroSlides.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      {confHeroSlides.map((sl, idx) => (
+                        <button
+                          key={sl.id}
+                          type="button"
+                          aria-label={`Slide ${idx + 1}`}
+                          onClick={() => setConfSlideIdx(idx)}
+                          className={`h-2 rounded-full transition-all ${
+                            idx === confSlideIdx % confHeroSlides.length ? 'w-5 bg-amber-400' : 'w-2 bg-white/45'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </header>
 
       {activeSection === 'overview' && (
@@ -433,18 +613,20 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
               <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white">
                 About {selectedConf.shortName} &amp; Call for Papers
               </h2>
-              <div
-                className="cms-prose text-stone-700 dark:text-slate-200"
-                dangerouslySetInnerHTML={{ __html: selectedConf.overviewHtml }}
+              <CmsHtmlContent
+                html={selectedConf.overviewHtml}
+                className="text-stone-700 dark:text-slate-200"
+                onNavigate={onNavigate}
               />
               {selectedConf.cfpHtml && (
                 <div className="p-4 rounded-lg bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40">
                   <p className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 mb-1">
                     Call for Original Research Papers
                   </p>
-                  <div
-                    className="cms-prose text-sm text-stone-700 dark:text-slate-200"
-                    dangerouslySetInnerHTML={{ __html: selectedConf.cfpHtml }}
+                  <CmsHtmlContent
+                    html={selectedConf.cfpHtml}
+                    className="text-sm text-stone-700 dark:text-slate-200"
+                    onNavigate={onNavigate}
                   />
                 </div>
               )}

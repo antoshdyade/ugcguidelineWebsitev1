@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { formatBytes, formatCommitteeGroupLabel, sortByOrder } from '../lib/cmsLogic';
 import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
+import { CmsHtmlContent } from './CmsHtmlContent';
 import type {
   CampusEvent,
   CmsCategory,
@@ -139,9 +140,10 @@ export function HomePage({
             key={comp.id}
             className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8"
           >
-            <div
-              className="cms-prose text-stone-700 dark:text-slate-200"
-              dangerouslySetInnerHTML={{ __html: comp.contentHtml }}
+            <CmsHtmlContent
+              html={comp.contentHtml}
+              className="text-stone-700 dark:text-slate-200"
+              onNavigate={onNavigate}
             />
           </div>
         ))}
@@ -157,7 +159,7 @@ export function HomePage({
           <div className="max-w-[1380px] mx-auto px-4 flex items-center justify-between gap-2">
             <div className="flex items-center flex-1 min-w-0">
               <div
-                className="py-2 px-3 text-xs font-bold uppercase tracking-wider text-white shrink-0"
+                className="relative z-10 py-2 px-3 text-xs font-bold uppercase tracking-wider text-white shrink-0"
                 style={{ backgroundColor: 'var(--secondary-color)' }}
               >
                 {t('latestUpdates')}
@@ -175,7 +177,7 @@ export function HomePage({
                   {activeTicker.text}
                 </button>
               ) : (
-                <div className="flex-1 min-w-0 overflow-hidden py-2 pl-4 relative">
+                <div className="flex-1 min-w-0 overflow-hidden py-2 ml-3 relative">
                   <div className="ticker-track gap-10">
                     {[...ticker, ...ticker].map((item, idx) => (
                       <button

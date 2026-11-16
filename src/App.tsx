@@ -8,6 +8,8 @@ import { DepartmentMicrosite } from './components/DepartmentMicrosite';
 import { QuickLinksRepository } from './components/QuickLinksRepository';
 import { GalleryView, ContactView } from './components/GalleryAndContact';
 import { AlumniPortal } from './components/AlumniPortal';
+import { ConferencePortal } from './components/ConferencePortal';
+import { GrievancePortal, PlacementsPortal } from './components/EngineeringPortals';
 import { AdminDashboard } from './components/AdminDashboard';
 import type {
   AlumniData,
@@ -15,10 +17,12 @@ import type {
   CmsCategory,
   CmsDocument,
   CmsPage,
+  Conference,
   Department,
   GalleryAlbum,
   HeroSlide,
   LeadershipProfile,
+  PlacementsData,
   SiteSettings,
   TelephoneEntry,
   TickerItem,
@@ -36,6 +40,8 @@ interface PublicBootstrapData {
   gallery: GalleryAlbum[];
   telephoneDirectory: TelephoneEntry[];
   alumni?: AlumniData;
+  conferences?: Conference[];
+  placements?: PlacementsData;
   settings: SiteSettings;
 }
 
@@ -127,6 +133,8 @@ export default function App() {
           pages={data.pages}
           leadership={data.leadership}
           events={data.events}
+          conferences={data.conferences || []}
+          researchSliderSlides={data.settings.researchSliderSlides || []}
           onNavigate={navigate}
         />
       );
@@ -141,6 +149,8 @@ export default function App() {
           pages={data.pages}
           leadership={data.leadership}
           events={data.events}
+          conferences={data.conferences || []}
+          researchSliderSlides={data.settings.researchSliderSlides || []}
           onNavigate={navigate}
         />
       );
@@ -158,6 +168,42 @@ export default function App() {
           onNavigate={navigate}
         />
       );
+    }
+
+    if (pathname === '/conferences' || pathname.startsWith('/conference/')) {
+      const confSlug = pathname.startsWith('/conference/')
+        ? pathname.replace('/conference/', '').split('/')[0]
+        : undefined;
+      return (
+        <ConferencePortal
+          slug={confSlug}
+          conferences={data.conferences || []}
+          settings={data.settings}
+          onNavigate={navigate}
+        />
+      );
+    }
+
+    if (pathname === '/placements') {
+      return (
+        <PlacementsPortal
+          placements={
+            data.placements || {
+              summaryNote: 'Training & Placement Cell supports structured campus recruitment and internships.',
+              coordinatorName: 'Training & Placement Officer',
+              coordinatorEmail: data.settings.email,
+              coordinatorPhone: data.settings.phone,
+              stats: [],
+              stories: [],
+            }
+          }
+          settings={data.settings}
+        />
+      );
+    }
+
+    if (pathname === '/grievance') {
+      return <GrievancePortal settings={data.settings} />;
     }
 
     if (pathname === '/quick-links') {
@@ -235,13 +281,31 @@ export default function App() {
   };
 
   const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+  const cardRadiusClass =
+    data.settings.cardRadius === 'sharp'
+      ? 'theme-radius-sharp'
+      : data.settings.cardRadius === 'soft'
+        ? 'theme-radius-soft'
+        : 'theme-radius-rounded';
 
   return (
     <ThemeAccessibilityProvider
       defaultPrimary={data.settings.primaryColor}
       defaultSecondary={data.settings.secondaryColor}
     >
-      <div className="min-h-screen flex flex-col">
+      <div
+        className={`min-h-screen flex flex-col ${cardRadiusClass}`}
+        style={
+          {
+            '--font-display': data.settings.fontHeading || "'Playfair Display', Georgia, serif",
+            '--font-sans': data.settings.fontBody || "'Plus Jakarta Sans', system-ui, sans-serif",
+            fontFamily: data.settings.fontBody || "'Plus Jakarta Sans', system-ui, sans-serif",
+          } as React.CSSProperties
+        }
+      >
+        {data.settings.customCss && (
+          <style dangerouslySetInnerHTML={{ __html: data.settings.customCss }} />
+        )}
         {!isAdminRoute && (
           <PublicHeader
             settings={data.settings}

@@ -1,8 +1,9 @@
-import React from 'react';
-import { ChevronRight, Download, ExternalLink, Mail, Phone, Volume2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Calendar, ChevronLeft, ChevronRight, Download, ExternalLink, Globe2, Mail, MapPin, Phone, Volume2 } from 'lucide-react';
 import { formatCommitteeGroupLabel, sortByOrder } from '../lib/cmsLogic';
 import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
-import type { CampusEvent, CmsCategory, CmsPage, LeadershipProfile } from '../types/cms';
+import { CmsHtmlContent } from './CmsHtmlContent';
+import type { CampusEvent, CmsCategory, CmsPage, Conference, ConferenceSlide, LeadershipProfile } from '../types/cms';
 
 interface PageViewerProps {
   slug?: string;
@@ -11,6 +12,8 @@ interface PageViewerProps {
   pages: CmsPage[];
   leadership: LeadershipProfile[];
   events: CampusEvent[];
+  conferences?: Conference[];
+  researchSliderSlides?: ConferenceSlide[];
   onNavigate: (path: string) => void;
 }
 
@@ -21,9 +24,20 @@ export function PageViewer({
   pages,
   leadership,
   events,
+  conferences = [],
+  researchSliderSlides = [],
   onNavigate,
 }: PageViewerProps) {
   const { toggleSpeech, isSpeaking } = useThemeAccessibility();
+  const [researchSlideIdx, setResearchSlideIdx] = useState(0);
+
+  useEffect(() => {
+    if (researchSliderSlides.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setResearchSlideIdx((prev) => (prev + 1) % researchSliderSlides.length);
+    }, 5500);
+    return () => window.clearInterval(timer);
+  }, [researchSliderSlides.length]);
 
   const resolvedCategory = categorySlug ? categories.find((c) => c.slug === categorySlug) : undefined;
   const categoryPages = resolvedCategory
@@ -156,10 +170,148 @@ export function PageViewer({
             </button>
           </div>
 
-          <div
-            className="cms-prose text-stone-700 dark:text-slate-200"
-            dangerouslySetInnerHTML={{ __html: page.contentHtml }}
+          <CmsHtmlContent
+            html={page.contentHtml}
+            className="text-stone-700 dark:text-slate-200"
+            onNavigate={onNavigate}
           />
+
+          {/* Research Category Dedicated Slider & Live Conferences / Events / Workshops */}
+          {page.categorySlug === 'research' && (
+            <div className="mt-8 pt-6 border-t border-stone-200 dark:border-slate-800 space-y-5">
+              {researchSliderSlides.length > 0 && (() => {
+                const activeSlide = researchSliderSlides[researchSlideIdx % researchSliderSlides.length];
+                return (
+                  <div className="relative rounded-xl overflow-hidden border border-stone-200 dark:border-slate-700 bg-slate-900 min-h-[260px] flex items-end">
+                    <img
+                      src={activeSlide.imageUrl}
+                      alt={activeSlide.title}
+                      className="absolute inset-0 w-full h-full object-cover opacity-75"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/45 to-transparent" />
+                    <div className="relative z-10 p-6 text-white w-full pr-24">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300 mb-1">
+                        Research Highlights &amp; Symposia Slider
+                      </p>
+                      <h2 className="font-display text-xl sm:text-2xl font-bold mb-1">{activeSlide.title}</h2>
+                      {activeSlide.caption && (
+                        <p className="text-xs sm:text-sm text-slate-200 max-w-2xl mb-3">{activeSlide.caption}</p>
+                      )}
+                      {activeSlide.ctaLabel && activeSlide.ctaLink && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate(activeSlide.ctaLink!)}
+                          className="px-3.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-bold"
+                        >
+                          {activeSlide.ctaLabel} &rarr;
+                        </button>
+                      )}
+                    </div>
+                    {researchSliderSlides.length > 1 && (
+                      <>
+                        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            aria-label="Previous research slide"
+                            onClick={() =>
+                              setResearchSlideIdx((prev) => (prev - 1 + researchSliderSlides.length) % researchSliderSlides.length)
+                            }
+                            className="p-1.5 rounded-full bg-slate-950/65 text-white border border-white/20 hover:bg-slate-950"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Next research slide"
+                            onClick={() => setResearchSlideIdx((prev) => (prev + 1) % researchSliderSlides.length)}
+                            className="p-1.5 rounded-full bg-slate-950/65 text-white border border-white/20 hover:bg-slate-950"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="absolute bottom-3 right-4 z-10 flex gap-1.5">
+                          {researchSliderSlides.map((s, idx) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              aria-label={`Research slide ${idx + 1}`}
+                              onClick={() => setResearchSlideIdx(idx)}
+                              className={`h-2 rounded-full transition-all ${
+                                idx === researchSlideIdx % researchSliderSlides.length ? 'w-5 bg-amber-400' : 'w-2 bg-white/50'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
+                    <Globe2 className="w-5 h-5 text-amber-600" />
+                    National / International Conferences, Workshops &amp; Research Events
+                  </h2>
+                  <p className="text-xs text-stone-500 dark:text-slate-400">
+                    Admin-managed conferences, workshops, FDPs, and symposia with dedicated microsites &amp; submission portals.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/conferences')}
+                  className="px-3.5 py-2 rounded-lg text-xs font-bold text-white"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  Open Full Research Conferences &amp; Events Portal &rarr;
+                </button>
+              </div>
+
+              {conferences.filter((c) => c.isPublished).length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {sortByOrder(conferences.filter((c) => c.isPublished)).map((conf) => (
+                    <div
+                      key={conf.id}
+                      className="rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 overflow-hidden flex flex-col justify-between"
+                    >
+                      <div className="p-4 space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold uppercase">
+                          <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950">{conf.scope}</span>
+                          <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-stone-800 dark:text-slate-200">
+                            {conf.mode}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                          {conf.shortName}: {conf.title}
+                        </h3>
+                        <p className="text-xs text-stone-600 dark:text-slate-300 line-clamp-2">{conf.theme}</p>
+                        <div className="flex flex-wrap gap-3 text-[11px] text-stone-500 dark:text-slate-400 pt-1">
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-amber-600" /> {conf.startDate}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-amber-600" /> {conf.venue}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="px-4 py-2.5 border-t border-stone-200/70 dark:border-slate-700 flex items-center justify-between">
+                        <span className="text-[11px] text-stone-500">{conf.tracks.length} Tracks</span>
+                        <button
+                          type="button"
+                          onClick={() => onNavigate(`/conference/${conf.slug}`)}
+                          className="text-xs font-bold hover:underline"
+                          style={{ color: 'var(--primary-color)' }}
+                        >
+                          Open Microsite &amp; Submit Paper &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Attached Statutory PDF or External Link */}
           {page.attachedPdfUrl && (() => {

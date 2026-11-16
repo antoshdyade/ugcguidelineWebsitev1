@@ -49,6 +49,7 @@
     copy: svgIcon('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', 13),
     trash: svgIcon('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>', 13),
     userCard: svgIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><rect x="15" y="5" width="7" height="10" rx="1.5"/>'),
+    slider: svgIcon('<rect width="18" height="14" x="3" y="5" rx="2"/><path d="m7 15 3-3 2 2 3-3 2 2"/><circle cx="9" cy="21" r="1"/><circle cx="12" cy="21" r="1"/><circle cx="15" cy="21" r="1"/>'),
   };
 
   var TEXT_SWATCHES = [
@@ -118,6 +119,61 @@
       return '<div class="cms-block cms-grid-2" data-block="photo-profile-card">' + cardInner + cardInner + '</div><p><br></p>';
     }
     return '<div class="cms-block" data-block="photo-profile-card">' + cardInner + '</div><p><br></p>';
+  }
+
+  function safeSliderUrl(url, fallback) {
+    var val = String(url || '').trim();
+    if (!val || /^(javascript|data:text|vbscript):/i.test(val)) {
+      return fallback || '';
+    }
+    return val;
+  }
+
+  function buildCustomSliderHtml(slides, heightPx, autoplaySec) {
+    var list = (Array.isArray(slides) && slides.length) ? slides : [
+      {
+        title: 'Academic Research & Innovation Showcase',
+        caption: 'Add custom conference banners, department lab photographs, and event highlights.',
+        imageUrl: resolveUrl('assets/images/hero_campus.jpg'),
+        ctaLabel: 'Explore Programs',
+        ctaLink: 'conferences.php',
+      },
+      {
+        title: 'NAAC A+ Accredited Autonomous Campus',
+        caption: 'Upload 16:9 widescreen photography and edit slide captions directly inside the composer.',
+        imageUrl: resolveUrl('assets/images/hero_lab.jpg'),
+        ctaLabel: '',
+        ctaLink: '',
+      },
+    ];
+    var h = Math.max(240, Math.min(620, parseInt(heightPx, 10) || 360));
+    var ap = Math.max(0, Math.min(30, isNaN(parseInt(autoplaySec, 10)) ? 5 : parseInt(autoplaySec, 10)));
+    var slidesMarkup = list.map(function (sl, idx) {
+      var img = safeSliderUrl(sl.imageUrl, resolveUrl('assets/images/hero_campus.jpg'));
+      var title = escapeProfileHtml(sl.title || ('Slide ' + (idx + 1)));
+      var caption = sl.caption && String(sl.caption).trim() ? '<p class="cms-slide-caption">' + escapeProfileHtml(String(sl.caption).trim()) + '</p>' : '';
+      var ctaHref = safeSliderUrl(sl.ctaLink, '');
+      var ctaHtml = (sl.ctaLabel && String(sl.ctaLabel).trim() && ctaHref)
+        ? '<p class="cms-slide-cta-row"><a class="cms-btn cms-btn-amber cms-slide-cta" href="' + escapeProfileHtml(ctaHref) + '">' + escapeProfileHtml(String(sl.ctaLabel).trim()) + '</a></p>'
+        : '';
+      return '<div class="cms-slide' + (idx === 0 ? ' is-active' : '') + '" data-slide-index="' + idx + '">' +
+        '<img src="' + escapeProfileHtml(img) + '" alt="' + title + '">' +
+        '<div class="cms-slide-overlay">' +
+        '<h3 class="cms-slide-title">' + title + '</h3>' +
+        caption + ctaHtml +
+        '</div></div>';
+    }).join('');
+    var controlsMarkup = list.length > 1
+      ? '<button type="button" class="cms-slider-prev" aria-label="Previous slide">&#8249;</button>' +
+        '<button type="button" class="cms-slider-next" aria-label="Next slide">&#8250;</button>' +
+        '<div class="cms-slider-dots">' + list.map(function (_, idx) {
+          return '<button type="button" class="cms-slider-dot' + (idx === 0 ? ' is-active' : '') + '" data-slide-to="' + idx + '" aria-label="Go to slide ' + (idx + 1) + '"></button>';
+        }).join('') + '</div>'
+      : '';
+    return '<div class="cms-block cms-slider" data-block="custom-slider" data-autoplay="' + ap + '" data-height="' + h + '">' +
+      '<div class="cms-slider-viewport" style="height:' + h + 'px;">' + slidesMarkup + '</div>' +
+      controlsMarkup +
+      '</div><p><br></p>';
   }
 
   var BLOCKS = [
@@ -214,6 +270,13 @@
       label: 'Button Action Strip',
       badge: 'CTA Buttons',
       html: '<div class="cms-block cms-btn-row" data-block="btn-row"><a href="quick-links.php" class="cms-btn cms-btn-primary">Download Circular (PDF)</a><a href="contact.php" class="cms-btn cms-btn-outline">Contact Helpdesk</a></div><p><br></p>',
+    },
+    {
+      id: 'custom-slider',
+      category: 'Interactive',
+      label: 'Customizable Image Slider',
+      badge: 'Multi-Slide Gallery + Captions',
+      html: buildCustomSliderHtml([], 360, 5),
     },
   ];
 
@@ -454,9 +517,25 @@
       }
 
       var right = document.createElement('div');
-      right.style.cssText = 'display:flex;align-items:center;gap:4px;';
+      right.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;';
       var targetEl = selectedBlockEl || activeTableEl;
       if (targetEl) {
+        if (selectedBlockEl && selectedBlockEl.getAttribute('data-block') === 'custom-slider' && typeof openSliderBuilder === 'function') {
+          var editSliderBtn = makeToolBtn(ICONS.slider + ' Edit Slides', 'Edit Selected Slider Images & Captions', true);
+          editSliderBtn.style.cssText = 'background:#0F294A;color:#fff;border-color:#0F294A;padding:0 8px;';
+          editSliderBtn.addEventListener('click', function () {
+            openSliderBuilder(selectedBlockEl);
+          });
+          right.appendChild(editSliderBtn);
+        }
+        if (selectedBlockEl && selectedBlockEl.getAttribute('data-block') === 'photo-profile-card' && typeof openProfileBuilder === 'function') {
+          var editCardBtn = makeToolBtn(ICONS.userCard + ' Edit Card', 'Edit Selected Profile Card', true);
+          editCardBtn.style.cssText = 'background:#0F294A;color:#fff;border-color:#0F294A;padding:0 8px;';
+          editCardBtn.addEventListener('click', function () {
+            openProfileBuilder(selectedBlockEl);
+          });
+          right.appendChild(editCardBtn);
+        }
         var upBtn = makeToolBtn(ICONS.up + ' Up', 'Move Block Up', true);
         upBtn.addEventListener('click', function () {
           if (targetEl.previousElementSibling) {
@@ -850,14 +929,35 @@
     imgLabel.appendChild(imgInput);
     toolbar.appendChild(imgLabel);
 
-    // + Profile Card (Statutory Body / Faculty Photo Profile Template Builder)
-    var profileCardBtn = makeToolBtn(ICONS.userCard + ' <span>+ Profile Card</span>', 'Insert Statutory / Faculty Photo Profile Card', true);
-    profileCardBtn.addEventListener('click', function () {
+    // + Profile Card (Statutory Body / Faculty Photo Profile Template Builder + In-Place Editor)
+    function openProfileBuilder(existingBlockEl) {
       if (isHtmlMode) return;
-      if (activePopover === 'profile_card') { popoverBar.style.display = 'none'; activePopover = null; return; }
+      if (!existingBlockEl && activePopover === 'profile_card') {
+        popoverBar.style.display = 'none';
+        activePopover = null;
+        return;
+      }
       activePopover = 'profile_card';
       popoverBar.innerHTML = '';
       popoverBar.style.display = 'flex';
+
+      var existingCard = existingBlockEl ? existingBlockEl.querySelector('.cms-photo-profile-card') : null;
+      var defRole = existingCard && existingCard.querySelector('.cms-profile-role') ? existingCard.querySelector('.cms-profile-role').textContent : 'Statutory Officer / Faculty Profile';
+      var defName = existingCard && existingCard.querySelector('h4') ? existingCard.querySelector('h4').textContent : 'Dr. Name Surname';
+      var defDesig = existingCard && existingCard.querySelector('.cms-photo-profile-desig') ? existingCard.querySelector('.cms-photo-profile-desig').textContent : 'Professor & HoD (Ph.D.)';
+      var defDept = existingCard && existingCard.querySelector('.cms-photo-profile-dept') ? existingCard.querySelector('.cms-photo-profile-dept').textContent : 'Academic Council / Computer Science & Engg.';
+      var defBio = existingCard && existingCard.querySelector('.cms-photo-profile-bio') ? existingCard.querySelector('.cms-photo-profile-bio').textContent : '15+ years of teaching, autonomous examination & sponsored research.';
+      var defPhoto = existingCard && existingCard.querySelector('img') ? existingCard.querySelector('img').getAttribute('src') : resolveUrl('assets/images/leadership_principal.jpg');
+      var defEmail = 'faculty@coe.sveri.ac.in';
+      var defPhone = '+91-02186-216063';
+      if (existingCard) {
+        var spans = existingCard.querySelectorAll('.cms-photo-profile-meta span');
+        spans.forEach(function (sp) {
+          var tx = sp.textContent || '';
+          if (tx.indexOf('Email:') !== -1) defEmail = tx.replace(/^.*Email:\s*/i, '').trim();
+          if (tx.indexOf('Phone:') !== -1) defPhone = tx.replace(/^.*Phone:\s*/i, '').trim();
+        });
+      }
 
       var wrap = document.createElement('div');
       wrap.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:8px;';
@@ -865,7 +965,7 @@
       var hdr = document.createElement('div');
       hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
       var hdrTitle = document.createElement('strong');
-      hdrTitle.textContent = 'Statutory / Faculty Photo Profile Card Template';
+      hdrTitle.textContent = existingBlockEl ? 'Edit Photo Profile Card' : 'Statutory / Faculty Photo Profile Card Template';
       var hdrSub = document.createElement('span');
       hdrSub.style.cssText = 'font-size:11px;color:#57534E;';
       hdrSub.textContent = 'Displays cropped 1:1 photo beside designation & contact details';
@@ -885,18 +985,21 @@
         return i;
       }
 
-      var roleInp = mkInput('Role / Body (e.g., Statutory Officer)', 'Statutory Officer / Faculty Profile');
-      var nameInp = mkInput('Full Name', 'Dr. Name Surname');
-      var desigInp = mkInput('Designation & Qualification', 'Professor & HoD (Ph.D.)');
-      var deptInp = mkInput('Department / Committee', 'Academic Council / Computer Science & Engg.');
-      var emailInp = mkInput('Email', 'faculty@coe.sveri.ac.in');
-      var phoneInp = mkInput('Phone', '+91-02186-216063');
-      var bioInp = mkInput('Short Bio / Experience', '15+ years of teaching, autonomous examination & sponsored research.');
-      var photoInp = mkInput('Photo URL (or upload below)', resolveUrl('assets/images/leadership_principal.jpg'));
+      var roleInp = mkInput('Role / Body (e.g., Statutory Officer)', defRole);
+      var nameInp = mkInput('Full Name', defName);
+      var desigInp = mkInput('Designation & Qualification', defDesig);
+      var deptInp = mkInput('Department / Committee', defDept);
+      var emailInp = mkInput('Email', defEmail);
+      var phoneInp = mkInput('Phone', defPhone);
+      var bioInp = mkInput('Short Bio / Experience', defBio);
+      var photoInp = mkInput('Photo URL (or upload below)', defPhoto);
 
       var layoutSel = document.createElement('select');
       layoutSel.style.cssText = 'padding:5px 8px;border:1px solid #D6D3D1;border-radius:6px;background:#fff;font-size:12px;';
       layoutSel.innerHTML = '<option value="1">Single Profile Card (1-Column)</option><option value="2">Two-Column Profile Grid</option>';
+      if (existingBlockEl && existingBlockEl.classList.contains('cms-grid-2')) {
+        layoutSel.value = '2';
+      }
 
       grid.appendChild(roleInp);
       grid.appendChild(nameInp);
@@ -967,10 +1070,10 @@
 
       var rightBtns = document.createElement('div');
       rightBtns.style.cssText = 'display:flex;align-items:center;gap:6px;';
-      var insertPCBtn = makeToolBtn('Insert Profile Card', 'Insert Profile Card', true);
+      var insertPCBtn = makeToolBtn(existingBlockEl ? 'Update Profile Card' : 'Insert Profile Card', 'Apply Profile Card', true);
       insertPCBtn.style.cssText = 'background:#0F294A;color:#fff;border-color:#0F294A;padding:0 12px;';
       insertPCBtn.addEventListener('click', function () {
-        insertHtmlAtFocus(buildPhotoProfileCardHtml({
+        var markup = buildPhotoProfileCardHtml({
           roleBadge: roleInp.value,
           name: nameInp.value,
           designation: desigInp.value,
@@ -980,7 +1083,19 @@
           bio: bioInp.value,
           photoUrl: photoInp.value,
           columns: layoutSel.value === '2' ? 2 : 1,
-        }));
+        });
+        if (existingBlockEl && existingBlockEl.parentNode) {
+          var tmp = document.createElement('div');
+          tmp.innerHTML = markup;
+          var newNode = tmp.querySelector('[data-block="photo-profile-card"]');
+          if (newNode) {
+            existingBlockEl.parentNode.replaceChild(newNode, existingBlockEl);
+            syncToTextarea();
+            inspectContext(newNode);
+          }
+        } else {
+          insertHtmlAtFocus(markup);
+        }
         popoverBar.style.display = 'none';
         activePopover = null;
       });
@@ -993,8 +1108,243 @@
       actions.appendChild(rightBtns);
       wrap.appendChild(actions);
       popoverBar.appendChild(wrap);
-    });
+    }
+
+    var profileCardBtn = makeToolBtn(ICONS.userCard + ' <span>+ Profile Card</span>', 'Insert Statutory / Faculty Photo Profile Card', true);
+    profileCardBtn.addEventListener('click', function () { openProfileBuilder(null); });
     toolbar.appendChild(profileCardBtn);
+
+    // + Image Slider (Customizable Multi-Slide Carousel Builder + In-Place Editor)
+    function openSliderBuilder(existingSliderEl) {
+      if (isHtmlMode) return;
+      if (!existingSliderEl && activePopover === 'custom_slider') {
+        popoverBar.style.display = 'none';
+        activePopover = null;
+        return;
+      }
+      activePopover = 'custom_slider';
+      popoverBar.innerHTML = '';
+      popoverBar.style.display = 'flex';
+
+      var draftSlides = [];
+      var initHeight = 360;
+      var initAutoplay = 5;
+      if (existingSliderEl) {
+        initHeight = parseInt(existingSliderEl.getAttribute('data-height') || '360', 10) || 360;
+        initAutoplay = parseInt(existingSliderEl.getAttribute('data-autoplay') || '5', 10);
+        if (isNaN(initAutoplay)) initAutoplay = 5;
+        existingSliderEl.querySelectorAll('.cms-slide').forEach(function (slEl) {
+          var imgEl = slEl.querySelector('img');
+          var tEl = slEl.querySelector('.cms-slide-title');
+          var cEl = slEl.querySelector('.cms-slide-caption');
+          var ctaEl = slEl.querySelector('.cms-slide-cta');
+          draftSlides.push({
+            title: tEl ? tEl.textContent : '',
+            caption: cEl ? cEl.textContent : '',
+            imageUrl: imgEl ? imgEl.getAttribute('src') : resolveUrl('assets/images/hero_campus.jpg'),
+            ctaLabel: ctaEl ? ctaEl.textContent : '',
+            ctaLink: ctaEl ? (ctaEl.getAttribute('href') || '') : '',
+          });
+        });
+      }
+      if (!draftSlides.length) {
+        draftSlides = [
+          {
+            title: 'Research & Innovation Showcase',
+            caption: 'International conferences, funded laboratories, and industry-sponsored R&D.',
+            imageUrl: resolveUrl('assets/images/hero_campus.jpg'),
+            ctaLabel: 'Explore Conferences',
+            ctaLink: 'conferences.php',
+          },
+          {
+            title: 'Modern Laboratories & Campus Facilities',
+            caption: 'Upload 16:9 slide banners directly with automatic aspect-ratio cropping.',
+            imageUrl: resolveUrl('assets/images/hero_lab.jpg'),
+            ctaLabel: '',
+            ctaLink: '',
+          },
+        ];
+      }
+
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'width:100%;display:flex;flex-direction:column;gap:8px;';
+
+      var hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;';
+      var hdrLeft = document.createElement('div');
+      hdrLeft.innerHTML = '<strong>' + (existingSliderEl ? 'Edit Customizable Image Slider' : 'Customizable Image Slider Builder') + '</strong>' +
+        ' <span style="font-size:11px;color:#57534E;">Add slides, captions, CTA buttons &amp; 16:9 photos</span>';
+      var cfgRow = document.createElement('div');
+      cfgRow.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:11px;';
+      var hInp = document.createElement('input');
+      hInp.type = 'number'; hInp.min = '240'; hInp.max = '620'; hInp.value = String(initHeight);
+      hInp.style.cssText = 'width:68px;padding:3px 6px;border:1px solid #D6D3D1;border-radius:6px;background:#fff;';
+      var apInp = document.createElement('input');
+      apInp.type = 'number'; apInp.min = '0'; apInp.max = '30'; apInp.value = String(initAutoplay);
+      apInp.style.cssText = 'width:58px;padding:3px 6px;border:1px solid #D6D3D1;border-radius:6px;background:#fff;';
+      cfgRow.appendChild(document.createTextNode('Height (px):'));
+      cfgRow.appendChild(hInp);
+      cfgRow.appendChild(document.createTextNode('Autoplay (s):'));
+      cfgRow.appendChild(apInp);
+      hdr.appendChild(hdrLeft);
+      hdr.appendChild(cfgRow);
+      wrap.appendChild(hdr);
+
+      var slidesBox = document.createElement('div');
+      slidesBox.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;';
+
+      function uploadSlideImage(targetFile, targetUrlInput) {
+        var policy = window.SVCOER_UPLOAD_POLICY || {};
+        var maxPhotoMb = parseFloat(policy.maxPhotoMb) || 2;
+        if (targetFile.size > Math.round(maxPhotoMb * 1024 * 1024)) {
+          showNotice('Slide image exceeds ' + maxPhotoMb + ' MB upload limit.', true);
+          return;
+        }
+        var fd = new FormData();
+        fd.append('csrf_token', csrf);
+        fd.append('file', targetFile);
+        var uploadUrl = textarea.getAttribute('data-upload-url') || resolveUrl('admin/upload_handler.php');
+        fetch(uploadUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data && data.ok && data.file_url) {
+              targetUrlInput.value = resolveUrl(data.file_url);
+              targetUrlInput.dispatchEvent(new Event('input'));
+              showNotice('16:9 slide photo uploaded: ' + data.file_url, false);
+            } else {
+              showNotice((data && data.error) || 'Slide upload failed.', true);
+            }
+          })
+          .catch(function () { showNotice('Slide upload failed.', true); });
+      }
+
+      function renderSlideRows() {
+        slidesBox.innerHTML = '';
+        draftSlides.forEach(function (sl, idx) {
+          var card = document.createElement('div');
+          card.style.cssText = 'background:#fff;border:1px solid #E7E5E4;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;';
+
+          var top = document.createElement('div');
+          top.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+          top.innerHTML = '<strong style="font-size:11.5px;color:#0F294A;">Slide #' + (idx + 1) + '</strong>';
+          var rmBtn = makeToolBtn('Remove', 'Remove Slide', true);
+          rmBtn.style.cssText = 'color:#B91C1C;height:22px;font-size:11px;padding:0 8px;';
+          rmBtn.disabled = draftSlides.length <= 1;
+          rmBtn.addEventListener('click', function () {
+            if (draftSlides.length > 1) {
+              draftSlides.splice(idx, 1);
+              renderSlideRows();
+            }
+          });
+          top.appendChild(rmBtn);
+          card.appendChild(top);
+
+          var rowGrid = document.createElement('div');
+          rowGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:6px;';
+          function sInp(ph, key) {
+            var inp = document.createElement('input');
+            inp.type = 'text';
+            inp.placeholder = ph;
+            inp.value = sl[key] || '';
+            inp.style.cssText = 'padding:4px 7px;border:1px solid #D6D3D1;border-radius:6px;font-size:12px;';
+            inp.addEventListener('input', function () { sl[key] = inp.value; });
+            return inp;
+          }
+          var tInp = sInp('Slide Title', 'title');
+          var cInp = sInp('Caption / Subtitle', 'caption');
+          var uInp = sInp('Image URL or upload', 'imageUrl');
+          var clInp = sInp('Button Label (optional)', 'ctaLabel');
+          var chInp = sInp('Button Link (optional)', 'ctaLink');
+
+          var upLbl = document.createElement('label');
+          upLbl.className = 'rte-tool-btn is-outlined';
+          upLbl.style.cssText = 'cursor:pointer;justify-content:center;font-size:11px;';
+          upLbl.innerHTML = ICONS.image + ' <span>Upload 16:9 Photo</span>';
+          var upFile = document.createElement('input');
+          upFile.type = 'file';
+          upFile.accept = 'image/jpeg,image/png,image/webp';
+          upFile.style.display = 'none';
+          upFile.addEventListener('change', function () {
+            var file = upFile.files && upFile.files[0];
+            if (!file) return;
+            var policy = window.SVCOER_UPLOAD_POLICY || {};
+            var maxPhotoMb = parseFloat(policy.maxPhotoMb) || 2;
+            if (typeof window.svcoerOpenCropModal === 'function') {
+              window.svcoerOpenCropModal(
+                file,
+                { aspectRatio: '16:9', maxPhotoMb: maxPhotoMb },
+                function (croppedFile) { uploadSlideImage(croppedFile, uInp); upFile.value = ''; },
+                function () { upFile.value = ''; }
+              );
+            } else {
+              uploadSlideImage(file, uInp);
+              upFile.value = '';
+            }
+          });
+          upLbl.appendChild(upFile);
+
+          rowGrid.appendChild(tInp);
+          rowGrid.appendChild(cInp);
+          rowGrid.appendChild(uInp);
+          rowGrid.appendChild(clInp);
+          rowGrid.appendChild(chInp);
+          rowGrid.appendChild(upLbl);
+          card.appendChild(rowGrid);
+          slidesBox.appendChild(card);
+        });
+      }
+      renderSlideRows();
+      wrap.appendChild(slidesBox);
+
+      var foot = document.createElement('div');
+      foot.style.cssText = 'display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;';
+      var addSlideBtn = makeToolBtn('+ Add Another Slide', 'Add Slide', true);
+      addSlideBtn.addEventListener('click', function () {
+        draftSlides.push({
+          title: 'Slide ' + (draftSlides.length + 1),
+          caption: 'Custom event, lab, or campus highlight.',
+          imageUrl: resolveUrl('assets/images/hero_campus.jpg'),
+          ctaLabel: '',
+          ctaLink: '',
+        });
+        renderSlideRows();
+      });
+
+      var rightSlBtns = document.createElement('div');
+      rightSlBtns.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      var applySliderBtn = makeToolBtn(existingSliderEl ? 'Update Slider Block' : 'Insert Image Slider', 'Insert Image Slider', true);
+      applySliderBtn.style.cssText = 'background:#0F294A;color:#fff;border-color:#0F294A;padding:0 12px;';
+      applySliderBtn.addEventListener('click', function () {
+        var markup = buildCustomSliderHtml(draftSlides, hInp.value, apInp.value);
+        if (existingSliderEl && existingSliderEl.parentNode) {
+          var tmp = document.createElement('div');
+          tmp.innerHTML = markup;
+          var newNode = tmp.querySelector('[data-block="custom-slider"]');
+          if (newNode) {
+            existingSliderEl.parentNode.replaceChild(newNode, existingSliderEl);
+            syncToTextarea();
+            inspectContext(newNode);
+          }
+        } else {
+          insertHtmlAtFocus(markup);
+        }
+        popoverBar.style.display = 'none';
+        activePopover = null;
+      });
+      var closeSlBtn = makeToolBtn('Close', 'Close', true);
+      closeSlBtn.addEventListener('click', function () { popoverBar.style.display = 'none'; activePopover = null; });
+      rightSlBtns.appendChild(applySliderBtn);
+      rightSlBtns.appendChild(closeSlBtn);
+
+      foot.appendChild(addSlideBtn);
+      foot.appendChild(rightSlBtns);
+      wrap.appendChild(foot);
+      popoverBar.appendChild(wrap);
+    }
+
+    var sliderBuilderBtn = makeToolBtn(ICONS.slider + ' <span>+ Image Slider</span>', 'Insert Customizable Multi-Slide Image Slider', true);
+    sliderBuilderBtn.addEventListener('click', function () { openSliderBuilder(null); });
+    toolbar.appendChild(sliderBuilderBtn);
 
     // Mode Switching (Visual Word Editor <-> HTML & CSS Source)
     function setMode(nextMode) {
@@ -1106,11 +1456,86 @@
     }
   }
 
+  function enhanceCustomSelects() {
+    document.querySelectorAll('select[data-custom-select="1"]').forEach(function (sel) {
+      if (sel.dataset.customSelectMounted === '1') return;
+      sel.dataset.customSelectMounted = '1';
+
+      var customOpt = document.createElement('option');
+      customOpt.value = '__SVCOER_CUSTOM__';
+      customOpt.textContent = '+ Other / Add Custom Entry...';
+      sel.appendChild(customOpt);
+
+      var holder = document.createElement('div');
+      holder.style.cssText = 'display:none;margin-top:6px;gap:6px;align-items:center;';
+      var txtInp = document.createElement('input');
+      txtInp.type = 'text';
+      txtInp.placeholder = 'Enter custom value...';
+      txtInp.className = 'form-input';
+      txtInp.style.cssText = 'flex:1;padding:6px 9px;font-size:12.5px;';
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'btn-outline btn-sm';
+      addBtn.textContent = 'Apply';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'btn-outline btn-sm';
+      cancelBtn.textContent = 'Cancel';
+
+      holder.appendChild(txtInp);
+      holder.appendChild(addBtn);
+      holder.appendChild(cancelBtn);
+      sel.parentNode.insertBefore(holder, sel.nextSibling);
+
+      var prevVal = sel.value;
+      sel.addEventListener('change', function () {
+        if (sel.value === '__SVCOER_CUSTOM__') {
+          holder.style.display = 'flex';
+          txtInp.value = '';
+          txtInp.focus();
+        } else {
+          prevVal = sel.value;
+          holder.style.display = 'none';
+        }
+      });
+
+      function applyCustom() {
+        var v = txtInp.value.trim();
+        if (!v) return;
+        var found = Array.prototype.find.call(sel.options, function (o) { return o.value === v; });
+        if (!found) {
+          var newOpt = document.createElement('option');
+          newOpt.value = v;
+          newOpt.textContent = v + ' (Custom)';
+          sel.insertBefore(newOpt, customOpt);
+        }
+        sel.value = v;
+        prevVal = v;
+        holder.style.display = 'none';
+        sel.dispatchEvent(new Event('change'));
+      }
+
+      addBtn.addEventListener('click', applyCustom);
+      txtInp.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          applyCustom();
+        }
+      });
+      cancelBtn.addEventListener('click', function () {
+        holder.style.display = 'none';
+        sel.value = prevVal && prevVal !== '__SVCOER_CUSTOM__' ? prevVal : (sel.options[0] ? sel.options[0].value : '');
+      });
+    });
+  }
+
   function initAllEditors() {
     document.querySelectorAll('textarea.rich-editor').forEach(mountEditor);
+    enhanceCustomSelects();
   }
 
   window.svcoerMountRichEditors = initAllEditors;
+  window.svcoerEnhanceCustomSelects = enhanceCustomSelects;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initAllEditors);

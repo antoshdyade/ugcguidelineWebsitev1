@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { CmsDatabase } from '../types/cms';
 import { CURRENT_SCHEMA_VERSION } from '../lib/collegeFeaturesLogic';
-import { buildPhotoProfileCardHtml, buildSinglePhotoProfileCardInnerHtml } from '../lib/editorBlocks';
+import { buildCustomSliderHtml, buildPhotoProfileCardHtml, buildSinglePhotoProfileCardInnerHtml } from '../lib/editorBlocks';
 
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -859,6 +859,38 @@ export function createSeedDatabase(): CmsDatabase {
         sortOrder: 3,
         updatedAt: '2026-08-29',
         updatedBy: 'Content Editor',
+      },
+      {
+        id: 504,
+        categorySlug: 'research',
+        slug: 'conferences-workshops-events',
+        title: 'National & International Conferences, Workshops & Symposia',
+        subtitle: 'UGC Section 5(e) · Dedicated Microsites, Call for Papers, Keynotes & Research Events',
+        contentHtml: `${buildCustomSliderHtml([
+          {
+            id: 'res-s1',
+            imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+            title: 'ICAEST-2026: International Conference on Smart Technology',
+            caption: 'Annual Flagship International Conference with IEEE/Springer proceedings and hybrid tracks.',
+            ctaLabel: 'Open ICAEST-2026 Microsite',
+            ctaLink: '/conference/icaest-2026',
+          },
+          {
+            id: 'res-s2',
+            imageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+            title: 'National Workshops, FDPs & Edge AI Symposia',
+            caption: 'Hands-on research workshops, STTPs, and patent filing clinics hosted year-round.',
+            ctaLabel: 'Browse All Programs',
+            ctaLink: '/conferences',
+          },
+        ])}
+          <h2>Academic Conferences, Workshops &amp; Technical Events</h2>
+          <p>SVCOER regularly hosts National &amp; International Conferences, AICTE/ISTE Faculty Development Programs (FDPs), Research Workshops, and Technical Symposia. Use the interactive portals below to inspect tracks, schedules, organizing committee profiles, or submit manuscripts online.</p>
+        `,
+        isPublished: true,
+        sortOrder: 4,
+        updatedAt: '2026-11-12',
+        updatedBy: 'Super Admin',
       },
 
       // 5(f) Student Life & Cells
@@ -2334,6 +2366,32 @@ export function createSeedDatabase(): CmsDatabase {
         categoriesHeading: 'Statutory Self-Disclosure & Autonomous Portals',
       },
       customHomeComponents: [],
+      researchSliderSlides: [
+        {
+          id: 1,
+          title: 'ICAEST-2026: 3rd International Conference on Engineering & Smart Technology',
+          caption: 'Hybrid Flagship Conference · 18–19 Dec 2026 · Call for Papers Open',
+          imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+          ctaLabel: 'Explore ICAEST-2026',
+          ctaLink: '/conference/icaest-2026',
+        },
+        {
+          id: 2,
+          title: 'NCEI-2026: National Conference on NEP 2020 & Sustainable Innovations',
+          caption: 'Indigenous Engineering Solutions, IDEA Lab Prototypes & ISBN Proceedings',
+          imageUrl: '/src/assets/images/campus_convocation_1794512597749.jpg',
+          ctaLabel: 'Explore NCEI-2026',
+          ctaLink: '/conference/ncei-2026',
+        },
+        {
+          id: 3,
+          title: 'Hands-On Research Workshops, FDPs & Patent Clinics',
+          caption: 'Department-hosted technical workshops in Edge AI, EV Powertrains & VLSI Design',
+          imageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+          ctaLabel: 'View Research Workshops',
+          ctaLink: '/conference/ai-edge-workshop-2026',
+        },
+      ],
     },
     alumni: createSeedAlumniData(),
     conferences: [
@@ -2353,6 +2411,26 @@ export function createSeedDatabase(): CmsDatabase {
         contactEmail: 'icaest2026@coe.sveri.ac.in',
         contactPhone: '+91-02186-216063',
         bannerUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+        heroSlides: [
+          {
+            id: 1,
+            title: '3rd International Conference on Advances in Engineering & Smart Technology',
+            caption: 'AI-Driven Cyber-Physical Systems, Sustainable Civil Infrastructure & Clean Energy',
+            imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+          },
+          {
+            id: 2,
+            title: 'Keynote Talks by IIT Bombay & TU Munich Researchers',
+            caption: 'Double-blind peer review, 4 technical tracks, and Scopus/IEEE proceedings support.',
+            imageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+          },
+          {
+            id: 3,
+            title: 'Hybrid Research Presentation & Industrial Networking',
+            caption: 'Present in-person at Pandharpur or virtually via dedicated track rooms.',
+            imageUrl: '/src/assets/images/campus_convocation_1794512597749.jpg',
+          },
+        ],
         brochureUrl: '/page/research-development-cell',
         templateUrl: '/quick-links',
         overviewHtml: `<p><strong>ICAEST-2026</strong> brings together international researchers, industry architects, and doctoral scholars to present peer-reviewed innovations across Artificial Intelligence, Edge Robotics, EV Powertrains, Microgrid Automation, and Resilient Smart Cities.</p><p>Selected peer-reviewed papers presented at the conference will be submitted for indexing and extended journal special issues.</p>`,
@@ -2514,6 +2592,20 @@ export function createSeedDatabase(): CmsDatabase {
         contactEmail: 'ncei2026@coe.sveri.ac.in',
         contactPhone: '+91-02186-216063',
         bannerUrl: '/src/assets/images/campus_convocation_1794512597749.jpg',
+        heroSlides: [
+          {
+            id: 1,
+            title: 'National Conference on NEP 2020 & Sustainable Rural Engineering Innovations',
+            caption: 'Multidisciplinary Outcome-Based Education & Indigenous Engineering Solutions',
+            imageUrl: '/src/assets/images/campus_convocation_1794512597749.jpg',
+          },
+          {
+            id: 2,
+            title: 'IDEA Lab Working Prototype & Rural Tech Showcase',
+            caption: 'Submit hardware demos, NEP pedagogy case studies, and student research papers.',
+            imageUrl: '/src/assets/images/hero_library_atrium_1794512596890.jpg',
+          },
+        ],
         brochureUrl: '/page/iqac',
         templateUrl: '/quick-links',
         overviewHtml: `<p><strong>NCEI-2026</strong> provides a national forum for engineering educators, rural entrepreneurs, and AICTE IDEA Lab innovators to share best practices in NEP 2020 multidisciplinary curricula and appropriate technology deployment.</p>`,
@@ -2571,6 +2663,101 @@ export function createSeedDatabase(): CmsDatabase {
             categoryLabel: 'Student / Faculty Delegate',
             inrAmount: '₹1,200',
             includesNote: 'Printed ISBN proceedings, lunch & participation certificate',
+          },
+        ],
+      },
+      {
+        id: 3,
+        slug: 'ai-edge-workshop-2026',
+        title: 'National Research Workshop on Edge AI, Robotics & Embedded IoT Systems',
+        shortName: 'EDGE-WS-2026',
+        scope: 'Research Workshop',
+        theme: '5-Day Hands-On Bootcamp on TinyML, ROS2 Autonomous Robotics & Patent Filing',
+        startDate: '2027-01-19',
+        endDate: '2027-01-23',
+        venue: 'NVIDIA & Robotics CoE Lab, SVCOER Pandharpur',
+        mode: 'Hybrid (On-Campus + Online)',
+        organizingDepartment: 'CSE & E&TC Research Cell',
+        indexingPartners: ['AICTE-ISTE Approved Workshop', 'Participation & Lab Certificate'],
+        contactEmail: 'workshop.rnd@coe.sveri.ac.in',
+        contactPhone: '+91-02186-216065',
+        bannerUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+        heroSlides: [
+          {
+            id: 1,
+            title: 'National Research Workshop on Edge AI & Autonomous Robotics',
+            caption: 'Hands-on hardware labs with STM32, Jetson Orin, and ROS2 simulation.',
+            imageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+          },
+          {
+            id: 2,
+            title: 'Patent Drafting & Technology Transfer Clinic',
+            caption: 'Live patent prior-art search and prototype commercialization sessions.',
+            imageUrl: '/src/assets/images/hero_library_atrium_1794512596890.jpg',
+          },
+        ],
+        brochureUrl: '/page/central-facilities',
+        templateUrl: '/quick-links',
+        overviewHtml: `<p><strong>EDGE-WS-2026</strong> is a 5-day intensive research workshop designed for faculty members, Ph.D. scholars, and final-year engineering students focusing on deploying quantized AI models onto embedded robotics hardware.</p>`,
+        cfpHtml: `<p>Participants may optionally submit a 2-page lab project abstract for best prototype awards during Day 5.</p>`,
+        isPublished: true,
+        isFeatured: true,
+        sortOrder: 3,
+        tracks: [
+          {
+            id: 1,
+            title: 'Module 1: Quantized Neural Networks on Edge MCUs & GPUs',
+            chair: 'Dr. Anjali K. Deshpande',
+            description: 'ONNX Runtime, TensorRT, and sensor fusion pipelines.',
+          },
+          {
+            id: 2,
+            title: 'Module 2: ROS2 Autonomous Navigation & Patent Clinic',
+            chair: 'Dr. M. S. Kadam',
+            description: 'SLAM mapping, LiDAR telemetry, and IP protection workflow.',
+          },
+        ],
+        importantDates: [
+          { id: 1, label: 'Early Bird Registration', date: '2027-01-08', statusNote: 'Limited Lab Seats' },
+          { id: 2, label: 'Workshop Commences', date: '2027-01-19', statusNote: 'On-Campus & Virtual' },
+        ],
+        people: [
+          {
+            id: 1,
+            kind: 'keynote',
+            role: 'Resource Person',
+            name: 'Dr. Anjali K. Deshpande',
+            designation: 'Professor & Head, CSE',
+            affiliation: 'SVCOER Pandharpur',
+            email: 'hod.cse@svcoer.edu.in',
+            photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+            bio: 'Lead PI for DST-SERB Precision IoT & Edge AI sponsored project.',
+            sortOrder: 1,
+          },
+        ],
+        schedule: [
+          {
+            id: 1,
+            dayLabel: 'Days 1–5',
+            timeSlot: '10:00 AM – 04:30 PM',
+            trackTitle: 'Module 1 & 2',
+            sessionTitle: 'Morning Theory Briefings + Afternoon Hardware CoE Lab Sprints',
+            speakerOrChair: 'CoE Research Mentors',
+            venue: 'Robotics & AI Lab',
+          },
+        ],
+        feeTiers: [
+          {
+            id: 1,
+            categoryLabel: 'Student / Scholar Participant',
+            inrAmount: '₹600',
+            includesNote: 'Kit access, dataset repo & e-certificate',
+          },
+          {
+            id: 2,
+            categoryLabel: 'Faculty / Industry Participant',
+            inrAmount: '₹1,200',
+            includesNote: 'FDP/STTP certificate & manual',
           },
         ],
       },

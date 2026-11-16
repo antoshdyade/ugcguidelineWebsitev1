@@ -213,6 +213,13 @@ function getSiteSettings(PDO $pdo): array
         'max_photo_mb' => 2.0,
         'max_doc_mb' => 10.0,
         'auto_crop_enabled' => 1,
+        'design_preset' => 'heritage-navy',
+        'font_heading' => "'Playfair Display', Georgia, serif",
+        'font_body' => "'Plus Jakarta Sans', system-ui, sans-serif",
+        'card_radius' => 'rounded',
+        'header_style' => 'classic',
+        'custom_css' => '',
+        'research_slider_slides' => [],
     ];
     try {
         $stmt = $pdo->query('SELECT * FROM site_settings WHERE id = 1 LIMIT 1');
@@ -240,21 +247,29 @@ function getSiteSettings(PDO $pdo): array
             }
         }
         try {
-            $kvStmt = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'upload_policy' LIMIT 1");
-            $kvStmt->execute();
-            $kvRaw = $kvStmt->fetchColumn();
-            if ($kvRaw) {
-                $policy = json_decode((string)$kvRaw, true);
-                if (is_array($policy)) {
-                    if (isset($policy['max_photo_mb']) && is_numeric($policy['max_photo_mb'])) {
-                        $merged['max_photo_mb'] = max(0.25, min(25.0, (float)$policy['max_photo_mb']));
+            $kvStmt = $pdo->query("SELECT key_name, val_json FROM cms_kv_store WHERE key_name IN ('upload_policy', 'design_settings', 'research_slider_slides')");
+            foreach ($kvStmt->fetchAll() as $kvRow) {
+                $kName = $kvRow['key_name'] ?? '';
+                $decoded = json_decode((string)($kvRow['val_json'] ?? ''), true);
+                if (!is_array($decoded)) continue;
+                if ($kName === 'upload_policy') {
+                    if (isset($decoded['max_photo_mb']) && is_numeric($decoded['max_photo_mb'])) {
+                        $merged['max_photo_mb'] = max(0.25, min(25.0, (float)$decoded['max_photo_mb']));
                     }
-                    if (isset($policy['max_doc_mb']) && is_numeric($policy['max_doc_mb'])) {
-                        $merged['max_doc_mb'] = max(0.5, min(50.0, (float)$policy['max_doc_mb']));
+                    if (isset($decoded['max_doc_mb']) && is_numeric($decoded['max_doc_mb'])) {
+                        $merged['max_doc_mb'] = max(0.5, min(50.0, (float)$decoded['max_doc_mb']));
                     }
-                    if (isset($policy['auto_crop_enabled'])) {
-                        $merged['auto_crop_enabled'] = !empty($policy['auto_crop_enabled']) ? 1 : 0;
+                    if (isset($decoded['auto_crop_enabled'])) {
+                        $merged['auto_crop_enabled'] = !empty($decoded['auto_crop_enabled']) ? 1 : 0;
                     }
+                } elseif ($kName === 'design_settings') {
+                    foreach (['design_preset', 'font_heading', 'font_body', 'card_radius', 'header_style', 'custom_css'] as $dk) {
+                        if (isset($decoded[$dk]) && is_string($decoded[$dk])) {
+                            $merged[$dk] = $decoded[$dk];
+                        }
+                    }
+                } elseif ($kName === 'research_slider_slides') {
+                    $merged['research_slider_slides'] = $decoded;
                 }
             }
         } catch (Throwable $ignoredKv) {

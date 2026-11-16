@@ -80,20 +80,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $maxPhotoMb = max(0.25, min(25.0, (float)($_POST['max_photo_mb'] ?? ($s['max_photo_mb'] ?? 2.0))));
         $maxDocMb   = max(0.5, min(50.0, (float)($_POST['max_doc_mb'] ?? ($s['max_doc_mb'] ?? 10.0))));
         $autoCrop   = isset($_POST['auto_crop_enabled']) ? 1 : 0;
+        $designPayload = [
+            'design_preset' => trim((string)($_POST['design_preset'] ?? 'heritage-navy')),
+            'font_heading'  => trim((string)($_POST['font_heading'] ?? "'Playfair Display', Georgia, serif")),
+            'font_body'     => trim((string)($_POST['font_body'] ?? "'Plus Jakarta Sans', system-ui, sans-serif")),
+            'card_radius'   => in_array($_POST['card_radius'] ?? 'rounded', ['sharp', 'rounded', 'soft'], true) ? $_POST['card_radius'] : 'rounded',
+            'header_style'  => ($_POST['header_style'] ?? 'classic') === 'compact' ? 'compact' : 'classic',
+            'custom_css'    => trim((string)($_POST['custom_css'] ?? '')),
+        ];
         try {
-            $pdo->exec('CREATE TABLE IF NOT EXISTS cms_kv_store (key_name VARCHAR(64) PRIMARY KEY, val_json LONGTEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)');
+            $pdo->exec('CREATE TABLE IF NOT EXISTS cms_kv_store (key_name VARCHAR(80) PRIMARY KEY, val_json MEDIUMTEXT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)');
             $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('upload_policy', ?)")
                 ->execute([json_encode(['max_photo_mb' => $maxPhotoMb, 'max_doc_mb' => $maxDocMb, 'auto_crop_enabled' => $autoCrop])]);
+            $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('design_settings', ?)")
+                ->execute([json_encode($designPayload, JSON_UNESCAPED_UNICODE)]);
         } catch (Throwable $ignoredKv) {}
 
         logAudit($pdo, $user, 'UPDATE_SETTINGS', 'Settings', $_POST['institution_name']);
-        $msg = 'Site settings, upload limits & homepage layout saved.';
+        $msg = 'Site settings, design presets, upload limits & homepage layout saved.';
         $s = getSiteSettings($pdo);
     }
 }
 $hs = $s['home_sections'] ?? [];
 $stats = $s['highlights_stats'] ?? [];
-$adminPageTitle = 'Site Settings, Branding & Homepage Charter';
+$adminPageTitle = 'Site Settings, Branding, Design Studio & Homepage Charter';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
 
@@ -137,9 +147,79 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <label>Email <input type="email" name="email" value="<?= e($s['email']) ?>" style="width:100%;padding:0.5rem;"></label>
       <label>Emergency Helpline <input type="text" name="emergency_helpline" value="<?= e($s['emergency_helpline']) ?>" style="width:100%;padding:0.5rem;"></label>
       <label>Anti-Ragging Helpline <input type="text" name="anti_ragging_helpline" value="<?= e($s['anti_ragging_helpline']) ?>" style="width:100%;padding:0.5rem;"></label>
-      <label>Default Primary Hex <input type="color" name="primary_color" value="<?= e($s['primary_color']) ?>"></label>
-      <label>Default Secondary Hex <input type="color" name="secondary_color" value="<?= e($s['secondary_color']) ?>"></label>
+      <label>Default Primary Hex <input id="setting-primary-hex" type="color" name="primary_color" value="<?= e($s['primary_color']) ?>"></label>
+      <label>Default Secondary Hex <input id="setting-secondary-hex" type="color" name="secondary_color" value="<?= e($s['secondary_color']) ?>"></label>
     </div>
+
+    <hr style="border:none;border-top:1px solid var(--border-color);margin:1.25rem 0;">
+    <h2 style="margin-top:0;">Design &amp; Typography Studio (Zero-Data-Loss Updates)</h2>
+    <p style="font-size:0.84rem;color:var(--text-muted);margin-top:-0.35rem;margin-bottom:0.85rem;">
+      Switch site-wide aesthetic presets, typography, corner radii, and header style at any time without disturbing any uploaded pages, PDFs, or media.
+    </p>
+    <div class="grid-3" style="margin-bottom:0.85rem;">
+      <label>Design Preset
+        <select name="design_preset" onchange="applyDesignPresetHex(this.value)" style="width:100%;padding:0.45rem;margin-top:4px;">
+          <?php foreach ([
+            'heritage-navy'   => 'Heritage Navy & Saffron Gold',
+            'modern-slate'    => 'Executive Slate & Indigo',
+            'emerald-campus'  => 'Emerald Green & Teal',
+            'crimson-scholar' => 'Academic Crimson & Bronze',
+          ] as $pk => $pl): ?>
+            <option value="<?= e($pk) ?>" <?= ($s['design_preset'] ?? 'heritage-navy') === $pk ? 'selected' : '' ?>><?= e($pl) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label>Card Corner Radius
+        <select name="card_radius" style="width:100%;padding:0.45rem;margin-top:4px;">
+          <option value="rounded" <?= ($s['card_radius'] ?? 'rounded') === 'rounded' ? 'selected' : '' ?>>Standard Rounded</option>
+          <option value="sharp" <?= ($s['card_radius'] ?? '') === 'sharp' ? 'selected' : '' ?>>Sharp Executive</option>
+          <option value="soft" <?= ($s['card_radius'] ?? '') === 'soft' ? 'selected' : '' ?>>Soft Modern</option>
+        </select>
+      </label>
+      <label>Header Layout
+        <select name="header_style" style="width:100%;padding:0.45rem;margin-top:4px;">
+          <option value="classic" <?= ($s['header_style'] ?? 'classic') === 'classic' ? 'selected' : '' ?>>Classic Crest + Brand</option>
+          <option value="compact" <?= ($s['header_style'] ?? '') === 'compact' ? 'selected' : '' ?>>Compact Strip</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid-2" style="margin-bottom:0.85rem;">
+      <label>Heading Font Family
+        <select name="font_heading" data-custom-select="1" style="width:100%;padding:0.45rem;margin-top:4px;">
+          <?php
+            $curHeadFont = (string)($s['font_heading'] ?? "'Playfair Display', Georgia, serif");
+            $headFonts = [
+              "'Playfair Display', Georgia, serif" => 'Playfair Display (Editorial Serif)',
+              "'Plus Jakarta Sans', system-ui, sans-serif" => 'Plus Jakarta Sans (Modern Geometric)',
+              "Georgia, Cambria, serif" => 'Georgia (Classic Academic)',
+            ];
+            if (!isset($headFonts[$curHeadFont])) $headFonts[$curHeadFont] = $curHeadFont;
+            foreach ($headFonts as $fk => $fl):
+          ?>
+            <option value="<?= e($fk) ?>" <?= $curHeadFont === $fk ? 'selected' : '' ?>><?= e($fl) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label>Body Font Family
+        <select name="font_body" data-custom-select="1" style="width:100%;padding:0.45rem;margin-top:4px;">
+          <?php
+            $curBodyFont = (string)($s['font_body'] ?? "'Plus Jakarta Sans', system-ui, sans-serif");
+            $bodyFonts = [
+              "'Plus Jakarta Sans', system-ui, sans-serif" => 'Plus Jakarta Sans (Clean UI)',
+              "'Atkinson Hyperlegible', sans-serif" => 'Atkinson Hyperlegible (High Readability)',
+              "system-ui, -apple-system, sans-serif" => 'System Native Sans',
+            ];
+            if (!isset($bodyFonts[$curBodyFont])) $bodyFonts[$curBodyFont] = $curBodyFont;
+            foreach ($bodyFonts as $bk => $bl):
+          ?>
+            <option value="<?= e($bk) ?>" <?= $curBodyFont === $bk ? 'selected' : '' ?>><?= e($bl) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+    </div>
+    <label style="display:block;margin-bottom:0.85rem;">Custom CSS Overrides (Optional)
+      <textarea name="custom_css" rows="3" placeholder="/* e.g. .hero-title { letter-spacing: -0.01em; } */" style="width:100%;padding:0.5rem;font-family:monospace;font-size:0.8rem;"><?= e($s['custom_css'] ?? '') ?></textarea>
+    </label>
 
     <hr style="border:none;border-top:1px solid var(--border-color);margin:1.25rem 0;">
     <h2 style="margin-top:0;">Homepage Sections Visibility &amp; Headings</h2>
@@ -191,4 +271,20 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 
     <button type="submit" class="btn-primary">Save Complete Settings &amp; Homepage Layout</button>
   </form>
+<script>
+function applyDesignPresetHex(preset) {
+  var map = {
+    'heritage-navy':   ['#0F294A', '#B45309'],
+    'modern-slate':    ['#1E293B', '#2563EB'],
+    'emerald-campus':  ['#064E3B', '#0F766E'],
+    'crimson-scholar': ['#7F1D1D', '#B45309']
+  };
+  var pair = map[preset];
+  if (!pair) return;
+  var p = document.getElementById('setting-primary-hex');
+  var s = document.getElementById('setting-secondary-hex');
+  if (p) p.value = pair[0];
+  if (s) s.value = pair[1];
+}
+</script>
 <?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

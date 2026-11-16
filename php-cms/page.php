@@ -59,6 +59,19 @@ $leaders = ($slug === 'statutory-officers')
     ? $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order ASC')->fetchAll()
     : [];
 
+$isResearchCat = ($page['category_slug'] ?? '') === 'research';
+$researchConfs = [];
+$researchSliderSlides = [];
+if ($isResearchCat) {
+    ensureCmsSchemaUpgraded($pdo);
+    $researchSliderSlides = getResearchSliderSlides($pdo);
+    try {
+        $researchConfs = $pdo->query('SELECT id, slug, short_name, title, scope, theme, start_date, end_date, venue, mode, organizing_department, banner_url FROM conferences WHERE is_published = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+    } catch (Throwable $ignoredConf) {
+        $researchConfs = [];
+    }
+}
+
 $pageTitle = $page['title'];
 require_once __DIR__ . '/includes/header.php';
 ?>
@@ -76,13 +89,58 @@ require_once __DIR__ . '/includes/header.php';
           </a>
         </li>
       <?php endforeach; ?>
+      <?php if ($isResearchCat): ?>
+        <li style="margin-top:0.65rem;padding-top:0.65rem;border-top:1px solid var(--border-color);">
+          <a href="<?= e(baseUrl('conferences.php')) ?>" style="display:block;padding:0.5rem 0.65rem;border-radius:6px;background:var(--secondary-color);color:#fff;font-weight:700;text-decoration:none;text-align:center;">
+            All Conferences, Workshops &amp; Events &rarr;
+          </a>
+        </li>
+      <?php endif; ?>
     </ul>
   </aside>
 
   <article class="card">
     <small style="color:var(--text-muted);"><?= e($page['subtitle']) ?> · Updated <?= e($page['updated_at']) ?></small>
-    <h1 style="font-family:'Playfair Display',serif;margin-top:0.25rem;"><?= e($page['title']) ?></h1>
+    <h1 style="font-family:var(--font-display);margin-top:0.25rem;"><?= e($page['title']) ?></h1>
+
+    <?php if ($isResearchCat && !empty($researchSliderSlides)): ?>
+      <div style="margin-bottom:1.25rem;">
+        <?= renderCustomSliderBlock($researchSliderSlides, 340, 5) ?>
+      </div>
+    <?php endif; ?>
+
     <div class="cms-prose"><?= $page['content_html'] ?></div>
+
+    <?php if ($isResearchCat): ?>
+      <section style="margin-top:1.75rem;padding-top:1.25rem;border-top:1px solid var(--border-color);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.9rem;">
+          <div>
+            <h2 style="margin:0;font-family:var(--font-display);">National / International Conferences, Workshops &amp; Events</h2>
+            <p style="margin:0.2rem 0 0;font-size:0.84rem;color:var(--text-muted);">Click any program below to view tracks, speakers, schedule, fee structure &amp; registration forms.</p>
+          </div>
+          <a href="<?= e(baseUrl('conferences.php')) ?>" class="btn-primary">Open Full Conferences Hub &rarr;</a>
+        </div>
+        <?php if (empty($researchConfs)): ?>
+          <p style="color:var(--text-muted);font-size:0.9rem;">No conferences or workshops published yet. Add programs from Admin &rarr; Conferences, Workshops &amp; R&amp;D.</p>
+        <?php else: ?>
+          <div class="grid-2">
+            <?php foreach ($researchConfs as $rc): ?>
+              <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
+                <img src="<?= e(mediaUrl($rc['banner_url'] ?? '', 'assets/images/hero_campus.jpg')) ?>" alt="<?= e($rc['title']) ?>" style="width:100%;height:160px;object-fit:cover;display:block;">
+                <div style="padding:1rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
+                  <div>
+                    <span class="alumni-pill"><?= e($rc['scope']) ?></span>
+                    <h3 style="margin:0.45rem 0 0.35rem;font-size:1.02rem;"><?= e($rc['short_name']) ?>: <?= e($rc['title']) ?></h3>
+                    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 0.65rem;"><?= e($rc['start_date']) ?> &ndash; <?= e($rc['end_date']) ?> · <?= e($rc['mode']) ?></p>
+                  </div>
+                  <a href="<?= e(baseUrl('conference.php?slug=' . urlencode($rc['slug']))) ?>" class="btn-primary" style="justify-content:center;">Open Microsite &amp; Register &rarr;</a>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </section>
+    <?php endif; ?>
 
     <?php if (!empty($page['attached_pdf_url'])):
       $isExtPdf = preg_match('#^https?://#i', (string)$page['attached_pdf_url']) === 1;

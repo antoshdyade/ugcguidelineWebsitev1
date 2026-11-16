@@ -351,6 +351,7 @@ export interface SiteSettings {
   autoCropImages?: boolean;
   homeSections?: HomeSectionsConfig;
   customHomeComponents?: CustomHomeComponent[];
+  researchSliderSlides?: ConferenceSlide[];
 }
 
 export type BackupMode = 'full' | 'incremental';
@@ -620,6 +621,15 @@ export interface ConferenceFeeTier {
   includesNote?: string;
 }
 
+export interface ConferenceSlide {
+  id: number;
+  title: string;
+  caption: string;
+  imageUrl: string;
+  ctaLabel?: string;
+  ctaLink?: string;
+}
+
 export interface Conference {
   id: number;
   slug: string;
@@ -636,6 +646,7 @@ export interface Conference {
   contactEmail: string;
   contactPhone: string;
   bannerUrl: string;
+  heroSlides?: ConferenceSlide[];
   brochureUrl?: string;
   templateUrl?: string;
   overviewHtml: string;

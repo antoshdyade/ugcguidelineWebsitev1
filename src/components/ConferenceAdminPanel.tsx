@@ -19,6 +19,7 @@ import type {
   ConferencePerson,
   ConferenceRegistration,
   ConferenceScheduleItem,
+  ConferenceSlide,
   ConferenceSubmission,
   ConferenceTrack,
   Department,
@@ -73,9 +74,24 @@ export function ConferenceAdminPanel({
   notify,
 }: ConferenceAdminPanelProps) {
   const [selectedId, setSelectedId] = useState<number>(conferences[0]?.id || 0);
-  const [subTab, setSubTab] = useState<'overview' | 'program' | 'people' | 'submissions' | 'registrations'>('overview');
+  const [subTab, setSubTab] = useState<'overview' | 'program' | 'people' | 'submissions' | 'registrations' | 'research-slider'>('overview');
   const [showCreate, setShowCreate] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [researchSlides, setResearchSlides] = useState<ConferenceSlide[]>(settings.researchSliderSlides || []);
+  const [rSlideTitle, setRSlideTitle] = useState('');
+  const [rSlideCap, setRSlideCap] = useState('');
+  const [rSlideImg, setRSlideImg] = useState('/src/assets/images/hero_campus_aerial_1794512596442.jpg');
+  const [rSlideCtaLabel, setRSlideCtaLabel] = useState('Explore Program');
+  const [rSlideCtaLink, setRSlideCtaLink] = useState('/conferences');
+  const [cSlideTitle, setCSlideTitle] = useState('');
+  const [cSlideCap, setCSlideCap] = useState('');
+  const [cSlideImg, setCSlideImg] = useState('/src/assets/images/hero_campus_aerial_1794512596442.jpg');
+  const [cSlideCtaLabel, setCSlideCtaLabel] = useState('');
+  const [cSlideCtaLink, setCSlideCtaLink] = useState('');
+
+  useEffect(() => {
+    setResearchSlides(settings.researchSliderSlides || []);
+  }, [settings.researchSliderSlides]);
 
   // Create New Conference State
   const [newTitle, setNewTitle] = useState('');
@@ -193,7 +209,7 @@ export function ConferenceAdminPanel({
         <div className="flex flex-wrap items-center gap-2">
           <Globe2 className="w-5 h-5 text-amber-600 shrink-0" />
           <span className="text-sm font-bold text-stone-900 dark:text-white mr-1">
-            Hosted Conferences ({conferences.length}):
+            Research Conferences, Workshops &amp; Events ({conferences.length}):
           </span>
           {conferences.map((c) => (
             <button
@@ -210,19 +226,35 @@ export function ConferenceAdminPanel({
               }`}
               style={!showCreate && selectedConf?.id === c.id ? { backgroundColor: 'var(--primary-color)' } : undefined}
             >
-              {c.shortName} ({c.isPublished ? 'Live' : 'Draft'})
+              {c.shortName} ({c.scope})
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate((v) => !v)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
-          style={{ backgroundColor: 'var(--secondary-color)' }}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>{showCreate ? 'Back to Selected Conference' : 'Host New National / International Conference'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreate(false);
+              setSubTab('research-slider');
+            }}
+            className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+              subTab === 'research-slider' && !showCreate
+                ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300'
+                : 'border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800'
+            }`}
+          >
+            Research Page Slider ({researchSlides.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreate((v) => !v)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
+            style={{ backgroundColor: 'var(--secondary-color)' }}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{showCreate ? 'Back to Selected Program' : 'Add Conference / Workshop / Event'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Create New Conference Form */}
@@ -259,7 +291,7 @@ export function ConferenceAdminPanel({
           }}
           className="rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 p-5 space-y-4"
         >
-          <h2 className="text-base font-bold">Launch New International / National Conference Microsite</h2>
+          <h2 className="text-base font-bold">Add National / International Conference, Workshop, FDP, Event or Custom Program</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold mb-1">Full Conference Title *</label>
@@ -386,11 +418,12 @@ export function ConferenceAdminPanel({
             <div className="flex flex-wrap gap-1.5">
               {(
                 [
-                  ['overview', 'Overview, Banner & CFP'],
+                  ['overview', 'Overview, Page Slider & CFP'],
                   ['program', `Tracks (${draft.tracks.length}), Dates, Schedule & Fees`],
                   ['people', `Keynote & Committee Photos (${draft.people.length})`],
                   ['submissions', `Paper Submissions (${confSubmissions.length})`],
                   ['registrations', `Delegate Registrations (${confRegistrations.length})`],
+                  ['research-slider', `Research Main Slider (${researchSlides.length})`],
                 ] as const
               ).map(([tid, tlabel]) => (
                 <button
@@ -567,7 +600,7 @@ export function ConferenceAdminPanel({
               </div>
 
               <ImageUploader
-                label="Conference Hero Banner (16:9)"
+                label="Default Fallback Banner (16:9)"
                 value={draft.bannerUrl}
                 onChange={(url) => setDraft({ ...draft, bannerUrl: url })}
                 uploadBinary={uploadBinary}
@@ -575,6 +608,136 @@ export function ConferenceAdminPanel({
                 maxPhotoMb={maxPhotoMb}
                 autoCropEnabled={autoCrop}
               />
+
+              {/* Dedicated Page Slider Slides for this Conference / Workshop / Event */}
+              <div className="p-4 rounded-xl border border-sky-200 dark:border-sky-900 bg-sky-50/40 dark:bg-slate-800/40 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                      Own Microsite Slider Slides ({(draft.heroSlides || []).length})
+                    </h3>
+                    <p className="text-[11px] text-stone-500 dark:text-slate-400">
+                      Each conference, workshop, or event microsite displays its own interactive multi-slide banner.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  <input
+                    type="text"
+                    value={cSlideTitle}
+                    onChange={(e) => setCSlideTitle(e.target.value)}
+                    placeholder="New Slide Title (e.g. Keynote & Paper Tracks Open)"
+                    className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <input
+                    type="text"
+                    value={cSlideCap}
+                    onChange={(e) => setCSlideCap(e.target.value)}
+                    placeholder="Slide Caption / Theme Subtitle"
+                    className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <input
+                    type="text"
+                    value={cSlideCtaLabel}
+                    onChange={(e) => setCSlideCtaLabel(e.target.value)}
+                    placeholder="CTA Label (optional)"
+                    className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <input
+                    type="text"
+                    value={cSlideCtaLink}
+                    onChange={(e) => setCSlideCtaLink(e.target.value)}
+                    placeholder="CTA Link (optional)"
+                    className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                </div>
+                <ImageUploader
+                  label="New Slide Image (16:9 Auto-Crop)"
+                  value={cSlideImg}
+                  onChange={setCSlideImg}
+                  uploadBinary={uploadBinary}
+                  aspectRatio="16:9"
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCrop}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!cSlideTitle.trim()) return;
+                    const existingSlides = draft.heroSlides || [];
+                    const newSlide: ConferenceSlide = {
+                      id: Math.max(0, ...existingSlides.map((s) => s.id)) + 1,
+                      title: cSlideTitle.trim(),
+                      caption: cSlideCap.trim(),
+                      imageUrl: cSlideImg || draft.bannerUrl,
+                      ctaLabel: cSlideCtaLabel.trim(),
+                      ctaLink: cSlideCtaLink.trim(),
+                    };
+                    setDraft({ ...draft, heroSlides: [...existingSlides, newSlide] });
+                    setCSlideTitle('');
+                    setCSlideCap('');
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-700 text-white text-xs font-bold"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Slide to {draft.shortName}
+                </button>
+
+                {(draft.heroSlides || []).length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    {(draft.heroSlides || []).map((sl, idx) => (
+                      <div
+                        key={sl.id}
+                        className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-wrap items-center gap-3 text-xs"
+                      >
+                        <img src={sl.imageUrl} alt={sl.title} className="w-24 h-14 rounded object-cover border shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold truncate">{sl.title}</p>
+                          <p className="text-[11px] text-stone-500 truncate">{sl.caption}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => {
+                              const arr = [...(draft.heroSlides || [])];
+                              [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                              setDraft({ ...draft, heroSlides: arr });
+                            }}
+                            className="p-1 rounded border disabled:opacity-30"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === (draft.heroSlides || []).length - 1}
+                            onClick={() => {
+                              const arr = [...(draft.heroSlides || [])];
+                              [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                              setDraft({ ...draft, heroSlides: arr });
+                            }}
+                            className="p-1 rounded border disabled:opacity-30"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                heroSlides: (draft.heroSlides || []).filter((_, i) => i !== idx),
+                              })
+                            }
+                            className="p-1 rounded border border-rose-200 text-rose-700"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3.5 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/40">
                 <div className="space-y-1.5">
@@ -675,9 +838,146 @@ export function ConferenceAdminPanel({
                 className="px-5 py-2.5 rounded-lg text-xs font-bold text-white"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                Save Conference Overview &amp; CFP
+                Save Program Overview, Slider &amp; CFP
               </button>
             </form>
+          )}
+
+          {/* RESEARCH PORTAL MAIN SLIDER MANAGER */}
+          {subTab === 'research-slider' && (
+            <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4">
+              <div>
+                <h2 className="text-base font-bold">Research Portal &amp; Conferences Landing Page Slider</h2>
+                <p className="text-xs text-stone-500 dark:text-slate-400">
+                  Controls the top hero slider on both the Research menu pages and `/conferences` portal.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <input
+                  type="text"
+                  value={rSlideTitle}
+                  onChange={(e) => setRSlideTitle(e.target.value)}
+                  placeholder="Research Slide Heading Title *"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={rSlideCap}
+                  onChange={(e) => setRSlideCap(e.target.value)}
+                  placeholder="Caption / Description"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={rSlideCtaLabel}
+                  onChange={(e) => setRSlideCtaLabel(e.target.value)}
+                  placeholder="CTA Button Label"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={rSlideCtaLink}
+                  onChange={(e) => setRSlideCtaLink(e.target.value)}
+                  placeholder="CTA Link (e.g. /conference/icaest-2026)"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <ImageUploader
+                label="Research Slider Photo (16:9 Auto-Crop)"
+                value={rSlideImg}
+                onChange={setRSlideImg}
+                uploadBinary={uploadBinary}
+                aspectRatio="16:9"
+                maxPhotoMb={maxPhotoMb}
+                autoCropEnabled={autoCrop}
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!rSlideTitle.trim()) return;
+                    const nextSlides: ConferenceSlide[] = [
+                      ...researchSlides,
+                      {
+                        id: Math.max(0, ...researchSlides.map((s) => s.id)) + 1,
+                        title: rSlideTitle.trim(),
+                        caption: rSlideCap.trim(),
+                        imageUrl: rSlideImg,
+                        ctaLabel: rSlideCtaLabel.trim(),
+                        ctaLink: rSlideCtaLink.trim(),
+                      },
+                    ];
+                    setResearchSlides(nextSlides);
+                    setRSlideTitle('');
+                    setRSlideCap('');
+                    await adminFetch('/api/admin/conferences/research-slider', 'PUT', { researchSliderSlides: nextSlides });
+                    notify('ok', 'Added slide to Research Portal Slider.');
+                  }}
+                  className="inline-flex items-center gap-1 px-4 py-2 rounded-lg text-xs font-bold text-white"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add &amp; Save Research Slide
+                </button>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-slate-800">
+                {researchSlides.map((sl, idx) => (
+                  <div
+                    key={sl.id}
+                    className="p-3 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 flex flex-wrap items-center gap-3 text-xs"
+                  >
+                    <img src={sl.imageUrl} alt={sl.title} className="w-28 h-16 rounded object-cover border shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm truncate">{sl.title}</p>
+                      <p className="text-stone-500 truncate">{sl.caption}</p>
+                      {sl.ctaLink && <p className="text-[11px] font-mono text-amber-700">{sl.ctaLabel} &rarr; {sl.ctaLink}</p>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={async () => {
+                          const arr = [...researchSlides];
+                          [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                          setResearchSlides(arr);
+                          await adminFetch('/api/admin/conferences/research-slider', 'PUT', { researchSliderSlides: arr });
+                          notify('ok', 'Updated Research slider order.');
+                        }}
+                        className="p-1.5 rounded border disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === researchSlides.length - 1}
+                        onClick={async () => {
+                          const arr = [...researchSlides];
+                          [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                          setResearchSlides(arr);
+                          await adminFetch('/api/admin/conferences/research-slider', 'PUT', { researchSliderSlides: arr });
+                          notify('ok', 'Updated Research slider order.');
+                        }}
+                        className="p-1.5 rounded border disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const arr = researchSlides.filter((_, i) => i !== idx);
+                          setResearchSlides(arr);
+                          await adminFetch('/api/admin/conferences/research-slider', 'PUT', { researchSliderSlides: arr });
+                          notify('ok', 'Removed Research slider image.');
+                        }}
+                        className="p-1.5 rounded border border-rose-200 text-rose-700 hover:bg-rose-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* 2. TRACKS, IMPORTANT DATES, SCHEDULE & FEE TIERS */}

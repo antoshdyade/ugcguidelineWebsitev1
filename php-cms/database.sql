@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS users (
   assigned_department_id INT NULL,
   allowed_categories_json TEXT NULL,
   allowed_page_ids_json TEXT NULL,
+  allowed_modules_json TEXT NULL,
+  allowed_department_ids_json TEXT NULL,
   is_active TINYINT(1) DEFAULT 1,
   last_login_at DATETIME NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -556,3 +558,110 @@ INSERT INTO cms_kv_store (key_name, val_json) VALUES
 ('alumni_settings', '{"heroTitle":"SVERI''s COE Alumni Association & Global Network","heroSubtitle":"Connecting 11,500+ engineering graduates, mentors, industry leaders, and chapter communities across Pune, Bengaluru, Mumbai, USA, Europe & Pandharpur.","associationRegNo":"MH/SOL/ALU-2016/06220","coordinatorName":"Prof. D. B. Kulkarni","coordinatorEmail":"alumni@coe.sveri.ac.in","allowSelfRegistration":true,"allowPublicJobPosting":true}'),
 ('alumni_seeded_v1', '1')
 ON DUPLICATE KEY UPDATE val_json = VALUES(val_json);
+
+-- 17. Conferences, Workshops, FDPs & Events + Placements + Grievances
+CREATE TABLE IF NOT EXISTS conferences (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  slug VARCHAR(140) NOT NULL UNIQUE,
+  title VARCHAR(260) NOT NULL,
+  short_name VARCHAR(80) NOT NULL,
+  scope VARCHAR(120) NOT NULL DEFAULT 'International Conference',
+  theme VARCHAR(300) NOT NULL DEFAULT '',
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  venue VARCHAR(240) NOT NULL DEFAULT '',
+  mode VARCHAR(120) NOT NULL DEFAULT 'Hybrid (On-Campus + Online)',
+  organizing_department VARCHAR(160) NOT NULL DEFAULT '',
+  indexing_partners_json TEXT NULL,
+  contact_email VARCHAR(160) NOT NULL DEFAULT '',
+  contact_phone VARCHAR(80) NOT NULL DEFAULT '',
+  banner_url VARCHAR(300) DEFAULT 'assets/images/hero_campus.jpg',
+  hero_slides_json LONGTEXT NULL,
+  overview_html MEDIUMTEXT NULL,
+  cfp_html MEDIUMTEXT NULL,
+  tracks_json MEDIUMTEXT NULL,
+  important_dates_json MEDIUMTEXT NULL,
+  people_json MEDIUMTEXT NULL,
+  schedule_json MEDIUMTEXT NULL,
+  fee_tiers_json MEDIUMTEXT NULL,
+  is_published TINYINT(1) DEFAULT 1,
+  is_featured TINYINT(1) DEFAULT 0,
+  sort_order INT DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS conference_submissions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  conference_id INT NOT NULL,
+  tracking_code VARCHAR(40) NOT NULL,
+  paper_title VARCHAR(280) NOT NULL,
+  track_title VARCHAR(180) NOT NULL,
+  author_name VARCHAR(160) NOT NULL,
+  author_email VARCHAR(160) NOT NULL,
+  author_phone VARCHAR(60) NULL,
+  affiliation VARCHAR(220) NOT NULL,
+  co_authors VARCHAR(300) NULL,
+  abstract_text TEXT NOT NULL,
+  manuscript_url VARCHAR(300) NULL,
+  status ENUM('Submitted','Under Review','Revision Requested','Accepted','Rejected') DEFAULT 'Submitted',
+  reviewer_notes TEXT NULL,
+  submitted_at VARCHAR(32) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS conference_registrations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  conference_id INT NOT NULL,
+  registration_code VARCHAR(40) NOT NULL,
+  attendee_name VARCHAR(160) NOT NULL,
+  email VARCHAR(160) NOT NULL,
+  phone VARCHAR(60) NULL,
+  affiliation VARCHAR(220) NOT NULL,
+  fee_category VARCHAR(140) NOT NULL,
+  paper_id_ref VARCHAR(60) NULL,
+  payment_ref VARCHAR(120) NULL,
+  status ENUM('Pending','Confirmed','Cancelled') DEFAULT 'Pending',
+  registered_at VARCHAR(32) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS placement_stats (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  academic_year VARCHAR(30) NOT NULL,
+  branch VARCHAR(120) NOT NULL,
+  eligible_students INT DEFAULT 0,
+  placed_students INT DEFAULT 0,
+  highest_package_lpa DECIMAL(6,2) DEFAULT 0.00,
+  average_package_lpa DECIMAL(6,2) DEFAULT 0.00,
+  top_recruiters_list VARCHAR(400) NULL,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS placement_stories (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  student_name VARCHAR(160) NOT NULL,
+  batch_year VARCHAR(30) NOT NULL,
+  branch VARCHAR(120) NOT NULL,
+  company VARCHAR(160) NOT NULL,
+  role_title VARCHAR(160) NOT NULL,
+  package_lpa VARCHAR(40) NOT NULL,
+  photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
+  quote_text TEXT NULL,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS grievances (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ticket_code VARCHAR(40) NOT NULL UNIQUE,
+  complainant_name VARCHAR(160) NOT NULL,
+  email VARCHAR(160) NOT NULL,
+  phone VARCHAR(60) NULL,
+  reporter_role VARCHAR(100) NOT NULL,
+  category VARCHAR(140) NOT NULL,
+  subject VARCHAR(240) NOT NULL,
+  description TEXT NOT NULL,
+  urgency ENUM('Normal','High','Urgent') DEFAULT 'Normal',
+  status ENUM('Open','Under Review','Escalated','Resolved') DEFAULT 'Open',
+  resolution_note TEXT NULL,
+  submitted_at VARCHAR(32) NOT NULL,
+  updated_at VARCHAR(32) NOT NULL
+) ENGINE=InnoDB;
+

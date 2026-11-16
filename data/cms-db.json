@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 3,
   "categories": [
     {
       "id": 1,
@@ -1655,7 +1656,7 @@
       "assignedDepartmentId": null,
       "isActive": true,
       "passwordHash": "335e6ddf4ddc588b85ec23d250a58c44:a1263e80eb984bde57f804847c0500aa53f1d36ca07d151f067608e3878949b9917b20ba5b0bc8b143a8d992c737a5944c3aceb5dfa45a39b61f4e97481e3dce",
-      "lastLoginAt": "2026-11-15 13:55"
+      "lastLoginAt": "2026-11-16 10:45"
     },
     {
       "id": 2,
@@ -1705,6 +1706,33 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": 108,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-16 10:45:02"
+    },
+    {
+      "id": 107,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-16 10:44:31"
+    },
+    {
+      "id": 106,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-16 10:22:17"
+    },
     {
       "id": 105,
       "actorEmail": "admin@svcoer.edu.in",
@@ -2667,6 +2695,12 @@
     "defaultPaletteId": "royal-navy",
     "primaryColor": "#0F294A",
     "secondaryColor": "#B45309",
+    "designPreset": "heritage-navy",
+    "fontHeading": "'Playfair Display', Georgia, serif",
+    "fontBody": "'Plus Jakarta Sans', system-ui, sans-serif",
+    "cardRadius": "rounded",
+    "headerStyle": "classic",
+    "customCss": "",
     "aboutSummary": "Established in 1998 under Shri Vitthal Education & Research Institute (SVERI), SVERI's College of Engineering, Pandharpur (Autonomous from AY 2024–25) is NAAC A+ (CGPA 3.46) accredited, offers NBA-accredited UG programs alongside MBA, MCA & Ph.D. centres, and upholds complete UGC public self-disclosure transparency.",
     "aboutImageUrl": "/src/assets/images/hero_campus_aerial_1794512596442.jpg",
     "visionText": "To be nationally recognized among the best institutes in India for excellence in technical education.",
@@ -2861,7 +2895,34 @@
       "departmentsHeading": "Academic Departments",
       "categoriesHeading": "Statutory Self-Disclosure & Autonomous Portals"
     },
-    "customHomeComponents": []
+    "customHomeComponents": [],
+    "researchSliderSlides": [
+      {
+        "id": 1,
+        "title": "ICAEST-2026: 3rd International Conference on Engineering & Smart Technology",
+        "caption": "Hybrid Flagship Conference · 18–19 Dec 2026 · Call for Papers Open",
+        "imageUrl": "/src/assets/images/hero_campus_aerial_1794512596442.jpg",
+        "ctaLabel": "Explore ICAEST-2026",
+        "ctaLink": "/conference/icaest-2026"
+      },
+      {
+        "id": 2,
+        "title": "NCEI-2026: National Conference on NEP 2020 & Sustainable Innovations",
+        "caption": "Indigenous Engineering Solutions, IDEA Lab Prototypes & ISBN Proceedings",
+        "imageUrl": "/src/assets/images/campus_convocation_1794512597749.jpg",
+        "ctaLabel": "Explore NCEI-2026",
+        "ctaLink": "/conference/ncei-2026"
+      },
+      {
+        "id": 3,
+        "title": "Hands-On Research Workshops, FDPs & Patent Clinics",
+        "caption": "Department-hosted technical workshops in Edge AI, EV Powertrains & VLSI Design",
+        "imageUrl": "/src/assets/images/hero_robotics_lab_1794512596365.jpg",
+        "ctaLabel": "View Research Workshops",
+        "ctaLink": "/conference/ai-edge-workshop-2026"
+      }
+    ],
+    "schemaVersion": 3
   },
   "alumni": {
     "settings": {
@@ -3211,8 +3272,502 @@
           }
         ]
       }
+    ],
+    "achievers": [
+      {
+        "id": 1,
+        "fullName": "Rohan Deshmukh",
+        "batchYear": 2016,
+        "departmentCode": "CSE",
+        "designation": "Principal Cloud Architect",
+        "organization": "Microsoft India",
+        "awardTitle": "Distinguished Young Engineer Alumni Award 2026",
+        "citation": "Recognized for scaling enterprise cloud systems and sponsoring 15+ rural engineering internships annually.",
+        "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+        "linkedinUrl": "https://linkedin.com",
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "fullName": "Snehal Patwardhan",
+        "batchYear": 2018,
+        "departmentCode": "ENTC",
+        "designation": "Staff SoC Verification Engineer",
+        "organization": "Qualcomm India",
+        "awardTitle": "VLSI Innovation & Women in STEM Excellence Award",
+        "citation": "Honored for multi-million-gate System-on-Chip verification leadership and annual student bootcamps.",
+        "photoUrl": "/src/assets/images/hero_library_atrium_1794512596890.jpg",
+        "linkedinUrl": "https://linkedin.com",
+        "sortOrder": 2
+      }
+    ],
+    "pledges": [
+      {
+        "id": 1,
+        "fullName": "Aditya Kulkarni",
+        "email": "aditya.k@alumni.svcoer.edu.in",
+        "phone": "+91-98220-77112",
+        "batchYear": 2015,
+        "departmentCode": "MECH",
+        "pledgeType": "Laboratory / Equipment Sponsorship",
+        "amountOrSupport": "EV Battery Thermal Bench & 2-Day CAD Industry Workshop",
+        "message": "Committed to equipping our Mechanical Department EV Centre of Excellence for final-year B.Tech capstone teams.",
+        "status": "acknowledged",
+        "submittedAt": "2026-10-18"
+      }
     ]
   },
+  "conferences": [
+    {
+      "id": 1,
+      "slug": "icaest-2026",
+      "title": "3rd International Conference on Advances in Engineering & Smart Technology",
+      "shortName": "ICAEST-2026",
+      "scope": "International Conference",
+      "theme": "AI-Driven Cyber-Physical Systems, Sustainable Civil Infrastructure & Clean Energy",
+      "startDate": "2026-12-18",
+      "endDate": "2026-12-19",
+      "venue": "SVERI's College of Engineering Auditorium, Gopalpur, Pandharpur",
+      "mode": "Hybrid (On-Campus + Online)",
+      "organizingDepartment": "CSE, E&TC, Mechanical, Electrical & Civil Engineering",
+      "indexingPartners": [
+        "IEEE Xplore / Scopus (Proposed)",
+        "Springer Lecture Notes",
+        "UGC Care Group-II"
+      ],
+      "contactEmail": "icaest2026@coe.sveri.ac.in",
+      "contactPhone": "+91-02186-216063",
+      "bannerUrl": "/src/assets/images/hero_campus_aerial_1794512596442.jpg",
+      "brochureUrl": "/page/research-development-cell",
+      "templateUrl": "/quick-links",
+      "overviewHtml": "<p><strong>ICAEST-2026</strong> brings together international researchers, industry architects, and doctoral scholars to present peer-reviewed innovations across Artificial Intelligence, Edge Robotics, EV Powertrains, Microgrid Automation, and Resilient Smart Cities.</p><p>Selected peer-reviewed papers presented at the conference will be submitted for indexing and extended journal special issues.</p>",
+      "cfpHtml": "<p>Original, unpublished full-length research papers (6–8 pages in double-column IEEE format) are invited across the four technical tracks listed below. All submissions undergo double-blind peer review and Turnitin plagiarism screening (&le; 15%).</p>",
+      "isPublished": true,
+      "isFeatured": true,
+      "sortOrder": 1,
+      "tracks": [
+        {
+          "id": 1,
+          "title": "Track 1: Generative AI, Cloud Native Systems & Cybersecurity",
+          "chair": "Dr. S. P. Deshmukh",
+          "description": "Foundation models, edge ML optimization, zero-trust cloud architectures, and privacy-preserving federated learning."
+        },
+        {
+          "id": 2,
+          "title": "Track 2: VLSI, Embedded Robotics & 6G IoT Networks",
+          "chair": "Dr. R. B. Patwardhan",
+          "description": "Low-power ASIC/FPGA design, autonomous UAV navigation, RISC-V accelerators, and smart agricultural sensing."
+        },
+        {
+          "id": 3,
+          "title": "Track 3: EV Powertrains, Thermal Systems & Smart Microgrids",
+          "chair": "Dr. A. K. Kulkarni",
+          "description": "Battery management systems, digital twins in additive manufacturing, solar-wind hybrid microgrids, and HVDC protection."
+        },
+        {
+          "id": 4,
+          "title": "Track 4: Green Concrete, GIS & Resilient Infrastructure",
+          "chair": "Dr. V. M. Jadhav",
+          "description": "Low-carbon geopolymer concrete, structural health monitoring with drones, and watershed hydrological modeling."
+        }
+      ],
+      "importantDates": [
+        {
+          "id": 1,
+          "label": "Full Paper Submission Deadline",
+          "date": "2026-11-25",
+          "statusNote": "Open Now"
+        },
+        {
+          "id": 2,
+          "label": "Notification of Acceptance",
+          "date": "2026-12-03",
+          "statusNote": "Double-Blind Review"
+        },
+        {
+          "id": 3,
+          "label": "Camera-Ready Paper & Registration",
+          "date": "2026-12-10",
+          "statusNote": "Mandatory"
+        },
+        {
+          "id": 4,
+          "label": "Conference Inauguration & Technical Sessions",
+          "date": "2026-12-18",
+          "statusNote": "Hybrid Mode"
+        }
+      ],
+      "people": [
+        {
+          "id": 1,
+          "kind": "keynote",
+          "role": "Keynote Speaker",
+          "name": "Prof. Dr. Rajesh K. Sharma",
+          "designation": "Professor, Dept. of Computer Science",
+          "affiliation": "IIT Bombay, Mumbai",
+          "email": "keynote.icaest@coe.sveri.ac.in",
+          "phone": "+91-022-2576-0000",
+          "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+          "bio": "IEEE Fellow specializing in trustworthy edge AI and autonomous cyber-physical systems.",
+          "sortOrder": 1
+        },
+        {
+          "id": 2,
+          "kind": "keynote",
+          "role": "Keynote Speaker",
+          "name": "Dr. Elena Rostova",
+          "designation": "Director of Smart Grid Research",
+          "affiliation": "TU Munich, Germany",
+          "email": "elena.speaker@coe.sveri.ac.in",
+          "photoUrl": "/src/assets/images/hero_library_atrium_1794512596890.jpg",
+          "bio": "Leading European consortium researcher on bidirectional EV grid balancing and renewable storage.",
+          "sortOrder": 2
+        },
+        {
+          "id": 3,
+          "kind": "committee",
+          "role": "General Chair",
+          "name": "Dr. Prashant M. Pawar",
+          "designation": "Principal & Professor",
+          "affiliation": "SVERI's College of Engineering, Pandharpur",
+          "email": "principal@coe.sveri.ac.in",
+          "phone": "+91-02186-216063",
+          "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+          "bio": "24+ years in structural engineering, AICTE/DST funded R&D, and autonomous higher education.",
+          "sortOrder": 3
+        },
+        {
+          "id": 4,
+          "kind": "committee",
+          "role": "Convener",
+          "name": "Dr. M. S. Kadam",
+          "designation": "Dean R&D & Professor",
+          "affiliation": "R&D Cell, SVCOER Pandharpur",
+          "email": "icaest2026@coe.sveri.ac.in",
+          "phone": "+91-02186-216066",
+          "photoUrl": "/src/assets/images/campus_convocation_1794512597749.jpg",
+          "bio": "Coordinating international TPC reviewers, IEEE publication workflow, and hybrid track logistics.",
+          "sortOrder": 4
+        }
+      ],
+      "schedule": [
+        {
+          "id": 1,
+          "dayLabel": "Day 1 (18 Dec)",
+          "timeSlot": "09:30 AM – 11:00 AM",
+          "trackTitle": "Plenary",
+          "sessionTitle": "Inaugural Ceremony & Keynote: Trustworthy Edge AI for Societal Scale",
+          "speakerOrChair": "Prof. Dr. Rajesh K. Sharma (IIT Bombay)",
+          "venue": "Central Auditorium & Zoom Live"
+        },
+        {
+          "id": 2,
+          "dayLabel": "Day 1 (18 Dec)",
+          "timeSlot": "11:30 AM – 01:30 PM",
+          "trackTitle": "Track 1 & Track 2",
+          "sessionTitle": "Parallel Paper Presentations: AI, Cloud & VLSI Systems",
+          "speakerOrChair": "Dr. S. P. Deshmukh & Dr. R. B. Patwardhan",
+          "venue": "Seminar Halls A & B"
+        },
+        {
+          "id": 3,
+          "dayLabel": "Day 2 (19 Dec)",
+          "timeSlot": "10:00 AM – 12:30 PM",
+          "trackTitle": "Track 3 & Track 4",
+          "sessionTitle": "Keynote & Technical Presentations: Smart Microgrids & Green Infrastructure",
+          "speakerOrChair": "Dr. Elena Rostova (TU Munich)",
+          "venue": "Central Auditorium & Online Room 2"
+        }
+      ],
+      "feeTiers": [
+        {
+          "id": 1,
+          "categoryLabel": "UG / PG Student & Research Scholar",
+          "inrAmount": "₹2,500",
+          "usdAmount": "$50",
+          "includesNote": "Paper presentation, digital proceedings, certificate & conference kit"
+        },
+        {
+          "id": 2,
+          "categoryLabel": "Academician / Faculty Member",
+          "inrAmount": "₹4,000",
+          "usdAmount": "$80",
+          "includesNote": "Full access, IEEE/Scopus processing support & gala dinner"
+        },
+        {
+          "id": 3,
+          "categoryLabel": "Industry / R&D Delegate",
+          "inrAmount": "₹6,000",
+          "usdAmount": "$120",
+          "includesNote": "Includes industry networking roundtable & exhibition booth access"
+        }
+      ],
+      "heroSlides": [
+        {
+          "id": 1,
+          "title": "3rd International Conference on Advances in Engineering & Smart Technology",
+          "caption": "AI-Driven Cyber-Physical Systems, Sustainable Civil Infrastructure & Clean Energy",
+          "imageUrl": "/src/assets/images/hero_campus_aerial_1794512596442.jpg"
+        },
+        {
+          "id": 2,
+          "title": "Keynote Talks by IIT Bombay & TU Munich Researchers",
+          "caption": "Double-blind peer review, 4 technical tracks, and Scopus/IEEE proceedings support.",
+          "imageUrl": "/src/assets/images/hero_robotics_lab_1794512596365.jpg"
+        },
+        {
+          "id": 3,
+          "title": "Hybrid Research Presentation & Industrial Networking",
+          "caption": "Present in-person at Pandharpur or virtually via dedicated track rooms.",
+          "imageUrl": "/src/assets/images/campus_convocation_1794512597749.jpg"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "slug": "ncei-2026",
+      "title": "National Conference on NEP 2020 & Sustainable Rural Engineering Innovations",
+      "shortName": "NCEI-2026",
+      "scope": "National Conference",
+      "theme": "Multidisciplinary Outcome-Based Education & Indigenous Engineering Solutions",
+      "startDate": "2027-02-06",
+      "endDate": "2027-02-07",
+      "venue": "SVCOER Seminar Complex, Pandharpur",
+      "mode": "On-Campus (In-Person)",
+      "organizingDepartment": "IQAC & All Autonomous Engineering Departments",
+      "indexingPartners": [
+        "ISBN Conference Proceedings",
+        "Institution Journal of Rural Tech"
+      ],
+      "contactEmail": "ncei2026@coe.sveri.ac.in",
+      "contactPhone": "+91-02186-216063",
+      "bannerUrl": "/src/assets/images/campus_convocation_1794512597749.jpg",
+      "brochureUrl": "/page/iqac",
+      "templateUrl": "/quick-links",
+      "overviewHtml": "<p><strong>NCEI-2026</strong> provides a national forum for engineering educators, rural entrepreneurs, and AICTE IDEA Lab innovators to share best practices in NEP 2020 multidisciplinary curricula and appropriate technology deployment.</p>",
+      "cfpHtml": "<p>Papers and working hardware prototype abstracts are invited from faculty, students, and polytechnic/industry practitioners across India.</p>",
+      "isPublished": true,
+      "isFeatured": true,
+      "sortOrder": 2,
+      "tracks": [
+        {
+          "id": 1,
+          "title": "Track A: NEP 2020 Multidisciplinary Pedagogies & ABC Implementation",
+          "chair": "IQAC Coordinator",
+          "description": "Honours/Minor tracks, Apprenticeship Embedded Degrees (AEDP), and Outcome-Based Assessment."
+        },
+        {
+          "id": 2,
+          "title": "Track B: Agro-Tech, Clean Water & Rural Energy Solutions",
+          "chair": "Dr. A. K. Kulkarni",
+          "description": "Low-cost precision irrigation, solar cold storage, and assistive rural mobility devices."
+        }
+      ],
+      "importantDates": [
+        {
+          "id": 1,
+          "label": "Abstract & Prototype Submission",
+          "date": "2027-01-10",
+          "statusNote": "Upcoming"
+        },
+        {
+          "id": 2,
+          "label": "Registration Closes",
+          "date": "2027-01-28",
+          "statusNote": "Upcoming"
+        }
+      ],
+      "people": [
+        {
+          "id": 1,
+          "kind": "committee",
+          "role": "Convener",
+          "name": "Prof. S. R. Jadhav",
+          "designation": "IQAC Coordinator & Associate Professor",
+          "affiliation": "SVCOER Pandharpur",
+          "email": "iqac@coe.sveri.ac.in",
+          "phone": "+91-02186-216064",
+          "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+          "bio": "Coordinating national academic delegates and NAAC/NEP quality track sessions.",
+          "sortOrder": 1
+        }
+      ],
+      "schedule": [
+        {
+          "id": 1,
+          "dayLabel": "Day 1 (06 Feb)",
+          "timeSlot": "10:00 AM – 01:00 PM",
+          "trackTitle": "Track A & Track B",
+          "sessionTitle": "Opening Keynote & Innovation Poster Expo",
+          "speakerOrChair": "Prof. S. R. Jadhav",
+          "venue": "Central Seminar Hall"
+        }
+      ],
+      "feeTiers": [
+        {
+          "id": 1,
+          "categoryLabel": "Student / Faculty Delegate",
+          "inrAmount": "₹1,200",
+          "includesNote": "Printed ISBN proceedings, lunch & participation certificate"
+        }
+      ],
+      "heroSlides": [
+        {
+          "id": 1,
+          "title": "National Conference on NEP 2020 & Sustainable Rural Engineering Innovations",
+          "caption": "Multidisciplinary Outcome-Based Education & Indigenous Engineering Solutions",
+          "imageUrl": "/src/assets/images/campus_convocation_1794512597749.jpg"
+        },
+        {
+          "id": 2,
+          "title": "IDEA Lab Working Prototype & Rural Tech Showcase",
+          "caption": "Submit hardware demos, NEP pedagogy case studies, and student research papers.",
+          "imageUrl": "/src/assets/images/hero_library_atrium_1794512596890.jpg"
+        }
+      ]
+    }
+  ],
+  "conferenceSubmissions": [
+    {
+      "id": 1,
+      "conferenceId": 1,
+      "trackingCode": "CONF-2026-0001",
+      "paperTitle": "Federated TinyML Anomaly Detection for Industrial Predictive Maintenance",
+      "trackTitle": "Track 1: Generative AI, Cloud Native Systems & Cybersecurity",
+      "authorName": "Prof. A. V. Deshpande",
+      "authorEmail": "avd@example.edu",
+      "authorPhone": "+91-98221-55110",
+      "affiliation": "College of Engineering Pune (COEP Tech)",
+      "coAuthors": "K. R. Patil, S. N. Joshi",
+      "abstractText": "We present an ultra-compact quantized autoencoder running on ARM Cortex-M7 edge sensors federated across factory lines without transmitting raw vibration telemetry.",
+      "status": "accepted",
+      "reviewerNote": "Strong experimental validation; minor formatting edits requested for camera-ready PDF.",
+      "submittedAt": "2026-11-08"
+    }
+  ],
+  "conferenceRegistrations": [
+    {
+      "id": 1,
+      "conferenceId": 1,
+      "regCode": "REG-2026-0001",
+      "attendeeName": "Prof. A. V. Deshpande",
+      "email": "avd@example.edu",
+      "phone": "+91-98221-55110",
+      "affiliation": "COEP Technological University, Pune",
+      "designation": "Assistant Professor",
+      "feeCategory": "Academician / Faculty Member",
+      "participationMode": "On-Campus (In-Person)",
+      "paperTrackingCode": "CONF-2026-0001",
+      "paymentRef": "NEFT-20261110-8821",
+      "status": "verified",
+      "registeredAt": "2026-11-10"
+    }
+  ],
+  "placements": {
+    "summaryNote": "SVERI's Training & Placement Cell works closely with 250+ core engineering and Fortune 500 technology employers, achieving 91.1% overall placement consistency alongside structured Aptitude, Japanese Language, GATE, and Coding Bootcamps from Second Year onwards.",
+    "coordinatorName": "Prof. S. B. Kulkarni",
+    "coordinatorEmail": "tnp@coe.sveri.ac.in",
+    "coordinatorPhone": "+91-02186-216063",
+    "stats": [
+      {
+        "id": 1,
+        "academicYear": "2025-26",
+        "branch": "Computer Science & Engineering (CSE)",
+        "eligibleStudents": 174,
+        "placedStudents": 162,
+        "highestPackageLpa": 22.5,
+        "averagePackageLpa": 6.4,
+        "topRecruitersList": "TCS Digital, Infosys SP, Accenture, Deloitte, Persistent, KPIT",
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "academicYear": "2025-26",
+        "branch": "Electronics & Telecommunication (E&TC)",
+        "eligibleStudents": 112,
+        "placedStudents": 101,
+        "highestPackageLpa": 16,
+        "averagePackageLpa": 5.5,
+        "topRecruitersList": "Qualcomm, Bosch, Tata Elxsi, Honeywell, Cognizant",
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "academicYear": "2025-26",
+        "branch": "Mechanical Engineering",
+        "eligibleStudents": 118,
+        "placedStudents": 106,
+        "highestPackageLpa": 12,
+        "averagePackageLpa": 4.9,
+        "topRecruitersList": "Bharat Forge, Atlas Copco, Tata Motors, Mahindra & Mahindra, Thermax",
+        "sortOrder": 3
+      },
+      {
+        "id": 4,
+        "academicYear": "2025-26",
+        "branch": "Civil Engineering",
+        "eligibleStudents": 64,
+        "placedStudents": 56,
+        "highestPackageLpa": 8.5,
+        "averagePackageLpa": 4.3,
+        "topRecruitersList": "Larsen & Toubro, Shapoorji Pallonji, UltraTech, Tata Projects",
+        "sortOrder": 4
+      },
+      {
+        "id": 5,
+        "academicYear": "2025-26",
+        "branch": "Electrical Engineering",
+        "eligibleStudents": 60,
+        "placedStudents": 54,
+        "highestPackageLpa": 11.2,
+        "averagePackageLpa": 4.8,
+        "topRecruitersList": "Tata Power, Schneider Electric, ABB, Siemens, Torrent Power",
+        "sortOrder": 5
+      }
+    ],
+    "stories": [
+      {
+        "id": 1,
+        "studentName": "Aishwarya N. Patil",
+        "branch": "B.Tech CSE (Batch 2026)",
+        "company": "Microsoft India / Enterprise Tech",
+        "packageLpa": "₹22.5 LPA",
+        "batchYear": "2026",
+        "photoUrl": "/src/assets/images/campus_convocation_1794512597749.jpg",
+        "quote": "Daily DSA peer groups and 6-month autonomous industrial internships gave me confidence to crack top product engineering rounds directly from Pandharpur.",
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "studentName": "Pratik S. Deshmukh",
+        "branch": "B.Tech Mechanical (Batch 2026)",
+        "company": "Atlas Copco India",
+        "packageLpa": "₹12.0 LPA",
+        "batchYear": "2026",
+        "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+        "quote": "Hands-on CAD/FEA training in our Centre of Excellence prepared me thoroughly for core R&D technical interviews.",
+        "sortOrder": 2
+      }
+    ]
+  },
+  "grievances": [
+    {
+      "id": 1,
+      "ticketCode": "GRV-2026-0001",
+      "complainantName": "S. R. Mane",
+      "complainantRole": "Student (UG / PG / Ph.D.)",
+      "email": "srmane@student.sveri.ac.in",
+      "phone": "+91-98220-00001",
+      "departmentOrCell": "Examination Cell & Academic Office",
+      "category": "Academic & Examination",
+      "subject": "DigiLocker ABC Credit Sync Verification",
+      "description": "Requesting re-sync of Semester IV Honours credits to my Academic Bank of Credits (ABC) ID before scholarship renewal deadline.",
+      "status": "resolved",
+      "resolutionNote": "Verified with Examination Cell NAD Nodal Officer. Semester IV credits synced cleanly to DigiLocker ABC portal.",
+      "submittedAt": "2026-11-02",
+      "updatedAt": "2026-11-04"
+    }
+  ],
   "backups": [
     {
       "id": "site-1794750953492-35b2",

@@ -63,6 +63,23 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
     if ($role === 'super_admin') {
         return true;
     }
+
+    $allowedDepts = array_values(array_unique(array_filter(array_map('intval', array_merge(
+        is_array($user['allowed_department_ids'] ?? null) ? $user['allowed_department_ids'] : [],
+        !empty($user['assigned_department_id']) ? [(int)$user['assigned_department_id']] : []
+    )))));
+
+    $allowedModules = is_array($user['allowed_modules'] ?? null) ? $user['allowed_modules'] : [];
+    if (count($allowedModules) > 0) {
+        if ($resource === 'departments') {
+            if (in_array('departments', $allowedModules, true)) {
+                return $targetDeptId === null || empty($allowedDepts) || in_array($targetDeptId, $allowedDepts, true);
+            }
+            return false;
+        }
+        return in_array($resource, $allowedModules, true);
+    }
+
     $hasExplicitScope = !empty($user['allowed_categories']) || !empty($user['allowed_page_ids']);
     if ($role === 'specific_page_editor') {
         return $resource === 'pages' && $hasExplicitScope;
@@ -75,10 +92,171 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
         'documents'                       => in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true),
         'leadership'                      => in_array($role, ['iqac_officer', 'content_editor'], true),
         'alumni'                          => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'conferences'                     => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'placements'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'grievances'                      => in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true),
         'departments'                     => $role === 'department_admin'
-            && ($targetDeptId === null ? !empty($user['assigned_department_id']) : (int)$user['assigned_department_id'] === $targetDeptId),
+            && ($targetDeptId === null ? count($allowedDepts) > 0 : in_array($targetDeptId, $allowedDepts, true)),
         default                           => false,
     };
+}
+
+function rbacModuleOptions(): array
+{
+    return [
+        'categories'     => 'Categories & Menus',
+        'pages'          => 'Pages & UGC Content',
+        'departments'    => 'Departments & Microsites',
+        'sliders_events' => 'Sliders, Ticker & Events',
+        'leadership'     => 'Leadership & Governance',
+        'alumni'         => 'Alumni Network & Portal',
+        'conferences'    => 'Conferences, Workshops & R&D',
+        'placements'     => 'Placements Desk (T&P)',
+        'grievances'     => 'Grievance Redressal Desk',
+        'gallery'        => 'Picture Gallery',
+        'documents'      => 'Document Repository',
+        'directory'      => 'Telephone Directory',
+    ];
+}
+
+function conferenceScopePresets(): array
+{
+    return [
+        'International Conference',
+        'National Conference',
+        'Research Workshop',
+        'Technical Event / Symposium',
+        'Faculty Development Program (FDP)',
+        'Short-Term Training Program (STTP)',
+        'Patent & IPR Clinic',
+    ];
+}
+
+function conferenceModePresets(): array
+{
+    return [
+        'Hybrid (On-Campus + Online)',
+        'On-Campus (In-Person)',
+        'Online Virtual Conference',
+    ];
+}
+
+function conferenceRolePresets(): array
+{
+    return [
+        'Keynote Speaker',
+        'Chief Patron',
+        'General Chair',
+        'Program Chair',
+        'Convener',
+        'Technical Program Committee (TPC)',
+        'Organizing Secretary',
+        'Advisory Board Member',
+    ];
+}
+
+function grievanceCategoryPresets(): array
+{
+    return [
+        'Academic & Examination',
+        'Scholarship & Fee Matters',
+        'Anti-Ragging & Campus Safety',
+        'Hostel, Transport & Canteen',
+        'Library, Lab & Infrastructure',
+        'Equal Opportunity / SC-ST Cell',
+        'Internal Complaint Committee (ICC)',
+    ];
+}
+
+function grievanceRolePresets(): array
+{
+    return [
+        'Student (UG / PG / Ph.D.)',
+        'Parent / Guardian',
+        'Faculty / Staff Member',
+        'Alumni / Visitor',
+    ];
+}
+
+function defaultResearchSliderSlides(): array
+{
+    return [
+        [
+            'id' => 1,
+            'title' => 'International & National Conferences at SVERI',
+            'caption' => 'Host peer-reviewed Scopus/IEEE-aligned conferences, keynote sessions, and call-for-papers under Research.',
+            'imageUrl' => 'assets/images/hero_campus.jpg',
+            'ctaLabel' => 'Explore Conferences',
+            'ctaLink' => 'conferences.php',
+        ],
+        [
+            'id' => 2,
+            'title' => 'Research Workshops, FDPs & STTPs',
+            'caption' => 'Hands-on AI, Robotics, VLSI, Renewable Energy, and Outcome-Based Education workshops managed dynamically.',
+            'imageUrl' => 'assets/images/hero_lab.jpg',
+            'ctaLabel' => 'Browse Workshops & Events',
+            'ctaLink' => 'conferences.php',
+        ],
+        [
+            'id' => 3,
+            'title' => 'Funded R&D Projects, Patents & Symposia',
+            'caption' => 'DST-SERB, AICTE-MODROBS & industry consultancy driving faculty and student technical publications.',
+            'imageUrl' => 'assets/images/hero_library.jpg',
+            'ctaLabel' => 'R&D Disclosures',
+            'ctaLink' => 'page.php?slug=research-development-cell',
+        ],
+    ];
+}
+
+function getResearchSliderSlides(PDO $pdo): array
+{
+    $s = getSiteSettings($pdo);
+    $slides = $s['research_slider_slides'] ?? [];
+    if (is_array($slides) && count($slides) > 0) {
+        return $slides;
+    }
+    return defaultResearchSliderSlides();
+}
+
+function renderCustomSliderBlock(array $slides, int $heightPx = 360, int $autoplaySec = 5): string
+{
+    if (empty($slides)) {
+        return '';
+    }
+    $heightPx = max(240, min(620, $heightPx));
+    $autoplaySec = max(0, min(30, $autoplaySec));
+    $out = '<div class="cms-prose"><div class="cms-block cms-slider" data-block="custom-slider" data-autoplay="' . $autoplaySec . '" data-height="' . $heightPx . '">';
+    $out .= '<div class="cms-slider-viewport" style="height:' . $heightPx . 'px;">';
+    foreach ($slides as $idx => $sl) {
+        $img = mediaUrl($sl['imageUrl'] ?? '', 'assets/images/hero_campus.jpg');
+        $title = trim((string)($sl['title'] ?? 'Featured Highlight'));
+        $caption = trim((string)($sl['caption'] ?? ''));
+        $ctaLabel = trim((string)($sl['ctaLabel'] ?? ''));
+        $ctaLink = trim((string)($sl['ctaLink'] ?? ''));
+        $out .= '<div class="cms-slide' . ($idx === 0 ? ' is-active' : '') . '" data-slide-index="' . $idx . '">';
+        $out .= '<img src="' . e($img) . '" alt="' . e($title) . '">';
+        $out .= '<div class="cms-slide-overlay">';
+        $out .= '<h3 class="cms-slide-title">' . e($title) . '</h3>';
+        if ($caption !== '') {
+            $out .= '<p class="cms-slide-caption">' . e($caption) . '</p>';
+        }
+        if ($ctaLabel !== '' && $ctaLink !== '') {
+            $out .= '<p class="cms-slide-cta-row"><a class="cms-btn cms-btn-amber cms-slide-cta" href="' . e(baseUrl($ctaLink)) . '">' . e($ctaLabel) . '</a></p>';
+        }
+        $out .= '</div></div>';
+    }
+    $out .= '</div>';
+    if (count($slides) > 1) {
+        $out .= '<button type="button" class="cms-slider-prev" aria-label="Previous slide">&#8249;</button>';
+        $out .= '<button type="button" class="cms-slider-next" aria-label="Next slide">&#8250;</button>';
+        $out .= '<div class="cms-slider-dots">';
+        foreach ($slides as $idx => $_) {
+            $out .= '<button type="button" class="cms-slider-dot' . ($idx === 0 ? ' is-active' : '') . '" data-slide-to="' . $idx . '" aria-label="Go to slide ' . ($idx + 1) . '"></button>';
+        }
+        $out .= '</div>';
+    }
+    $out .= '</div></div>';
+    return $out;
 }
 
 function canAccessCategory(array $user, string $categorySlug): bool
@@ -242,6 +420,15 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
         try {
             $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('super_admin', 'content_editor', 'department_admin', 'iqac_officer', 'exam_controller', 'specific_page_editor') NOT NULL");
         } catch (Throwable $ignoredEnum) {
+        }
+        foreach ([
+            "ALTER TABLE users ADD COLUMN allowed_modules_json TEXT NULL AFTER allowed_page_ids_json",
+            "ALTER TABLE users ADD COLUMN allowed_department_ids_json TEXT NULL AFTER allowed_modules_json",
+        ] as $alterSql) {
+            try {
+                $pdo->exec($alterSql);
+            } catch (Throwable $ignoredCol) {
+            }
         }
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS alumni_profiles (
@@ -454,6 +641,256 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('alumni_discussions_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
                 ->execute();
         }
+
+        // Phase 2: Conferences, Workshops, FDPs, Events, Placements & Grievances (non-destructive)
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS conferences (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                slug VARCHAR(140) NOT NULL UNIQUE,
+                title VARCHAR(260) NOT NULL,
+                short_name VARCHAR(80) NOT NULL,
+                scope VARCHAR(120) NOT NULL DEFAULT 'International Conference',
+                theme VARCHAR(300) NOT NULL DEFAULT '',
+                start_date DATE NOT NULL,
+                end_date DATE NOT NULL,
+                venue VARCHAR(240) NOT NULL DEFAULT '',
+                mode VARCHAR(120) NOT NULL DEFAULT 'Hybrid (On-Campus + Online)',
+                organizing_department VARCHAR(160) NOT NULL DEFAULT '',
+                indexing_partners_json TEXT NULL,
+                contact_email VARCHAR(160) NOT NULL DEFAULT '',
+                contact_phone VARCHAR(80) NOT NULL DEFAULT '',
+                banner_url VARCHAR(300) DEFAULT 'assets/images/hero_campus.jpg',
+                hero_slides_json LONGTEXT NULL,
+                overview_html MEDIUMTEXT NULL,
+                cfp_html MEDIUMTEXT NULL,
+                tracks_json MEDIUMTEXT NULL,
+                important_dates_json MEDIUMTEXT NULL,
+                people_json MEDIUMTEXT NULL,
+                schedule_json MEDIUMTEXT NULL,
+                fee_tiers_json MEDIUMTEXT NULL,
+                is_published TINYINT(1) DEFAULT 1,
+                is_featured TINYINT(1) DEFAULT 0,
+                sort_order INT DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB"
+        );
+        try {
+            $pdo->exec("ALTER TABLE conferences ADD COLUMN hero_slides_json LONGTEXT NULL AFTER banner_url");
+        } catch (Throwable $ignoredHeroCol) {
+        }
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS conference_submissions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                conference_id INT NOT NULL,
+                tracking_code VARCHAR(40) NOT NULL,
+                paper_title VARCHAR(280) NOT NULL,
+                track_title VARCHAR(180) NOT NULL,
+                author_name VARCHAR(160) NOT NULL,
+                author_email VARCHAR(160) NOT NULL,
+                author_phone VARCHAR(60) NULL,
+                affiliation VARCHAR(220) NOT NULL,
+                co_authors VARCHAR(300) NULL,
+                abstract_text TEXT NOT NULL,
+                manuscript_url VARCHAR(300) NULL,
+                status ENUM('Submitted','Under Review','Revision Requested','Accepted','Rejected') DEFAULT 'Submitted',
+                reviewer_notes TEXT NULL,
+                submitted_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB"
+        );
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS conference_registrations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                conference_id INT NOT NULL,
+                registration_code VARCHAR(40) NOT NULL,
+                attendee_name VARCHAR(160) NOT NULL,
+                email VARCHAR(160) NOT NULL,
+                phone VARCHAR(60) NULL,
+                affiliation VARCHAR(220) NOT NULL,
+                fee_category VARCHAR(140) NOT NULL,
+                paper_id_ref VARCHAR(60) NULL,
+                payment_ref VARCHAR(120) NULL,
+                status ENUM('Pending','Confirmed','Cancelled') DEFAULT 'Pending',
+                registered_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB"
+        );
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS placement_stats (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                academic_year VARCHAR(30) NOT NULL,
+                branch VARCHAR(120) NOT NULL,
+                eligible_students INT DEFAULT 0,
+                placed_students INT DEFAULT 0,
+                highest_package_lpa DECIMAL(6,2) DEFAULT 0.00,
+                average_package_lpa DECIMAL(6,2) DEFAULT 0.00,
+                top_recruiters_list VARCHAR(400) NULL,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS placement_stories (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                student_name VARCHAR(160) NOT NULL,
+                batch_year VARCHAR(30) NOT NULL,
+                branch VARCHAR(120) NOT NULL,
+                company VARCHAR(160) NOT NULL,
+                role_title VARCHAR(160) NOT NULL,
+                package_lpa VARCHAR(40) NOT NULL,
+                photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
+                quote_text TEXT NULL,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS grievances (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                ticket_code VARCHAR(40) NOT NULL UNIQUE,
+                complainant_name VARCHAR(160) NOT NULL,
+                email VARCHAR(160) NOT NULL,
+                phone VARCHAR(60) NULL,
+                reporter_role VARCHAR(100) NOT NULL,
+                category VARCHAR(140) NOT NULL,
+                subject VARCHAR(240) NOT NULL,
+                description TEXT NOT NULL,
+                urgency ENUM('Normal','High','Urgent') DEFAULT 'Normal',
+                status ENUM('Open','Under Review','Escalated','Resolved') DEFAULT 'Open',
+                resolution_note TEXT NULL,
+                submitted_at VARCHAR(32) NOT NULL,
+                updated_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB"
+        );
+
+        // Seed Research Slider Slides if absent
+        $resSliderChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'research_slider_slides' LIMIT 1");
+        $resSliderChk->execute();
+        if (!$resSliderChk->fetchColumn()) {
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('research_slider_slides', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+                ->execute([json_encode(defaultResearchSliderSlides(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+        }
+
+        // Seed Conferences / Workshops / Events once
+        $confSeedChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'conferences_seeded_v1' LIMIT 1");
+        $confSeedChk->execute();
+        if (!$confSeedChk->fetchColumn() && (int)$pdo->query('SELECT COUNT(*) FROM conferences')->fetchColumn() === 0) {
+            $insConf = $pdo->prepare(
+                'INSERT INTO conferences (slug, title, short_name, scope, theme, start_date, end_date, venue, mode, organizing_department, indexing_partners_json, contact_email, contact_phone, banner_url, hero_slides_json, overview_html, cfp_html, tracks_json, important_dates_json, people_json, schedule_json, fee_tiers_json, is_published, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            );
+            $insConf->execute([
+                'icaest-2026',
+                'International Conference on Advances in Engineering, Science & Sustainable Technology',
+                'ICAEST-2026',
+                'International Conference',
+                'AI-Driven Autonomous Systems, Clean Energy Microgrids & Smart Manufacturing',
+                '2026-12-18',
+                '2026-12-19',
+                'SVERI Central Auditorium, Gopalpur, Pandharpur',
+                'Hybrid (On-Campus + Online)',
+                'All Engineering Departments & R&D Cell',
+                json_encode(['IEEE Xplore (Planned)', 'Scopus Proceedings', 'UGC Care Journal']),
+                'icaest2026@coe.sveri.ac.in',
+                '+91-02186-216063',
+                'assets/images/hero_campus.jpg',
+                json_encode([
+                    ['id' => 1, 'title' => 'ICAEST-2026: International Research Conclave', 'caption' => 'Bringing researchers, IEEE fellows, and industry leaders together at SVERI Pandharpur.', 'imageUrl' => 'assets/images/hero_campus.jpg', 'ctaLabel' => 'Submit Manuscript', 'ctaLink' => 'conference.php?slug=icaest-2026#submit-paper'],
+                    ['id' => 2, 'title' => 'Peer-Reviewed Proceedings & Keynotes', 'caption' => 'Dedicated tracks spanning AI, Edge Computing, Smart Grids, VLSI & Structural Materials.', 'imageUrl' => 'assets/images/hero_lab.jpg', 'ctaLabel' => 'Register as Delegate', 'ctaLink' => 'conference.php?slug=icaest-2026#register'],
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                '<p>ICAEST-2026 provides a premier international interdisciplinary forum for researchers, academicians, and industry practitioners to present breakthroughs in AI, Embedded VLSI, Clean Energy, Robotics, and Sustainable Infrastructure.</p>',
+                '<p>Original unpublished full-length papers (6–8 pages in IEEE double-column format) are invited. All accepted and presented papers will undergo plagiarism screening and double-blind peer review.</p>',
+                json_encode([
+                    ['id' => 't1', 'code' => 'Track 1', 'title' => 'Artificial Intelligence, Cloud & Cyber Security', 'description' => 'LLMs, edge analytics, computer vision, and privacy-preserving cloud architectures.', 'chairName' => 'Dr. Anjali K. Deshpande'],
+                    ['id' => 't2', 'code' => 'Track 2', 'title' => 'VLSI Design, Embedded IoT & Communication Systems', 'description' => 'Low-power ASIC, RF antennas, RTOS, and 5G/6G networks.', 'chairName' => 'Dr. Vandana P. Chavan'],
+                    ['id' => 't3', 'code' => 'Track 3', 'title' => 'EV Powertrains, Robotics & Sustainable Structures', 'description' => 'Smart manufacturing, clean energy storage, and resilient civil materials.', 'chairName' => 'Dr. Rajendra B. Kulkarni'],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 'd1', 'label' => 'Full Paper Submission Deadline', 'dateText' => '2026-11-25', 'isHighlight' => true],
+                    ['id' => 'd2', 'label' => 'Acceptance Notification', 'dateText' => '2026-12-05', 'isHighlight' => false],
+                    ['id' => 'd3', 'label' => 'Camera-Ready & Registration', 'dateText' => '2026-12-10', 'isHighlight' => true],
+                    ['id' => 'd4', 'label' => 'Conference Dates', 'dateText' => '18–19 Dec 2026', 'isHighlight' => true],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 'p1', 'name' => 'Dr. B. P. Ronge', 'role' => 'Chief Patron', 'designation' => 'Principal & Director', 'affiliation' => 'SVCOER Pandharpur', 'bio' => 'Presiding chair driving autonomous research quality.', 'photoUrl' => 'assets/images/principal.jpg'],
+                    ['id' => 'p2', 'name' => 'Dr. Aravind S. Nadkarni', 'role' => 'Keynote Speaker', 'designation' => 'Professor & IEEE Fellow', 'affiliation' => 'IIT Bombay', 'bio' => 'Specialist in trustworthy edge AI and autonomous cyber-physical systems.', 'photoUrl' => 'assets/images/principal.jpg'],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 's1', 'day' => 'Day 1 · 18 Dec', 'timeSlot' => '09:30 – 11:00', 'sessionTitle' => 'Inauguration & Keynote Address', 'speaker' => 'Dr. Aravind S. Nadkarni', 'hall' => 'SVERI Central Auditorium'],
+                    ['id' => 's2', 'day' => 'Day 1 · 18 Dec', 'timeSlot' => '11:30 – 13:30', 'sessionTitle' => 'Parallel Technical Paper Sessions (Tracks 1–3)', 'speaker' => 'Track Chairs', 'hall' => 'Seminar Halls A, B & C'],
+                    ['id' => 's3', 'day' => 'Day 2 · 19 Dec', 'timeSlot' => '14:30 – 16:30', 'sessionTitle' => 'Best Paper Awards & Valedictory Ceremony', 'speaker' => 'Organizing Committee', 'hall' => 'Central Auditorium'],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 'f1', 'category' => 'UG / PG Student / Research Scholar', 'earlyBirdFee' => 'INR 2,500', 'regularFee' => 'INR 3,000', 'notes' => 'Includes proceedings kit & certificate'],
+                    ['id' => 'f2', 'category' => 'Academician / Faculty Delegate', 'earlyBirdFee' => 'INR 3,500', 'regularFee' => 'INR 4,500', 'notes' => 'Includes lunch & digital proceedings'],
+                    ['id' => 'f3', 'category' => 'Industry Professional / Foreign Delegate', 'earlyBirdFee' => 'INR 5,500 / USD 120', 'regularFee' => 'INR 6,500 / USD 150', 'notes' => 'Full access + publication support'],
+                ], JSON_UNESCAPED_UNICODE),
+                1, 1, 1
+            ]);
+            $insConf->execute([
+                'ai-robotics-workshop-2026',
+                '5-Day Hands-On Research Workshop on Generative AI, Edge Vision & Industrial Robotics',
+                'WORKSHOP-AI-2026',
+                'Research Workshop',
+                'Practical ROS2, edge inference optimization, and KUKA cobot cell programming',
+                '2026-11-24',
+                '2026-11-28',
+                'Tata CIII Robotics Lab & GPU Cluster, Pandharpur',
+                'On-Campus (In-Person)',
+                'CSE & Mechanical Engineering',
+                json_encode(['AICTE ATAL Approved', 'SVERI R&D Certificate']),
+                'workshop.ai@coe.sveri.ac.in',
+                '+91-02186-216063',
+                'assets/images/hero_lab.jpg',
+                json_encode([
+                    ['id' => 1, 'title' => 'Hands-On Generative AI & Robotics Bootcamp', 'caption' => 'Build end-to-end vision pipelines and cobot automation cells in 5 intensive days.', 'imageUrl' => 'assets/images/hero_lab.jpg', 'ctaLabel' => 'Register Now', 'ctaLink' => 'conference.php?slug=ai-robotics-workshop-2026#register'],
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                '<p>Designed for B.Tech/M.Tech students, Ph.D. scholars, and engineering faculty seeking hands-on implementation skills on GPU clusters and industrial cobots.</p>',
+                '<p>Participants may optionally submit a 2-page lab project abstract for showcase evaluation on Day 5.</p>',
+                json_encode([
+                    ['id' => 'w1', 'code' => 'Module 1', 'title' => 'Quantized Vision Models & Edge Deployment', 'description' => 'ONNX Runtime, TensorRT & Jetson deployment labs.', 'chairName' => 'Dr. Siddharth R. Mane'],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 'wd1', 'label' => 'Seat Confirmation Cutoff', 'dateText' => '2026-11-20', 'isHighlight' => true],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 'wp1', 'name' => 'Dr. Siddharth R. Mane', 'role' => 'Convener', 'designation' => 'Associate Professor', 'affiliation' => 'CSE Dept', 'bio' => 'AICTE RPS grantee leading GPU Vision lab.', 'photoUrl' => 'assets/images/principal.jpg'],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 'ws1', 'day' => 'Days 1–5', 'timeSlot' => '10:00 – 17:00', 'sessionTitle' => 'Interactive Coding & Hardware Lab Practicum', 'speaker' => 'Faculty & Industry Mentors', 'hall' => 'AI & Tata CIII Labs'],
+                ], JSON_UNESCAPED_UNICODE),
+                json_encode([
+                    ['id' => 'wf1', 'category' => 'Student Participant', 'earlyBirdFee' => 'INR 500', 'regularFee' => 'INR 750', 'notes' => 'Includes lab manual & certificate'],
+                    ['id' => 'wf2', 'category' => 'Faculty / Industry Participant', 'earlyBirdFee' => 'INR 1,200', 'regularFee' => 'INR 1,500', 'notes' => 'Full 5-day lab access'],
+                ], JSON_UNESCAPED_UNICODE),
+                1, 1, 2
+            ]);
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('conferences_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
+
+        // Seed Placements stats & stories once
+        $plChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'placements_seeded_v1' LIMIT 1");
+        $plChk->execute();
+        if (!$plChk->fetchColumn() && (int)$pdo->query('SELECT COUNT(*) FROM placement_stats')->fetchColumn() === 0) {
+            $insPl = $pdo->prepare('INSERT INTO placement_stats (academic_year, branch, eligible_students, placed_students, highest_package_lpa, average_package_lpa, top_recruiters_list, sort_order) VALUES (?,?,?,?,?,?,?,?)');
+            $insPl->execute(['2025-26', 'Computer Science & Engg.', 172, 161, 18.50, 6.20, 'TCS Digital, Infosys, Accenture, Deloitte', 1]);
+            $insPl->execute(['2025-26', 'Electronics & Telecom', 112, 98, 12.00, 5.10, 'Qualcomm, KPIT, Wipro, Tech Mahindra', 2]);
+            $insPl->execute(['2025-26', 'Mechanical Engineering', 108, 94, 10.50, 4.90, 'Bharat Forge, Atlas Copco, Mahindra & Mahindra', 3]);
+
+            $insSt = $pdo->prepare('INSERT INTO placement_stories (student_name, batch_year, branch, company, role_title, package_lpa, photo_url, quote_text, sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
+            $insSt->execute(['Atharva Deshpande', '2026', 'CSE', 'Deloitte India', 'Analyst — Cloud & Data Engg.', '14.5 LPA', 'assets/images/principal.jpg', 'Coding bootcamps and alumni mock interviews prepared me thoroughly.', 1]);
+            $insSt->execute(['Pranjal Kulkarni', '2026', 'MECH', 'Atlas Copco', 'Graduate Engineer Trainee', '8.2 LPA', 'assets/images/principal.jpg', 'Hands-on CNC and Robotics lab exposure set our batch apart during technical rounds.', 2]);
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('placements_summary', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+                ->execute([json_encode([
+                    'summaryNote'      => 'With a 91.1% placement track record and 250+ visiting recruiters, our Training & Placement Cell delivers structured aptitude, coding, Communication Improvement Programs (CIP), and industry internship mentorship.',
+                    'coordinatorName'  => 'Dr. S. B. Kulkarni',
+                    'coordinatorEmail' => 'tnp@coe.sveri.ac.in',
+                    'coordinatorPhone' => '+91-02186-216063',
+                ], JSON_UNESCAPED_UNICODE)]);
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('placements_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
     } catch (Throwable $ignoredSchema) {
     }
 }
@@ -477,6 +914,9 @@ function swapSortOrder(PDO $pdo, string $table, int $id, string $dir, ?string $s
         'alumni_profiles',
         'alumni_jobs',
         'alumni_events',
+        'conferences',
+        'placement_stats',
+        'placement_stories',
     ];
     $allowedScopes = [null, 'category_id', 'department_id'];
     $allowedTies   = ['id ASC', 'id DESC', 'event_date DESC, id DESC', 'uploaded_at DESC, id DESC'];

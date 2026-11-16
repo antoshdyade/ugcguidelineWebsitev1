@@ -95,8 +95,11 @@ export const ALUMNI_PLEDGE_TYPE_PRESETS = [
 export const CONFERENCE_SCOPE_PRESETS = [
   'International Conference',
   'National Conference',
-  'AICTE / IEEE Symposium',
+  'Research Workshop',
+  'Technical Event / Symposium',
   'Faculty Development Program (FDP)',
+  'Short-Term Training Program (STTP)',
+  'Patent & IPR Clinic',
 ] as const;
 
 export const CONFERENCE_MODE_PRESETS = [
@@ -306,9 +309,32 @@ export function migrateDatabaseInPlace(
     upgraded = true;
   }
 
-  const conferences: Conference[] = Array.isArray(existing.conferences)
+  const rawConferences: Conference[] = Array.isArray(existing.conferences)
     ? existing.conferences
     : ((upgraded = true), structuredClone(seed.conferences || []));
+
+  const conferences: Conference[] = rawConferences.map((conf) => {
+    if (Array.isArray(conf.heroSlides) && conf.heroSlides.length > 0) {
+      return conf;
+    }
+    const seedMatch = (seed.conferences || []).find((sc) => sc.id === conf.id || sc.slug === conf.slug);
+    upgraded = true;
+    return {
+      ...conf,
+      heroSlides: seedMatch?.heroSlides
+        ? structuredClone(seedMatch.heroSlides)
+        : [
+            {
+              id: 1,
+              title: `${conf.shortName}: ${conf.title}`,
+              caption: conf.theme || `${conf.scope} · ${conf.venue}`,
+              imageUrl: conf.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+              ctaLabel: 'Explore Tracks & Submit Paper',
+              ctaLink: `/conference/${conf.slug}`,
+            },
+          ],
+    };
+  });
 
   const conferenceSubmissions: ConferenceSubmission[] = Array.isArray(existing.conferenceSubmissions)
     ? existing.conferenceSubmissions
@@ -351,7 +377,21 @@ export function migrateDatabaseInPlace(
     fontBody: existing.settings?.fontBody || seed.settings.fontBody || "'Plus Jakarta Sans', system-ui, sans-serif",
     cardRadius: existing.settings?.cardRadius || seed.settings.cardRadius || 'rounded',
     headerStyle: existing.settings?.headerStyle || seed.settings.headerStyle || 'classic',
+    researchSliderSlides:
+      Array.isArray(existing.settings?.researchSliderSlides) && existing.settings.researchSliderSlides.length > 0
+        ? existing.settings.researchSliderSlides
+        : structuredClone(seed.settings.researchSliderSlides || []),
     homeSections: {
+      showTicker: true,
+      showSlider: true,
+      showStatsAndRecognitions: true,
+      showAboutAndDownloads: true,
+      showApprovedAndVision: true,
+      showLeadershipDesk: true,
+      showExaminationSpotlight: true,
+      showDepartments: true,
+      showCategoriesDirectory: true,
+      showEventsAndRecruiters: true,
       ...(seed.settings.homeSections || {}),
       ...(existing.settings?.homeSections || {}),
     },

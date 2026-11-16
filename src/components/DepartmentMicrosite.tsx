@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { sortByOrder } from '../lib/cmsLogic';
+import { CmsHtmlContent } from './CmsHtmlContent';
 import type { Department, DepartmentSubPagePhoto } from '../types/cms';
 
 interface DepartmentMicrositeProps {
@@ -380,11 +381,10 @@ export function DepartmentMicrosite({
                 </div>
               )}
 
-              <div
-                className="cms-prose text-stone-700 dark:text-slate-200"
-                dangerouslySetInnerHTML={{
-                  __html: currentSubPage?.contentHtml || `<p>${dept.overview}</p>`,
-                }}
+              <CmsHtmlContent
+                html={currentSubPage?.contentHtml || `<p>${dept.overview}</p>`}
+                className="text-stone-700 dark:text-slate-200"
+                onNavigate={onNavigate}
               />
 
               {/* Structured Items Feed (Notice Board, Events, Notes & Syllabus, Achievements) */}

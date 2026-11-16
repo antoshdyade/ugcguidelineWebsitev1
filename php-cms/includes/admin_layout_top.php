@@ -123,8 +123,14 @@ $uploadPolicy = isset($pdo)
         <?php if (canAccessResource($user, 'leadership')): ?>
           <a href="<?= e(baseUrl('admin/manage_leadership.php')) ?>" class="<?= $activePage === 'manage_leadership.php' ? 'active' : '' ?>"><?= $icons['usercheck'] ?><span>Leadership &amp; Our Desk</span></a>
         <?php endif; ?>
+        <?php if (canAccessResource($user, 'conferences')): ?>
+          <a href="<?= e(baseUrl('admin/manage_conferences.php')) ?>" class="<?= $activePage === 'manage_conferences.php' ? 'active' : '' ?>"><?= $icons['blocks'] ?><span>Conferences, Workshops &amp; R&amp;D</span></a>
+        <?php endif; ?>
         <?php if (canAccessResource($user, 'alumni')): ?>
           <a href="<?= e(baseUrl('admin/manage_alumni.php')) ?>" class="<?= $activePage === 'manage_alumni.php' ? 'active' : '' ?>"><?= $icons['graduation'] ?><span>Alumni Network &amp; Jobs</span></a>
+        <?php endif; ?>
+        <?php if (canAccessResource($user, 'placements') || canAccessResource($user, 'grievances')): ?>
+          <a href="<?= e(baseUrl('admin/manage_portals.php')) ?>" class="<?= $activePage === 'manage_portals.php' ? 'active' : '' ?>"><?= $icons['shield'] ?><span>Placements &amp; Grievance Desk</span></a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'gallery')): ?>
           <a href="<?= e(baseUrl('admin/manage_gallery.php')) ?>" class="<?= $activePage === 'manage_gallery.php' ? 'active' : '' ?>"><?= $icons['image'] ?><span>Picture Gallery</span></a>

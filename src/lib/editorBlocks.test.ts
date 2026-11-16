@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildCustomSliderHtml,
+  buildPhotoProfileCardHtml,
   buildStyledTableHtml,
   EDITOR_COMPONENT_BLOCKS,
   swapTableThemeInHtml,
@@ -45,4 +47,61 @@ test('EDITOR_COMPONENT_BLOCKS exposes distinct graphical HTML components across 
     assert.ok(block.html.includes('data-block='), `Missing data-block attribute on ${block.id}`);
     assert.ok(block.title.length > 3);
   }
+  assert.ok(ids.has('custom-slider'));
+  assert.ok(ids.has('photo-profile-card'));
 });
+
+test('buildCustomSliderHtml generates interactive slider markup, sanitizes unsafe URLs, and clamps options', () => {
+  const html = buildCustomSliderHtml(
+    [
+      {
+        id: '1',
+        imageUrl: 'javascript:alert(1)',
+        title: 'AI & Robotics Symposium',
+        caption: 'Keynote & Technical Sessions',
+        ctaLabel: 'Register',
+        ctaLink: 'javascript:evil()',
+      },
+      {
+        id: '2',
+        imageUrl: '/uploads/campus.jpg',
+        title: 'IEEE Conference Track',
+        caption: 'Accepted papers archived in Scopus',
+        ctaLabel: 'Submit Paper',
+        ctaLink: '/conferences',
+      },
+    ],
+    { heightPx: 999, autoplaySec: 7 },
+  );
+  assert.ok(html.includes('data-block="custom-slider"'));
+  assert.ok(html.includes('data-autoplay="7"'));
+  assert.ok(html.includes('height:620px;'));
+  assert.equal(html.includes('javascript:'), false);
+  assert.equal((html.match(/data-slide-to="/g) || []).length, 2);
+  assert.ok(html.includes('href="/conferences"'));
+});
+
+test('buildPhotoProfileCardHtml renders portrait card HTML safely in 1 and 2 column layouts', () => {
+  const single = buildPhotoProfileCardHtml({
+    roleBadge: 'Statutory Officer',
+    name: 'Dr. Test <Faculty>',
+    designation: 'Professor',
+    email: 'test@coe.sveri.ac.in',
+    phone: '+91-99999',
+    photoUrl: 'javascript:alert(1)',
+    columns: 1,
+  });
+  assert.ok(single.includes('data-block="photo-profile-card"'));
+  assert.ok(single.includes('Dr. Test &lt;Faculty&gt;'));
+  assert.equal(single.includes('javascript:'), false);
+
+  const dual = buildPhotoProfileCardHtml({
+    roleBadge: 'Committee',
+    name: 'Dr. Member',
+    designation: 'Member',
+    columns: 2,
+  });
+  assert.ok(dual.includes('cms-grid-2'));
+  assert.equal((dual.match(/class="cms-photo-profile-card"/g) || []).length, 2);
+});
+

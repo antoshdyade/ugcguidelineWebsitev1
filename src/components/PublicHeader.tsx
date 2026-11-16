@@ -334,7 +334,11 @@ export function PublicHeader({
       </div>
 
       {/* Institutional Crest / Uploaded Logo, Trust Banner, Institute Code Pill & Global Search */}
-      <div className="max-w-[1380px] mx-auto px-4 py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div
+        className={`max-w-[1380px] mx-auto px-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 ${
+          settings.headerStyle === 'compact' ? 'py-2' : 'py-3.5'
+        }`}
+      >
         <button
           type="button"
           onClick={() => onNavigate('/')}
@@ -462,7 +466,7 @@ export function PublicHeader({
       >
         <div className="max-w-[1380px] mx-auto px-4">
           {/* Desktop Single-Row Nav */}
-          <ul className="hidden lg:flex flex-wrap items-center gap-0.5 py-1">
+          <ul className="hidden lg:flex flex-wrap items-center gap-0 py-1">
             <li>
               <button
                 type="button"
@@ -470,7 +474,7 @@ export function PublicHeader({
                   setOpenDropdown(null);
                   onNavigate('/');
                 }}
-                className={`px-3 py-2 text-xs xl:text-sm font-semibold uppercase tracking-wide whitespace-nowrap shrink-0 rounded transition-colors ${
+                className={`px-2 py-2 text-xs xl:text-[13px] font-semibold uppercase tracking-wide whitespace-nowrap shrink-0 rounded transition-colors ${
                   currentPath === '/'
                     ? 'bg-white/20 text-amber-300'
                     : 'text-white/95 hover:bg-white/10'
@@ -495,7 +499,7 @@ export function PublicHeader({
                     type="button"
                     aria-expanded={isOpen}
                     onClick={() => setOpenDropdown(isOpen ? null : cat.slug)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-2 text-xs xl:text-sm font-medium rounded whitespace-nowrap shrink-0 transition-colors ${
+                    className={`inline-flex items-center gap-0.5 px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium rounded whitespace-nowrap shrink-0 transition-colors ${
                       isActiveCat ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
                     }`}
                   >
@@ -528,6 +532,42 @@ export function PublicHeader({
                           >
                             Interactive Alumni Network, Jobs &amp; Registration &rarr;
                           </button>
+                        )}
+                        {cat.slug === 'research' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenDropdown(null);
+                              onNavigate('/conferences');
+                            }}
+                            className="w-full text-left px-2.5 py-2 text-xs font-bold rounded bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 mb-1"
+                          >
+                            Conferences, Workshops, FDPs &amp; Events Portal &rarr;
+                          </button>
+                        )}
+                        {cat.slug === 'student-life' && (
+                          <div className="space-y-1 mb-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdown(null);
+                                onNavigate('/placements');
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 text-xs font-bold rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                            >
+                              Training &amp; Placement (T&amp;P) Hub &rarr;
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdown(null);
+                                onNavigate('/grievance');
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 text-xs font-bold rounded bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/40"
+                            >
+                              Online Grievance &amp; Anti-Ragging Helpdesk &rarr;
+                            </button>
+                          </div>
                         )}
                         <ul className="space-y-0.5 max-h-80 overflow-y-auto">
                           {catPages.map((pg) => (
@@ -588,7 +628,7 @@ export function PublicHeader({
                   type="button"
                   aria-expanded={openDropdown === '__more__'}
                   onClick={() => setOpenDropdown(openDropdown === '__more__' ? null : '__more__')}
-                  className="inline-flex items-center gap-1 px-2.5 py-2 text-xs xl:text-sm font-medium text-white/95 hover:bg-white/10 rounded whitespace-nowrap shrink-0 transition-colors"
+                  className="inline-flex items-center gap-0.5 px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium text-white/95 hover:bg-white/10 rounded whitespace-nowrap shrink-0 transition-colors"
                 >
                   <span>More Portals</span>
                   <ChevronDown className="w-3.5 h-3.5 opacity-75" />
@@ -611,6 +651,42 @@ export function PublicHeader({
                               <span>{cat.name}</span>
                               <span>Portal &rarr;</span>
                             </button>
+                            {cat.slug === 'research' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdown(null);
+                                  onNavigate('/conferences');
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs font-bold rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 my-1"
+                              >
+                                Conferences, Workshops &amp; Events Portal &rarr;
+                              </button>
+                            )}
+                            {cat.slug === 'student-life' && (
+                              <div className="space-y-1 my-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                    onNavigate('/placements');
+                                  }}
+                                  className="w-full text-left px-3 py-1 text-xs font-bold rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300"
+                                >
+                                  Training &amp; Placement Hub &rarr;
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                    onNavigate('/grievance');
+                                  }}
+                                  className="w-full text-left px-3 py-1 text-xs font-bold rounded bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300"
+                                >
+                                  Grievance Redressal Portal &rarr;
+                                </button>
+                              </div>
+                            )}
                             {catPages.map((pg) => (
                               <button
                                 key={pg.id}
@@ -636,8 +712,43 @@ export function PublicHeader({
             <li>
               <button
                 type="button"
+                onClick={() => onNavigate('/conferences')}
+                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                  currentPath === '/conferences' || currentPath.startsWith('/conference/')
+                    ? 'bg-white/20 text-amber-300'
+                    : 'text-white/95 hover:bg-white/10'
+                }`}
+              >
+                Conferences
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => onNavigate('/placements')}
+                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                  currentPath === '/placements' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
+                }`}
+              >
+                Placements
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => onNavigate('/grievance')}
+                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                  currentPath === '/grievance' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
+                }`}
+              >
+                Grievance
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
                 onClick={() => onNavigate('/alumni')}
-                className={`px-2.5 py-2 text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
                   currentPath.startsWith('/alumni') ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
                 }`}
               >
@@ -648,7 +759,7 @@ export function PublicHeader({
               <button
                 type="button"
                 onClick={() => onNavigate('/gallery')}
-                className={`px-2.5 py-2 text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
                   currentPath === '/gallery' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
                 }`}
               >
@@ -659,7 +770,7 @@ export function PublicHeader({
               <button
                 type="button"
                 onClick={() => onNavigate('/contact')}
-                className={`px-2.5 py-2 text-xs xl:text-sm font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
                   currentPath === '/contact' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
                 }`}
               >
@@ -681,6 +792,36 @@ export function PublicHeader({
                   className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
                 >
                   {t('home')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onNavigate('/conferences');
+                  }}
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-amber-100 text-slate-950 font-semibold"
+                >
+                  Conferences &amp; Events
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onNavigate('/placements');
+                  }}
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
+                >
+                  Placements Hub
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onNavigate('/grievance');
+                  }}
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
+                >
+                  Grievance Helpdesk
                 </button>
                 <button
                   type="button"
@@ -718,7 +859,7 @@ export function PublicHeader({
                     setMobileMenuOpen(false);
                     onNavigate('/contact');
                   }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900 col-span-2"
+                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
                 >
                   {t('contact')}
                 </button>
@@ -739,6 +880,18 @@ export function PublicHeader({
                     >
                       Open {cat.name} Portal &rarr;
                     </button>
+                    {cat.slug === 'research' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          onNavigate('/conferences');
+                        }}
+                        className="block w-full text-left py-1 text-xs font-bold text-amber-800"
+                      >
+                        Conferences, Workshops &amp; Events Portal &rarr;
+                      </button>
+                    )}
                     {getCategoryPages(cat.slug).map((pg) => (
                       <button
                         key={pg.id}

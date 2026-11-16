@@ -31,6 +31,13 @@ function backupTablesList(): array
         'alumni_discussion_topics',
         'alumni_discussion_posts',
         'alumni_discussion_comments',
+        'conferences',
+        'conference_submissions',
+        'conference_registrations',
+        'placement_stats',
+        'placement_stories',
+        'grievances',
+        'cms_kv_store',
     ];
 }
 

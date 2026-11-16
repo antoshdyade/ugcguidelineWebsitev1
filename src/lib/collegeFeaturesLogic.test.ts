@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CONFERENCE_SCOPE_PRESETS,
   CURRENT_SCHEMA_VERSION,
   generateReferenceCode,
   migrateDatabaseInPlace,
@@ -234,3 +235,152 @@ test('migrateDatabaseInPlace upgrades v1 data non-destructively without losing c
   assert.equal(db.placements?.stats.length, 1);
   assert.equal(db.alumni?.achievers?.length, 1);
 });
+
+test('CONFERENCE_SCOPE_PRESETS covers conferences/workshops/events and migrateDatabaseInPlace backfills sliders non-destructively', () => {
+  assert.ok(CONFERENCE_SCOPE_PRESETS.includes('International Conference'));
+  assert.ok(CONFERENCE_SCOPE_PRESETS.includes('National Conference'));
+  assert.ok(CONFERENCE_SCOPE_PRESETS.includes('Research Workshop'));
+  assert.ok(CONFERENCE_SCOPE_PRESETS.includes('Technical Event / Symposium'));
+  assert.ok(CONFERENCE_SCOPE_PRESETS.includes('Short-Term Training Program (STTP)'));
+  assert.ok(CONFERENCE_SCOPE_PRESETS.includes('Patent & IPR Clinic'));
+
+  const seed = {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    categories: [],
+    pages: [],
+    leadership: [],
+    departments: [],
+    sliders: [],
+    ticker: [],
+    events: [],
+    documents: [],
+    gallery: [],
+    telephoneDirectory: [],
+    conferences: [
+      {
+        id: 1,
+        slug: 'conf-1',
+        title: 'National Symposium',
+        shortName: 'NS-2026',
+        scope: 'National Conference',
+        theme: 'Smart Systems',
+        startDate: '2026-11-10',
+        endDate: '2026-11-11',
+        venue: 'Main Auditorium',
+        mode: 'Hybrid',
+        organizingDepartment: 'CSE',
+        indexingPartners: [],
+        contactEmail: 'conf@coe.sveri.ac.in',
+        contactPhone: '123',
+        bannerUrl: '/uploads/banner.jpg',
+        heroSlides: [
+          {
+            id: 1,
+            title: 'Seed Slide',
+            caption: 'Seed Caption',
+            imageUrl: '/uploads/banner.jpg',
+            ctaLabel: 'Register',
+            ctaLink: '/conference/conf-1',
+          },
+        ],
+        overviewHtml: '',
+        cfpHtml: '',
+        isPublished: true,
+        isFeatured: true,
+        sortOrder: 1,
+        tracks: [],
+        importantDates: [],
+        people: [],
+        schedule: [],
+        feeTiers: [],
+      },
+    ],
+    conferenceSubmissions: [],
+    conferenceRegistrations: [],
+    users: [],
+    auditLogs: [],
+    settings: {
+      institutionName: 'Seed Inst',
+      shortCode: 'SV',
+      affiliation: 'Uni',
+      aicteCode: '1',
+      dteCode: '2',
+      address: 'Addr',
+      phone: '1',
+      email: 'a@b.c',
+      emergencyHelpline: '1',
+      antiRaggingHelpline: '1',
+      defaultPaletteId: 'royal-navy',
+      primaryColor: '#0F294A',
+      secondaryColor: '#B45309',
+      researchSliderSlides: [
+        {
+          id: 10,
+          title: 'Seed Research Slider',
+          caption: 'Conferences & R&D',
+          imageUrl: '/uploads/res.jpg',
+          ctaLabel: 'Explore',
+          ctaLink: '/conferences',
+        },
+      ],
+      accreditationHighlights: [],
+      topBarLinks: [],
+      footerColumns: [],
+      socialLinks: { facebook: '', linkedin: '', youtube: '', twitter: '' },
+      mapEmbedQuery: 'Pandharpur',
+      homeSections: {
+        showTicker: true,
+        showSlider: true,
+        showStatsAndRecognitions: true,
+        showAboutAndDownloads: true,
+        showApprovedAndVision: true,
+        showLeadershipDesk: true,
+        showExaminationSpotlight: true,
+        showDepartments: true,
+        showCategoriesDirectory: true,
+        showEventsAndRecruiters: true,
+      },
+      customHomeComponents: [],
+    },
+  } as unknown as CmsDatabase;
+
+  const existingLegacy: Partial<CmsDatabase> = {
+    schemaVersion: 2,
+    conferences: [
+      {
+        ...(seed.conferences![0]),
+        heroSlides: undefined,
+      },
+      {
+        ...(seed.conferences![0]),
+        id: 2,
+        slug: 'custom-workshop-99',
+        title: 'Custom Robotics Workshop',
+        shortName: 'CRW-2026',
+        scope: 'Research Workshop',
+        bannerUrl: '/uploads/custom-ws.jpg',
+        heroSlides: [
+          {
+            id: 99,
+            title: 'Preserved Custom Slide',
+            caption: 'Never overwritten',
+            imageUrl: '/uploads/custom-ws.jpg',
+          },
+        ],
+      },
+    ],
+    settings: {
+      ...seed.settings,
+      researchSliderSlides: undefined,
+    },
+  };
+
+  const { db, upgraded } = migrateDatabaseInPlace(existingLegacy, seed);
+  assert.equal(upgraded, true);
+  assert.equal(db.conferences?.[0].heroSlides?.length, 1);
+  assert.equal(db.conferences?.[0].heroSlides?.[0].title, 'Seed Slide');
+  assert.equal(db.conferences?.[1].heroSlides?.[0].title, 'Preserved Custom Slide');
+  assert.equal(db.settings.researchSliderSlides?.length, 1);
+  assert.equal(db.settings.researchSliderSlides?.[0].title, 'Seed Research Slider');
+});
+

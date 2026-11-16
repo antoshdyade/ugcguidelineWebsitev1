@@ -14,6 +14,7 @@ import {
   GripVertical,
   Highlighter,
   ImagePlus,
+  Images,
   Indent,
   Italic,
   Link2,
@@ -39,6 +40,7 @@ import { DEFAULT_MAX_PHOTO_UPLOAD_MB } from '../lib/imageCrop';
 import { ImageCropModal } from './ImageCropModal';
 import { ImageUploader } from './ImageUploader';
 import {
+  buildCustomSliderHtml,
   buildPhotoProfileCardHtml,
   buildSinglePhotoProfileCardInnerHtml,
   buildStyledTableHtml,
@@ -49,6 +51,7 @@ import {
   TABLE_THEMES,
   TEXT_COLOR_SWATCHES,
   type EditorComponentBlock,
+  type EditorSliderSlide,
   type TableThemeId,
 } from '../lib/editorBlocks';
 
@@ -107,6 +110,29 @@ export function RichTextEditor({
   const [profBio, setProfBio] = useState('');
   const [profPhotoUrl, setProfPhotoUrl] = useState('/src/assets/images/leadership_principal_1794512597061.jpg');
   const [profCols, setProfCols] = useState<1 | 2>(1);
+  const [activeSliderEl, setActiveSliderEl] = useState<HTMLElement | null>(null);
+  const [editingSliderEl, setEditingSliderEl] = useState<HTMLElement | null>(null);
+  const [sliderOpen, setSliderOpen] = useState(false);
+  const [sliderHeight, setSliderHeight] = useState(380);
+  const [sliderAutoplay, setSliderAutoplay] = useState(5);
+  const [sliderSlides, setSliderSlides] = useState<EditorSliderSlide[]>([
+    {
+      id: 'slide-1',
+      imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+      title: 'Research & Innovation Showcase',
+      caption: 'Add highlights from conferences, workshops, departments, or campus events.',
+      ctaLabel: 'Explore More',
+      ctaLink: '/conferences',
+    },
+    {
+      id: 'slide-2',
+      imageUrl: '/src/assets/images/hero_robotics_lab_1794512596365.jpg',
+      title: 'State-of-the-Art Engineering Laboratories',
+      caption: 'Sponsored research facilities, incubators, and Centre of Excellence infrastructure.',
+      ctaLabel: 'View Facilities',
+      ctaLink: '/page/central-facilities',
+    },
+  ]);
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -168,6 +194,51 @@ export function RichTextEditor({
       setActiveProfileCardEl(cardEl);
     } else {
       setActiveProfileCardEl(null);
+    }
+
+    const sliderEl = el?.closest('.cms-slider[data-block="custom-slider"]') as HTMLElement | null;
+    if (sliderEl && editorRef.current.contains(sliderEl)) {
+      setActiveSliderEl(sliderEl);
+    } else {
+      setActiveSliderEl(null);
+    }
+  };
+
+  const openSliderEditor = (sliderEl?: HTMLElement | null) => {
+    setTableOpen(false);
+    setLinkOpen(false);
+    setTextColorOpen(false);
+    setBgColorOpen(false);
+    setProfileOpen(false);
+    if (sliderEl) {
+      setEditingSliderEl(sliderEl);
+      const parsedHeight = Number(sliderEl.getAttribute('data-height') || '380');
+      const parsedAuto = Number(sliderEl.getAttribute('data-autoplay') || '5');
+      setSliderHeight(Number.isFinite(parsedHeight) && parsedHeight >= 240 ? parsedHeight : 380);
+      setSliderAutoplay(Number.isFinite(parsedAuto) && parsedAuto >= 0 ? parsedAuto : 5);
+      const slideEls = Array.from(sliderEl.querySelectorAll('.cms-slide'));
+      if (slideEls.length > 0) {
+        setSliderSlides(
+          slideEls.map((sl, idx) => {
+            const img = sl.querySelector('img') as HTMLImageElement | null;
+            const titleEl = sl.querySelector('.cms-slide-title');
+            const capEl = sl.querySelector('.cms-slide-caption');
+            const ctaEl = sl.querySelector('.cms-slide-cta') as HTMLAnchorElement | null;
+            return {
+              id: `slide-${Date.now()}-${idx}`,
+              imageUrl: img?.getAttribute('src') || '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+              title: titleEl?.textContent?.trim() || `Slide ${idx + 1}`,
+              caption: capEl?.textContent?.trim() || '',
+              ctaLabel: ctaEl?.textContent?.trim() || '',
+              ctaLink: ctaEl?.getAttribute('href') || '',
+            };
+          }),
+        );
+      }
+      setSliderOpen(true);
+    } else {
+      setEditingSliderEl(null);
+      setSliderOpen((v) => !v);
     }
   };
 
@@ -769,6 +840,19 @@ export function RichTextEditor({
             <span>+ Profile Card</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => openSliderEditor(null)}
+            className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded border transition-colors ${
+              sliderOpen
+                ? 'border-sky-600 bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-300'
+                : 'border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-stone-100 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Images className="w-3 h-3" />
+            <span>+ Image Slider</span>
+          </button>
+
           {uploadBinary && (
             <label className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-stone-100 dark:hover:bg-slate-700 cursor-pointer">
               <ImagePlus className="w-3 h-3" />
@@ -1059,8 +1143,222 @@ export function RichTextEditor({
           </div>
         )}
 
-        {/* Contextual Controls when clicking inside a Block, Photo Profile Card, Table, or Image */}
-        {mode === 'visual' && (selectedBlockEl || activeProfileCardEl || activeTableEl || activeImgEl) && (
+        {/* Customizable Image Slider Builder (Insert or Edit-in-Place) */}
+        {sliderOpen && (
+          <div className="p-3 bg-sky-50/70 dark:bg-slate-800/90 border-b border-stone-200 dark:border-slate-700 space-y-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-stone-800 dark:text-slate-100">
+                {editingSliderEl
+                  ? 'Edit Selected Page Image Slider (Images, Captions, Links & Timing)'
+                  : 'Customizable Page Image Slider Designer (16:9 Auto-Crop)'}
+              </strong>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-1">
+                  Height:
+                  <select
+                    value={sliderHeight}
+                    onChange={(e) => setSliderHeight(Number(e.target.value) || 380)}
+                    className="px-2 py-1 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+                  >
+                    <option value={280}>280px Compact</option>
+                    <option value={340}>340px Medium</option>
+                    <option value={380}>380px Standard</option>
+                    <option value={440}>440px Tall</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  Autoplay (sec, 0=off):
+                  <input
+                    type="number"
+                    min={0}
+                    max={30}
+                    value={sliderAutoplay}
+                    onChange={(e) => setSliderAutoplay(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-14 px-2 py-1 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+              {sliderSlides.map((sl, idx) => (
+                <div
+                  key={sl.id}
+                  className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-[11px] uppercase tracking-wider text-sky-800 dark:text-sky-300">
+                      Slide #{idx + 1}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => {
+                          const next = [...sliderSlides];
+                          [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                          setSliderSlides(next);
+                        }}
+                        className="px-1.5 py-0.5 rounded border border-stone-300 dark:border-slate-600 disabled:opacity-40"
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === sliderSlides.length - 1}
+                        onClick={() => {
+                          const next = [...sliderSlides];
+                          [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                          setSliderSlides(next);
+                        }}
+                        className="px-1.5 py-0.5 rounded border border-stone-300 dark:border-slate-600 disabled:opacity-40"
+                      >
+                        Down
+                      </button>
+                      {sliderSlides.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setSliderSlides(sliderSlides.filter((_, i) => i !== idx))}
+                          className="px-1.5 py-0.5 rounded border border-rose-200 text-rose-700 hover:bg-rose-50"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={sl.title}
+                      onChange={(e) =>
+                        setSliderSlides(sliderSlides.map((item, i) => (i === idx ? { ...item, title: e.target.value } : item)))
+                      }
+                      placeholder="Slide Heading Title"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-950"
+                    />
+                    <input
+                      type="text"
+                      value={sl.caption}
+                      onChange={(e) =>
+                        setSliderSlides(sliderSlides.map((item, i) => (i === idx ? { ...item, caption: e.target.value } : item)))
+                      }
+                      placeholder="Slide Caption / Subtitle"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-950"
+                    />
+                    <input
+                      type="text"
+                      value={sl.ctaLabel || ''}
+                      onChange={(e) =>
+                        setSliderSlides(sliderSlides.map((item, i) => (i === idx ? { ...item, ctaLabel: e.target.value } : item)))
+                      }
+                      placeholder="Button Label (optional)"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-950"
+                    />
+                    <input
+                      type="text"
+                      value={sl.ctaLink || ''}
+                      onChange={(e) =>
+                        setSliderSlides(sliderSlides.map((item, i) => (i === idx ? { ...item, ctaLink: e.target.value } : item)))
+                      }
+                      placeholder="Button Link (/conferences or https://...)"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+
+                  {uploadBinary ? (
+                    <ImageUploader
+                      label={`Slide #${idx + 1} Photo (16:9 Auto-Crop)`}
+                      value={sl.imageUrl}
+                      onChange={(url) =>
+                        setSliderSlides(sliderSlides.map((item, i) => (i === idx ? { ...item, imageUrl: url } : item)))
+                      }
+                      uploadBinary={uploadBinary}
+                      aspectRatio="16:9"
+                      maxPhotoMb={maxPhotoMb}
+                      autoCropEnabled={autoCropEnabled}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={sl.imageUrl}
+                      onChange={(e) =>
+                        setSliderSlides(sliderSlides.map((item, i) => (i === idx ? { ...item, imageUrl: e.target.value } : item)))
+                      }
+                      placeholder="Slide Image URL (/uploads/...)"
+                      className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-950"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setSliderSlides([
+                    ...sliderSlides,
+                    {
+                      id: `slide-${Date.now()}`,
+                      imageUrl: '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+                      title: `Highlight Slide ${sliderSlides.length + 1}`,
+                      caption: 'Describe this highlight, event, conference track, or department facility.',
+                      ctaLabel: '',
+                      ctaLink: '',
+                    },
+                  ])
+                }
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-sky-400 bg-white dark:bg-slate-900 text-sky-800 dark:text-sky-300 font-semibold"
+              >
+                <Plus className="w-3 h-3" /> Add Another Slide ({sliderSlides.length})
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSliderEl(null);
+                    setSliderOpen(false);
+                  }}
+                  className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const html = buildCustomSliderHtml(sliderSlides, {
+                      heightPx: sliderHeight,
+                      autoplaySec: sliderAutoplay,
+                    });
+                    if (editingSliderEl && editingSliderEl.parentNode) {
+                      const temp = document.createElement('div');
+                      temp.innerHTML = html;
+                      const replacement = temp.querySelector('.cms-slider') as HTMLElement | null;
+                      if (replacement) {
+                        editingSliderEl.replaceWith(replacement);
+                        setActiveSliderEl(replacement);
+                        syncFromVisual();
+                      }
+                      setEditingSliderEl(null);
+                      setSliderOpen(false);
+                    } else {
+                      insertHtml(html);
+                      setSliderOpen(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded text-white font-semibold"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  {editingSliderEl ? 'Update Page Slider' : 'Insert Customizable Slider'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Contextual Controls when clicking inside a Block, Photo Profile Card, Slider, Table, or Image */}
+        {mode === 'visual' && (selectedBlockEl || activeProfileCardEl || activeSliderEl || activeTableEl || activeImgEl) && (
           <div className="px-3 py-1.5 bg-amber-50 dark:bg-slate-800 border-b border-amber-200 dark:border-slate-700 flex flex-wrap items-center gap-2 text-[11px]">
             {selectedBlockEl && (
               <>
@@ -1092,6 +1390,19 @@ export function RichTextEditor({
                   className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
                 >
                   <Trash2 className="w-3 h-3" /> Remove Block
+                </button>
+              </>
+            )}
+
+            {activeSliderEl && (
+              <>
+                <span className="font-bold text-sky-900 dark:text-sky-300 ml-1">Page Slider:</span>
+                <button
+                  type="button"
+                  onClick={() => openSliderEditor(activeSliderEl)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-700 text-white font-semibold"
+                >
+                  <Images className="w-3 h-3" /> Edit Slider Images &amp; Captions
                 </button>
               </>
             )}
