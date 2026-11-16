@@ -8,6 +8,8 @@ export type UserRole =
 
 export type UgcCategorySlug = string;
 
+export type MenuPlacementLocation = 'main' | 'more' | 'hidden';
+
 export interface CmsCategory {
   id: number;
   slug: UgcCategorySlug;
@@ -18,6 +20,16 @@ export interface CmsCategory {
   description: string;
   showInMenu?: boolean;
   showOnHome?: boolean;
+  menuLocation?: MenuPlacementLocation;
+}
+
+export interface HeaderPortalMenuItem {
+  id: number;
+  label: string;
+  url: string;
+  menuLocation: MenuPlacementLocation;
+  sortOrder: number;
+  badge?: string;
 }
 
 export interface CmsPage {
@@ -352,6 +364,9 @@ export interface SiteSettings {
   homeSections?: HomeSectionsConfig;
   customHomeComponents?: CustomHomeComponent[];
   researchSliderSlides?: ConferenceSlide[];
+  portalMenuItems?: HeaderPortalMenuItem[];
+  grievancePortal?: GrievancePortalConfig;
+  intakePrograms?: SanctionedIntakeProgram[];
 }
 
 export type BackupMode = 'full' | 'incremental';
@@ -630,6 +645,14 @@ export interface ConferenceSlide {
   ctaLink?: string;
 }
 
+export interface ConferenceCustomSection {
+  id: number;
+  title: string;
+  badge?: string;
+  contentHtml: string;
+  sortOrder?: number;
+}
+
 export interface Conference {
   id: number;
   slug: string;
@@ -649,8 +672,13 @@ export interface Conference {
   heroSlides?: ConferenceSlide[];
   brochureUrl?: string;
   templateUrl?: string;
+  submissionMode?: 'portal' | 'external' | 'closed';
+  externalSubmissionUrl?: string;
+  externalSubmissionLabel?: string;
+  submissionInstructionsHtml?: string;
   overviewHtml: string;
   cfpHtml: string;
+  customSections?: ConferenceCustomSection[];
   isPublished: boolean;
   isFeatured: boolean;
   sortOrder: number;
@@ -728,6 +756,29 @@ export interface PlacementStory {
   sortOrder: number;
 }
 
+export interface PlacementDrive {
+  id: number;
+  company: string;
+  roleTitle: string;
+  packageLpa: string;
+  driveDate: string;
+  eligibleBranches: string;
+  applyUrl?: string;
+  status: 'upcoming' | 'ongoing' | 'completed';
+  sortOrder: number;
+}
+
+export interface SanctionedIntakeProgram {
+  id: number;
+  code: string;
+  programName: string;
+  level: string;
+  sanctionedIntake: number;
+  accreditationStatus: string;
+  annualFee: string;
+  sortOrder: number;
+}
+
 export interface PlacementsData {
   summaryNote: string;
   coordinatorName: string;
@@ -735,9 +786,40 @@ export interface PlacementsData {
   coordinatorPhone: string;
   stats: PlacementYearStat[];
   stories: PlacementStory[];
+  upcomingDrives?: PlacementDrive[];
 }
 
 export type GrievanceStatus = 'submitted' | 'in_review' | 'resolved' | 'closed';
+
+export interface GrievanceCommitteeMember {
+  id: number;
+  name: string;
+  roleTitle: string;
+  designation: string;
+  committeeName: string;
+  email: string;
+  phone: string;
+  photoUrl: string;
+  sortOrder: number;
+}
+
+export interface GrievancePortalConfig {
+  heroTitle: string;
+  heroSubtitle: string;
+  ombudspersonName: string;
+  ombudspersonDesignation: string;
+  ombudspersonEmail: string;
+  ombudspersonPhone: string;
+  ombudspersonPhotoUrl: string;
+  antiRaggingSquadPhone: string;
+  iccCoordinatorName: string;
+  iccCoordinatorEmail: string;
+  ugcAffidavitUrl: string;
+  slaAcknowledgementHours: string;
+  slaResolutionDays: string;
+  charterHtml: string;
+  committeeMembers: GrievanceCommitteeMember[];
+}
 
 export interface GrievanceTicket {
   id: number;
@@ -748,6 +830,8 @@ export interface GrievanceTicket {
   phone: string;
   departmentOrCell: string;
   category: string;
+  urgency?: 'Normal' | 'High' | 'Urgent';
+  isAnonymous?: boolean;
   subject: string;
   description: string;
   attachmentUrl?: string;

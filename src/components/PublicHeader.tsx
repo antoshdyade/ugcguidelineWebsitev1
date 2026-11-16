@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { THEME_PALETTES } from '../lib/cmsLogic';
+import { partitionHeaderMenus } from '../lib/collegeFeaturesLogic';
 import { useThemeAccessibility, type SupportedLang } from '../context/ThemeAccessibilityContext';
 import type { CmsCategory, CmsPage, Department, SearchResultItem, SiteSettings } from '../types/cms';
 
@@ -102,11 +103,17 @@ export function PublicHeader({
     pages.filter((p) => p.categorySlug === slug).sort((a, b) => a.sortOrder - b.sortOrder);
 
   const visibleMenuCategories = [...categories]
-    .filter((c) => c.showInMenu !== false)
+    .filter((c) => c.showInMenu !== false && c.menuLocation !== 'hidden')
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const primaryMenuCategories = visibleMenuCategories.slice(0, 6);
-  const overflowMenuCategories = visibleMenuCategories.slice(6);
+  const {
+    mainCategories: primaryMenuCategories,
+    moreCategories: overflowMenuCategories,
+    mainPortalLinks,
+    morePortalLinks,
+  } = partitionHeaderMenus(categories, settings.portalMenuItems);
+
+  const hasMoreDropdown = overflowMenuCategories.length > 0 || morePortalLinks.length > 0;
 
   const dteDisplay = (settings.dteCode || 'EN-6220').replace(/^EN-/i, '');
 
@@ -618,7 +625,32 @@ export function PublicHeader({
               );
             })}
 
-            {overflowMenuCategories.length > 0 && (
+            {mainPortalLinks.map((portalItem) => {
+              const isActivePortal =
+                portalItem.url === '/'
+                  ? currentPath === '/'
+                  : currentPath === portalItem.url ||
+                    (portalItem.url === '/conferences' && currentPath.startsWith('/conference/')) ||
+                    (portalItem.url !== '/' && currentPath.startsWith(`${portalItem.url}/`));
+              return (
+                <li key={`portal-${portalItem.id}-${portalItem.url}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenDropdown(null);
+                      onNavigate(portalItem.url);
+                    }}
+                    className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
+                      isActivePortal ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
+                    }`}
+                  >
+                    {portalItem.label}
+                  </button>
+                </li>
+              );
+            })}
+
+            {hasMoreDropdown && (
               <li
                 className="relative"
                 onMouseEnter={() => setOpenDropdown('__more__')}
@@ -636,6 +668,27 @@ export function PublicHeader({
                 {openDropdown === '__more__' && (
                   <div className="absolute right-0 top-full pt-1 w-80 z-50">
                     <div className="bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 rounded-lg shadow-xl p-2 max-h-96 overflow-y-auto space-y-2">
+                      {morePortalLinks.length > 0 && (
+                        <div className="pb-1.5 border-b border-stone-100 dark:border-slate-800 space-y-0.5">
+                          <p className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                            Institutional Portals &amp; Links
+                          </p>
+                          {morePortalLinks.map((portalItem) => (
+                            <button
+                              key={`more-portal-${portalItem.id}-${portalItem.url}`}
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdown(null);
+                                onNavigate(portalItem.url);
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded text-stone-800 dark:text-slate-100 hover:bg-amber-50 dark:hover:bg-slate-800 flex items-center justify-between"
+                            >
+                              <span>{portalItem.label}</span>
+                              <span className="text-amber-700 dark:text-amber-400">&rarr;</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {overflowMenuCategories.map((cat) => {
                         const catPages = getCategoryPages(cat.slug);
                         return (
@@ -708,75 +761,6 @@ export function PublicHeader({
                 )}
               </li>
             )}
-
-            <li>
-              <button
-                type="button"
-                onClick={() => onNavigate('/conferences')}
-                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath === '/conferences' || currentPath.startsWith('/conference/')
-                    ? 'bg-white/20 text-amber-300'
-                    : 'text-white/95 hover:bg-white/10'
-                }`}
-              >
-                Conferences
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => onNavigate('/placements')}
-                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath === '/placements' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
-                }`}
-              >
-                Placements
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => onNavigate('/grievance')}
-                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath === '/grievance' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
-                }`}
-              >
-                Grievance
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => onNavigate('/alumni')}
-                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath.startsWith('/alumni') ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
-                }`}
-              >
-                Alumni
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => onNavigate('/gallery')}
-                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath === '/gallery' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
-                }`}
-              >
-                {t('gallery')}
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => onNavigate('/contact')}
-                className={`px-1.5 xl:px-2 py-2 text-xs xl:text-[13px] font-medium whitespace-nowrap shrink-0 rounded transition-colors ${
-                  currentPath === '/contact' ? 'bg-white/20 text-amber-300' : 'text-white/95 hover:bg-white/10'
-                }`}
-              >
-                {t('contact')}
-              </button>
-            </li>
           </ul>
 
           {/* Mobile Drawer Nav */}
@@ -793,76 +777,23 @@ export function PublicHeader({
                 >
                   {t('home')}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onNavigate('/conferences');
-                  }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-amber-100 text-slate-950 font-semibold"
-                >
-                  Conferences &amp; Events
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onNavigate('/placements');
-                  }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
-                >
-                  Placements Hub
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onNavigate('/grievance');
-                  }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
-                >
-                  Grievance Helpdesk
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onNavigate('/alumni');
-                  }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-amber-300 text-slate-950 font-semibold"
-                >
-                  Alumni Network
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onNavigate('/quick-links');
-                  }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
-                >
-                  {t('quickLinks')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onNavigate('/gallery');
-                  }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
-                >
-                  {t('gallery')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onNavigate('/contact');
-                  }}
-                  className="px-3 py-2 text-left text-sm font-medium rounded bg-white text-slate-900"
-                >
-                  {t('contact')}
-                </button>
+                {[...mainPortalLinks, ...morePortalLinks].map((portalItem) => (
+                  <button
+                    key={`mobile-portal-${portalItem.id}-${portalItem.url}`}
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      onNavigate(portalItem.url);
+                    }}
+                    className={`px-3 py-2 text-left text-sm font-medium rounded ${
+                      portalItem.menuLocation === 'main'
+                        ? 'bg-amber-100 text-slate-950 font-semibold'
+                        : 'bg-white text-slate-900'
+                    }`}
+                  >
+                    {portalItem.label}
+                  </button>
+                ))}
               </div>
               {visibleMenuCategories.map((cat) => (
                 <details key={cat.id} className="bg-white text-slate-900 rounded px-3 py-2">

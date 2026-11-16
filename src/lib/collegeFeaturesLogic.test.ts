@@ -382,5 +382,91 @@ test('CONFERENCE_SCOPE_PRESETS covers conferences/workshops/events and migrateDa
   assert.equal(db.conferences?.[1].heroSlides?.[0].title, 'Preserved Custom Slide');
   assert.equal(db.settings.researchSliderSlides?.length, 1);
   assert.equal(db.settings.researchSliderSlides?.[0].title, 'Seed Research Slider');
+  assert.ok((db.settings.portalMenuItems?.length || 0) >= 6);
+  assert.ok((db.settings.grievancePortal?.committeeMembers?.length || 0) >= 1);
+});
+
+import {
+  computePlacementMetrics,
+  isExternalPaperSubmissionActive,
+  partitionHeaderMenus,
+} from './collegeFeaturesLogic';
+
+test('partitionHeaderMenus splits main bar vs More Portals vs hidden menus cleanly', () => {
+  const cats = [
+    { id: 1, slug: 'about', name: 'About HEI', ugcCode: '5a', sortOrder: 1, description: '', showInMenu: true, menuLocation: 'main' as const },
+    { id: 2, slug: 'iqac', name: 'IQAC Cell', ugcCode: '5a', sortOrder: 2, description: '', showInMenu: true, menuLocation: 'more' as const },
+    { id: 3, slug: 'draft', name: 'Draft', ugcCode: '5a', sortOrder: 3, description: '', showInMenu: false, menuLocation: 'hidden' as const },
+  ];
+  const portals = [
+    { id: 1, label: 'Conferences', url: '/conferences', menuLocation: 'main' as const, sortOrder: 1 },
+    { id: 2, label: 'Gallery', url: '/gallery', menuLocation: 'more' as const, sortOrder: 2 },
+    { id: 3, label: 'Hidden Portal', url: '/hidden', menuLocation: 'hidden' as const, sortOrder: 3 },
+  ];
+  const res = partitionHeaderMenus(cats, portals);
+  assert.deepEqual(res.mainCategories.map((c) => c.slug), ['about']);
+  assert.deepEqual(res.moreCategories.map((c) => c.slug), ['iqac']);
+  assert.deepEqual(res.mainPortalLinks.map((p) => p.label), ['Conferences']);
+  assert.deepEqual(res.morePortalLinks.map((p) => p.label), ['Gallery']);
+});
+
+test('isExternalPaperSubmissionActive disables local submission whenever external link is configured', () => {
+  assert.equal(isExternalPaperSubmissionActive({ submissionMode: 'portal', externalSubmissionUrl: '' }), false);
+  assert.equal(
+    isExternalPaperSubmissionActive({
+      submissionMode: 'external',
+      externalSubmissionUrl: 'https://cmt3.research.microsoft.com/ICAEST2026',
+    }),
+    true,
+  );
+  // Even if mode wasn't toggled yet, presence of valid external URL enforces lock on local submission
+  assert.equal(
+    isExternalPaperSubmissionActive({
+      submissionMode: 'portal',
+      externalSubmissionUrl: 'https://easychair.org/conferences/?conf=icaest26',
+    }),
+    true,
+  );
+  // Closed mode disables external portal submission too
+  assert.equal(
+    isExternalPaperSubmissionActive({
+      submissionMode: 'closed',
+      externalSubmissionUrl: 'https://cmt3.research.microsoft.com/ICAEST2026',
+    }),
+    false,
+  );
+});
+
+test('computePlacementMetrics computes percentage and aggregate KPIs accurately', () => {
+  const m = computePlacementMetrics([
+    {
+      id: 1,
+      academicYear: '2025-26',
+      branch: 'CSE',
+      eligibleStudents: 100,
+      placedStudents: 92,
+      highestPackageLpa: 21,
+      averagePackageLpa: 6.5,
+      topRecruitersList: 'TCS',
+      sortOrder: 1,
+    },
+    {
+      id: 2,
+      academicYear: '2025-26',
+      branch: 'MECH',
+      eligibleStudents: 100,
+      placedStudents: 80,
+      highestPackageLpa: 12,
+      averagePackageLpa: 5.5,
+      topRecruitersList: 'Bosch',
+      sortOrder: 2,
+    },
+  ]);
+  assert.equal(m.eligible, 200);
+  assert.equal(m.placed, 172);
+  assert.equal(m.overallRate, '86.0');
+  assert.equal(m.highest, 21);
+  assert.equal(m.avg, '6.00');
+  assert.equal(m.rowsWithPct[0].placementRatePct, 92);
 });
 

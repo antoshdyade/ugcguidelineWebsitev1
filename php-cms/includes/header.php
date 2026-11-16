@@ -1,19 +1,20 @@
 <?php
 declare(strict_types=1);
+ensureCmsSchemaUpgraded($pdo);
 $settings = getSiteSettings($pdo);
-try {
-    $navCats = $pdo->query('SELECT * FROM categories WHERE COALESCE(show_in_menu, 1) = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
-} catch (Throwable $exNav) {
-    $navCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
-}
+$allHeaderCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
+$portalMenuItems = getPortalMenuItems($pdo);
+$partitionedNav = partitionHeaderMenus($allHeaderCats, $portalMenuItems);
+$primaryCats = $partitionedNav['mainCats'];
+$overflowCats = $partitionedNav['moreCats'];
+$mainPortalMenus = $partitionedNav['mainPortals'];
+$morePortalMenus = $partitionedNav['morePortals'];
 $navDepts = $pdo->query('SELECT id, slug, code, name FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $navPagesStmt = $pdo->query('SELECT id, category_id, slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC');
 $pagesByCat = [];
 foreach ($navPagesStmt->fetchAll() as $pg) {
     $pagesByCat[$pg['category_id']][] = $pg;
 }
-$primaryCats = array_slice($navCats, 0, 7);
-$overflowCats = array_slice($navCats, 7);
 $dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '06220');
 $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
 ?>
@@ -178,7 +179,17 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
             </div>
           </li>
         <?php endforeach; ?>
-        <?php if (!empty($overflowCats)): ?>
+        <?php foreach ($mainPortalMenus as $pm):
+          $pmHref = (string)($pm['href'] ?? 'index.php');
+          $isExt = preg_match('#^https?://#i', $pmHref) === 1;
+          $pmUrl = $isExt ? $pmHref : baseUrl($pmHref);
+          $isMatch = in_array($currentScript, (array)($pm['matchScripts'] ?? []), true);
+        ?>
+          <li class="nav-item">
+            <a class="nav-link <?= $isMatch ? 'is-active' : '' ?>" href="<?= e($pmUrl) ?>"<?= !empty($pm['openInNewTab']) ? ' target="_blank" rel="noopener noreferrer"' : '' ?>><?= e((string)$pm['label']) ?></a>
+          </li>
+        <?php endforeach; ?>
+        <?php if (!empty($overflowCats) || !empty($morePortalMenus)): ?>
           <li class="nav-item">
             <a class="nav-link" href="#">More Portals</a>
             <div class="dropdown-menu">
@@ -194,15 +205,18 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
                   <a href="<?= e(baseUrl('page.php?slug=' . urlencode($pg['slug']))) ?>" style="padding-left:1.25rem;font-size:0.8rem;"><?= e($pg['title']) ?></a>
                 <?php endforeach; ?>
               <?php endforeach; ?>
+              <?php if (!empty($overflowCats) && !empty($morePortalMenus)): ?>
+                <hr style="border:none;border-top:1px solid var(--border-color);margin:6px 0;">
+              <?php endif; ?>
+              <?php foreach ($morePortalMenus as $mpm):
+                $mpmHref = (string)($mpm['href'] ?? 'index.php');
+                $mpmUrl = preg_match('#^https?://#i', $mpmHref) === 1 ? $mpmHref : baseUrl($mpmHref);
+              ?>
+                <a href="<?= e($mpmUrl) ?>"<?= !empty($mpm['openInNewTab']) ? ' target="_blank" rel="noopener noreferrer"' : '' ?>><strong><?= e((string)$mpm['label']) ?> &rarr;</strong></a>
+              <?php endforeach; ?>
             </div>
           </li>
         <?php endif; ?>
-        <li class="nav-item"><a class="nav-link <?= ($currentScript === 'conferences.php' || $currentScript === 'conference.php') ? 'is-active' : '' ?>" href="<?= e(baseUrl('conferences.php')) ?>">Conferences</a></li>
-        <li class="nav-item"><a class="nav-link <?= $currentScript === 'placements.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('placements.php')) ?>">Placements</a></li>
-        <li class="nav-item"><a class="nav-link <?= $currentScript === 'alumni.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('alumni.php')) ?>">Alumni</a></li>
-        <li class="nav-item"><a class="nav-link <?= $currentScript === 'grievance.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('grievance.php')) ?>">Grievance</a></li>
-        <li class="nav-item"><a class="nav-link <?= $currentScript === 'gallery.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('gallery.php')) ?>">Gallery</a></li>
-        <li class="nav-item"><a class="nav-link <?= $currentScript === 'contact.php' ? 'is-active' : '' ?>" href="<?= e(baseUrl('contact.php')) ?>">Contact Us</a></li>
       </ul>
     </div>
   </nav>

@@ -1,14 +1,101 @@
 import type {
   AlumniEndowmentPledge,
+  CmsCategory,
   CmsDatabase,
   Conference,
   ConferenceRegistration,
   ConferenceSubmission,
+  GrievancePortalConfig,
   GrievanceTicket,
+  HeaderPortalMenuItem,
   PlacementsData,
+  PlacementYearStat,
+  SanctionedIntakeProgram,
 } from '../types/cms';
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
+
+export const CONFERENCE_SUBMISSION_PLATFORM_PRESETS = [
+  'Microsoft CMT',
+  'EasyChair',
+  'EDAS Conference System',
+  'IEEE Conference Portal',
+  'OpenConf',
+  'Google Form',
+] as const;
+
+export const DEFAULT_PORTAL_MENU_ITEMS: HeaderPortalMenuItem[] = [
+  { id: 1, label: 'Conferences', url: '/conferences', menuLocation: 'main', sortOrder: 1 },
+  { id: 2, label: 'Placements', url: '/placements', menuLocation: 'main', sortOrder: 2 },
+  { id: 3, label: 'Grievance & Anti-Ragging', url: '/grievance', menuLocation: 'main', sortOrder: 3 },
+  { id: 4, label: 'Alumni', url: '/alumni', menuLocation: 'main', sortOrder: 4 },
+  { id: 5, label: 'Gallery', url: '/gallery', menuLocation: 'more', sortOrder: 5 },
+  { id: 6, label: 'Contact Us', url: '/contact', menuLocation: 'more', sortOrder: 6 },
+  { id: 7, label: 'Quick Links & Disclosures', url: '/quick-links', menuLocation: 'more', sortOrder: 7 },
+];
+
+export const DEFAULT_GRIEVANCE_PORTAL_CONFIG: GrievancePortalConfig = {
+  heroTitle: 'Online Student Grievance Redressal (SGRC) & Anti-Ragging Helpdesk',
+  heroSubtitle:
+    'AICTE & UGC Statutory 2023 Compliant Mechanism — Lodge confidential academic, examination, scholarship, hostel, ICC, or anti-ragging complaints and track committee action online.',
+  ombudspersonName: 'Hon. Dr. S. R. Chougule (Retd. Vice-Chancellor)',
+  ombudspersonDesignation: 'Appointed Institutional Ombudsperson (UGC SGRC Regulations 2023)',
+  ombudspersonEmail: 'ombudsperson@coe.sveri.ac.in',
+  ombudspersonPhone: '+91-02186-216063',
+  ombudspersonPhotoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+  antiRaggingSquadPhone: '+91-94220-88100 (24x7 Squad)',
+  iccCoordinatorName: 'Dr. M. S. Kulkarni',
+  iccCoordinatorEmail: 'icc@coe.sveri.ac.in',
+  ugcAffidavitUrl: 'https://www.antiragging.in/',
+  slaAcknowledgementHours: '24 Hours',
+  slaResolutionDays: '15 Working Days',
+  charterHtml:
+    '<h3>Statutory Escalation &amp; Redressal SLA</h3><table class="cms-table cms-table-navy"><thead><tr><th>Stage</th><th>Authority / Committee</th><th>Turnaround Timeline</th><th>Action Protocol</th></tr></thead><tbody><tr><td>Level 1</td><td>Departmental / Hostel Nodal Officer</td><td>Within 48 Hours</td><td>Ticket acknowledgement &amp; preliminary inquiry</td></tr><tr><td>Level 2</td><td>Institutional Student Grievance Redressal Committee (SGRC)</td><td>Within 15 Working Days</td><td>Formal hearing, documentary review &amp; written order</td></tr><tr><td>Level 3</td><td>Institutional Ombudsperson</td><td>Appeal within 15 Days</td><td>Independent appellate adjudication (UGC Guidelines)</td></tr><tr><td>Emergency</td><td>Anti-Ragging Squad / ICC Cell</td><td>Immediate (Zero Tolerance)</td><td>24x7 campus intervention, interim protection &amp; FIR protocol if warranted</td></tr></tbody></table>',
+  committeeMembers: [
+    {
+      id: 1,
+      name: 'Dr. Prashant M. Pawar',
+      roleTitle: 'Chairperson, SGRC',
+      designation: 'Principal & Professor',
+      committeeName: 'Student Grievance Redressal Committee',
+      email: 'principal@coe.sveri.ac.in',
+      phone: '+91-02186-216063',
+      photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+      sortOrder: 1,
+    },
+    {
+      id: 2,
+      name: 'Prof. S. S. Deshmukh',
+      roleTitle: 'Convener, Anti-Ragging Squad',
+      designation: 'Dean Student Affairs',
+      committeeName: '24x7 Anti-Ragging Flying Squad',
+      email: 'antiragging@coe.sveri.ac.in',
+      phone: '+91-94220-88100',
+      photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+      sortOrder: 2,
+    },
+    {
+      id: 3,
+      name: 'Dr. M. S. Kulkarni',
+      roleTitle: 'Presiding Officer, ICC',
+      designation: 'Professor, Electronics & Telecom',
+      committeeName: 'Internal Complaint Committee (Women Safety)',
+      email: 'icc@coe.sveri.ac.in',
+      phone: '+91-02186-216065',
+      photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
+      sortOrder: 3,
+    },
+  ],
+};
+
+export const DEFAULT_INTAKE_PROGRAMS: SanctionedIntakeProgram[] = [
+  { id: 1, code: '622024510', programName: 'B.Tech in Computer Science & Engineering', level: 'UG (4 Years)', sanctionedIntake: 180, accreditationStatus: 'NBA Accredited · Autonomous', annualFee: '₹1,14,500', sortOrder: 1 },
+  { id: 2, code: '622037210', programName: 'B.Tech in Electronics & Telecommunication Engg.', level: 'UG (4 Years)', sanctionedIntake: 120, accreditationStatus: 'NBA Accredited · Autonomous', annualFee: '₹1,14,500', sortOrder: 2 },
+  { id: 3, code: '622061210', programName: 'B.Tech in Mechanical Engineering', level: 'UG (4 Years)', sanctionedIntake: 120, accreditationStatus: 'NBA Accredited · Autonomous', annualFee: '₹1,14,500', sortOrder: 3 },
+  { id: 4, code: '622019110', programName: 'B.Tech in Civil Engineering', level: 'UG (4 Years)', sanctionedIntake: 60, accreditationStatus: 'NAAC A+ · Autonomous', annualFee: '₹1,14,500', sortOrder: 4 },
+  { id: 5, code: '622029310', programName: 'B.Tech in Electrical Engineering', level: 'UG (4 Years)', sanctionedIntake: 60, accreditationStatus: 'NAAC A+ · Autonomous', annualFee: '₹1,14,500', sortOrder: 5 },
+  { id: 6, code: '622010110', programName: 'Master of Business Administration (MBA) & M.Tech', level: 'PG (2 Years)', sanctionedIntake: 96, accreditationStatus: 'AICTE & PAHSUS Approved', annualFee: '₹88,000', sortOrder: 6 },
+];
 
 export const DOCUMENT_CATEGORY_PRESETS = [
   'Fee Structure',
@@ -293,6 +380,69 @@ export function validateAlumniPledgeInput(input: {
   return { valid: true };
 }
 
+export function partitionHeaderMenus(
+  categories: CmsCategory[],
+  portalMenuItems?: HeaderPortalMenuItem[],
+): {
+  mainCategories: CmsCategory[];
+  moreCategories: CmsCategory[];
+  mainPortalLinks: HeaderPortalMenuItem[];
+  morePortalLinks: HeaderPortalMenuItem[];
+} {
+  const orderedCats = [...(categories || [])]
+    .filter((c) => c.showInMenu !== false && c.menuLocation !== 'hidden')
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const mainCategories: CmsCategory[] = [];
+  const moreCategories: CmsCategory[] = [];
+
+  orderedCats.forEach((cat, idx) => {
+    const loc = cat.menuLocation || (idx < 6 ? 'main' : 'more');
+    if (loc === 'main') {
+      mainCategories.push(cat);
+    } else if (loc === 'more') {
+      moreCategories.push(cat);
+    }
+  });
+
+  const orderedPortals = [...(portalMenuItems && portalMenuItems.length > 0 ? portalMenuItems : DEFAULT_PORTAL_MENU_ITEMS)]
+    .filter((item) => item.menuLocation !== 'hidden')
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  return {
+    mainCategories,
+    moreCategories,
+    mainPortalLinks: orderedPortals.filter((item) => item.menuLocation === 'main'),
+    morePortalLinks: orderedPortals.filter((item) => item.menuLocation === 'more'),
+  };
+}
+
+export function isExternalPaperSubmissionActive(conf?: Pick<Conference, 'submissionMode' | 'externalSubmissionUrl'> | null): boolean {
+  if (!conf) return false;
+  if (conf.submissionMode === 'closed') return false;
+  const rawUrl = (conf.externalSubmissionUrl || '').trim();
+  return /^https?:\/\//i.test(rawUrl);
+}
+
+export function computePlacementMetrics(stats: PlacementYearStat[]) {
+  const eligible = stats.reduce((sum, s) => sum + Number(s.eligibleStudents || 0), 0);
+  const placed = stats.reduce((sum, s) => sum + Number(s.placedStudents || 0), 0);
+  const highest = Math.max(0, ...stats.map((s) => Number(s.highestPackageLpa || 0)));
+  const avg =
+    stats.length > 0
+      ? stats.reduce((sum, s) => sum + Number(s.averagePackageLpa || 0), 0) / stats.length
+      : 0;
+  const overallRate = eligible > 0 ? ((placed / eligible) * 100).toFixed(1) : '0.0';
+  const rowsWithPct = stats.map((row) => ({
+    ...row,
+    placementRatePct:
+      row.eligibleStudents > 0
+        ? Number(((Number(row.placedStudents) / Number(row.eligibleStudents)) * 100).toFixed(1))
+        : 0,
+  }));
+  return { eligible, placed, highest, avg: avg.toFixed(2), overallRate, rowsWithPct };
+}
+
 /**
  * Non-destructive forward-compatible database schema upgrader.
  * Guarantees ZERO data loss on code updates, design changes, feature additions,
@@ -368,6 +518,45 @@ export function migrateDatabaseInPlace(
     ? existingAlumni.pledges
     : ((upgraded = true), structuredClone(seed.alumni?.pledges || []));
 
+  const rawCategories = Array.isArray(existing.categories) ? existing.categories : seed.categories;
+  const categories = rawCategories.map((cat, idx) => ({
+    ...cat,
+    menuLocation:
+      cat.menuLocation ||
+      (cat.showInMenu === false ? 'hidden' : idx < 6 ? 'main' : 'more'),
+  }));
+
+  const mergedPortalMenuItems =
+    Array.isArray(existing.settings?.portalMenuItems) && existing.settings.portalMenuItems.length > 0
+      ? existing.settings.portalMenuItems
+      : structuredClone(seed.settings.portalMenuItems || DEFAULT_PORTAL_MENU_ITEMS);
+
+  const mergedGrievancePortal: GrievancePortalConfig = {
+    ...DEFAULT_GRIEVANCE_PORTAL_CONFIG,
+    ...(seed.settings.grievancePortal || {}),
+    ...(existing.settings?.grievancePortal || {}),
+    committeeMembers:
+      Array.isArray(existing.settings?.grievancePortal?.committeeMembers) &&
+      existing.settings.grievancePortal.committeeMembers.length > 0
+        ? existing.settings.grievancePortal.committeeMembers
+        : structuredClone(
+            seed.settings.grievancePortal?.committeeMembers ||
+              DEFAULT_GRIEVANCE_PORTAL_CONFIG.committeeMembers,
+          ),
+  };
+
+  const mergedIntakePrograms =
+    Array.isArray(existing.settings?.intakePrograms) && existing.settings.intakePrograms.length > 0
+      ? existing.settings.intakePrograms
+      : structuredClone(seed.settings.intakePrograms || DEFAULT_INTAKE_PROGRAMS);
+
+  const mergedPlacements: PlacementsData = {
+    ...placements,
+    upcomingDrives: Array.isArray(placements.upcomingDrives)
+      ? placements.upcomingDrives
+      : structuredClone(seed.placements?.upcomingDrives || []),
+  };
+
   const mergedSettings = {
     ...seed.settings,
     ...(existing.settings || {}),
@@ -381,6 +570,9 @@ export function migrateDatabaseInPlace(
       Array.isArray(existing.settings?.researchSliderSlides) && existing.settings.researchSliderSlides.length > 0
         ? existing.settings.researchSliderSlides
         : structuredClone(seed.settings.researchSliderSlides || []),
+    portalMenuItems: mergedPortalMenuItems,
+    grievancePortal: mergedGrievancePortal,
+    intakePrograms: mergedIntakePrograms,
     homeSections: {
       showTicker: true,
       showSlider: true,
@@ -403,10 +595,11 @@ export function migrateDatabaseInPlace(
     ...seed,
     ...existing,
     schemaVersion: CURRENT_SCHEMA_VERSION,
+    categories,
     conferences,
     conferenceSubmissions,
     conferenceRegistrations,
-    placements,
+    placements: mergedPlacements,
     grievances,
     alumni: existingAlumni
       ? {

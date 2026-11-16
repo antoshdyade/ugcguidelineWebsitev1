@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS categories (
   ugc_code VARCHAR(40) NOT NULL,
   description TEXT,
   show_in_menu TINYINT(1) DEFAULT 1,
+  menu_location ENUM('main','more','hidden') DEFAULT 'main',
   show_on_home TINYINT(1) DEFAULT 1,
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
@@ -584,6 +585,10 @@ CREATE TABLE IF NOT EXISTS conferences (
   people_json MEDIUMTEXT NULL,
   schedule_json MEDIUMTEXT NULL,
   fee_tiers_json MEDIUMTEXT NULL,
+  submission_mode ENUM('internal','external','closed') DEFAULT 'internal',
+  external_submission_url VARCHAR(500) NULL,
+  external_submission_label VARCHAR(160) NULL,
+  submission_instructions_html MEDIUMTEXT NULL,
   is_published TINYINT(1) DEFAULT 1,
   is_featured TINYINT(1) DEFAULT 0,
   sort_order INT DEFAULT 1,
@@ -659,6 +664,8 @@ CREATE TABLE IF NOT EXISTS grievances (
   subject VARCHAR(240) NOT NULL,
   description TEXT NOT NULL,
   urgency ENUM('Normal','High','Urgent') DEFAULT 'Normal',
+  is_anonymous TINYINT(1) DEFAULT 0,
+  attachment_url VARCHAR(300) NULL,
   status ENUM('Open','Under Review','Escalated','Resolved') DEFAULT 'Open',
   resolution_note TEXT NULL,
   submitted_at VARCHAR(32) NOT NULL,

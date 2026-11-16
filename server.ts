@@ -44,7 +44,9 @@ import {
   verifyCaptchaChallenge,
 } from './src/lib/captchaLogic';
 import {
+  DEFAULT_GRIEVANCE_PORTAL_CONFIG,
   generateReferenceCode,
+  isExternalPaperSubmissionActive,
   migrateDatabaseInPlace,
   validateAlumniPledgeInput,
   validateConferenceRegistrationInput,
@@ -470,6 +472,16 @@ async function startServer() {
       res.status(404).json({ error: 'Target conference not found or closed.' });
       return;
     }
+    if (conf.submissionMode === 'closed') {
+      res.status(403).json({ error: 'Paper submissions are closed for this conference.' });
+      return;
+    }
+    if (isExternalPaperSubmissionActive(conf)) {
+      res.status(403).json({
+        error: `Local paper submission is disabled for ${conf.shortName}. Submissions are accepted exclusively via ${conf.externalSubmissionLabel || 'the external submission portal'} (${conf.externalSubmissionUrl}).`,
+      });
+      return;
+    }
     if (body.manuscriptUrl && body.manuscriptUrl.trim()) {
       const uCheck = validateExternalDocumentUrl(body.manuscriptUrl);
       if (!uCheck.valid) {
@@ -556,6 +568,47 @@ async function startServer() {
   });
 
   // Public Grievance Redressal & Status Tracking
+  app.get('/api/public/grievances/summary', (_req, res) => {
+    const tickets = db.grievances ?? [];
+    const total = tickets.length;
+    const resolved = tickets.filter((g) => g.status === 'resolved').length;
+    const closed = tickets.filter((g) => g.status === 'closed').length;
+    const inReview = tickets.filter((g) => g.status === 'in_review').length;
+    const submitted = tickets.filter((g) => g.status === 'submitted').length;
+    res.json({
+      total,
+      submitted,
+      underReview: inReview,
+      inReview,
+      resolved,
+      closed,
+      resolutionRatePct: total > 0 ? Math.round(((resolved + closed) / total) * 100) : 100,
+    });
+  });
+
+  app.post('/api/public/grievances/upload-attachment', (req, res) => {
+    const { filename, mimeType, base64Data } = req.body as {
+      filename?: string;
+      mimeType?: string;
+      base64Data?: string;
+    };
+    if (!filename || !mimeType || !base64Data) {
+      res.status(400).json({ error: 'Missing attachment filename, MIME type, or file data.' });
+      return;
+    }
+    const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const maxBytes = getUploadSizeLimitBytes(db.settings, 'document');
+    const check = validateUploadMeta(filename, mimeType, buffer.length, maxBytes);
+    if (!check.valid || !check.safeFilename) {
+      res.status(400).json({ error: check.reason || 'Evidence upload rejected.' });
+      return;
+    }
+    const safeName = `grievance-${check.safeFilename}`;
+    fs.writeFileSync(path.join(UPLOAD_DIR, safeName), buffer);
+    res.json({ url: `/uploads/${safeName}`, filename: safeName, sizeBytes: buffer.length });
+  });
+
   app.get('/api/public/grievances/status', (req, res) => {
     const code = String(req.query.code || '').trim().toUpperCase();
     if (!code) {
@@ -570,6 +623,8 @@ async function startServer() {
     res.json({
       ticketCode: ticket.ticketCode,
       category: ticket.category,
+      urgency: ticket.urgency || 'Normal',
+      isAnonymous: Boolean(ticket.isAnonymous),
       subject: ticket.subject,
       departmentOrCell: ticket.departmentOrCell,
       status: ticket.status,
@@ -589,26 +644,44 @@ async function startServer() {
       res.status(400).json({ error: captchaCheck.reason || 'Invalid CAPTCHA verification.' });
       return;
     }
-    const validation = validateGrievanceInput(body);
+    const isAnon = Boolean(body.isAnonymous);
+    const effectiveName = isAnon && !(body.complainantName || '').trim()
+      ? 'Confidential Whistleblower'
+      : String(body.complainantName || '').trim();
+    const validation = validateGrievanceInput({
+      ...body,
+      complainantName: effectiveName,
+    });
     if (!validation.valid) {
       res.status(400).json({ error: validation.reason });
       return;
+    }
+    if (body.attachmentUrl && body.attachmentUrl.trim()) {
+      const uCheck = validateExternalDocumentUrl(body.attachmentUrl);
+      if (!uCheck.valid) {
+        res.status(400).json({ error: uCheck.reason || 'Invalid attachment URL.' });
+        return;
+      }
     }
     db.grievances = db.grievances ?? [];
     const nextId = Math.max(0, ...db.grievances.map((g) => g.id)) + 1;
     const ticketCode = generateReferenceCode('GRV', nextId);
     const today = new Date().toISOString().slice(0, 10);
+    const urgencyVal = body.urgency === 'High' || body.urgency === 'Urgent' ? body.urgency : 'Normal';
     const ticket: GrievanceTicket = {
       id: nextId,
       ticketCode,
-      complainantName: String(body.complainantName).trim(),
+      complainantName: isAnon ? 'Confidential (Protected Identity)' : effectiveName,
       complainantRole: String(body.complainantRole || 'Student (UG / PG / Ph.D.)').trim(),
       email: String(body.email).trim().toLowerCase(),
       phone: String(body.phone || '').trim(),
       departmentOrCell: String(body.departmentOrCell || 'General Administration').trim(),
       category: String(body.category).trim(),
+      urgency: urgencyVal,
+      isAnonymous: isAnon,
       subject: String(body.subject).trim(),
       description: String(body.description).trim(),
+      attachmentUrl: body.attachmentUrl ? String(body.attachmentUrl).trim() : undefined,
       status: 'submitted',
       submittedAt: today,
       updatedAt: today,
@@ -1231,6 +1304,7 @@ async function startServer() {
       description,
       showInMenu,
       showOnHome,
+      menuLocation,
       createDefaultPage,
     } = req.body as {
       name?: string;
@@ -1240,6 +1314,7 @@ async function startServer() {
       description?: string;
       showInMenu?: boolean;
       showOnHome?: boolean;
+      menuLocation?: 'main' | 'more' | 'hidden';
       createDefaultPage?: boolean;
     };
     if (!name || !String(name).trim()) {
@@ -1254,6 +1329,12 @@ async function startServer() {
     }
     const nextId = Math.max(1, ...db.categories.map((c) => c.id)) + 1;
     const nextSort = Math.max(0, ...db.categories.map((c) => c.sortOrder)) + 1;
+    const loc =
+      menuLocation === 'main' || menuLocation === 'more' || menuLocation === 'hidden'
+        ? menuLocation
+        : showInMenu === false
+          ? 'hidden'
+          : 'more';
     const cat = {
       id: nextId,
       slug: cleanSlug,
@@ -1262,8 +1343,9 @@ async function startServer() {
       ugcCode: String(ugcCode || 'Autonomous Portal').trim(),
       description: String(description || `Official institutional section and micro-pages for ${String(name).trim()}.`).trim(),
       sortOrder: nextSort,
-      showInMenu: showInMenu !== false,
+      showInMenu: loc !== 'hidden',
       showOnHome: showOnHome !== false,
+      menuLocation: loc,
     };
     db.categories.push(cat);
 
@@ -1315,13 +1397,21 @@ async function startServer() {
       res.status(404).json({ error: 'Category not found.' });
       return;
     }
-    const { name, shortLabel, ugcCode, description, sortOrder, showInMenu, showOnHome } = req.body;
+    const { name, shortLabel, ugcCode, description, sortOrder, showInMenu, showOnHome, menuLocation } = req.body;
     if (name !== undefined) cat.name = String(name).trim();
     if (shortLabel !== undefined) cat.shortLabel = String(shortLabel).trim();
     if (ugcCode !== undefined) cat.ugcCode = String(ugcCode).trim();
     if (description !== undefined) cat.description = String(description).trim();
     if (sortOrder !== undefined) cat.sortOrder = Number(sortOrder);
-    if (showInMenu !== undefined) cat.showInMenu = Boolean(showInMenu);
+    if (menuLocation === 'main' || menuLocation === 'more' || menuLocation === 'hidden') {
+      cat.menuLocation = menuLocation;
+      cat.showInMenu = menuLocation !== 'hidden';
+    } else if (showInMenu !== undefined) {
+      cat.showInMenu = Boolean(showInMenu);
+      cat.menuLocation = Boolean(showInMenu)
+        ? (cat.menuLocation === 'hidden' || !cat.menuLocation ? 'more' : cat.menuLocation)
+        : 'hidden';
+    }
     if (showOnHome !== undefined) cat.showOnHome = Boolean(showOnHome);
     db.categories.sort((a, b) => a.sortOrder - b.sortOrder);
     addAudit(actor, 'UPDATE_CATEGORY', 'Category', cat.name);
@@ -3960,6 +4050,124 @@ async function startServer() {
     }
     const [removed] = list.splice(idx, 1);
     addAudit(actor, 'DELETE_GRIEVANCE', 'Grievance', removed.ticketCode);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/grievances/config', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const cur = db.settings.grievancePortal || DEFAULT_GRIEVANCE_PORTAL_CONFIG;
+    const incoming = req.body || {};
+    db.settings = {
+      ...db.settings,
+      grievancePortal: {
+        ...cur,
+        ...incoming,
+        committeeMembers: Array.isArray(incoming.committeeMembers)
+          ? incoming.committeeMembers
+          : cur.committeeMembers,
+      },
+    };
+    addAudit(actor, 'UPDATE_GRIEVANCE_CONFIG', 'Grievance', 'Updated SGRC & Anti-Ragging Portal Config');
+    saveDatabase();
+    res.json(db.settings.grievancePortal);
+  });
+
+  app.put('/api/admin/placements/stats/reorder', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (Array.isArray(orderedIds)) {
+      orderedIds.forEach((id, idx) => {
+        const s = pl.stats.find((x) => x.id === Number(id));
+        if (s) s.sortOrder = idx + 1;
+      });
+      pl.stats.sort((a, b) => a.sortOrder - b.sortOrder);
+      addAudit(actor, 'REORDER_PLACEMENT_STATS', 'Placements', 'Updated placement stats order');
+      saveDatabase();
+    }
+    res.json(pl.stats);
+  });
+
+  app.put('/api/admin/placements/stories/reorder', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (Array.isArray(orderedIds)) {
+      orderedIds.forEach((id, idx) => {
+        const s = pl.stories.find((x) => x.id === Number(id));
+        if (s) s.sortOrder = idx + 1;
+      });
+      pl.stories.sort((a, b) => a.sortOrder - b.sortOrder);
+      addAudit(actor, 'REORDER_PLACEMENT_STORIES', 'Placements', 'Updated placement stories order');
+      saveDatabase();
+    }
+    res.json(pl.stories);
+  });
+
+  app.put('/api/admin/placements/stories/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    const story = pl.stories.find((s) => s.id === Number(req.params.id));
+    if (!story) {
+      res.status(404).json({ error: 'Placement story not found.' });
+      return;
+    }
+    Object.assign(story, req.body);
+    addAudit(actor, 'UPDATE_PLACEMENT_STORY', 'Placements', story.studentName);
+    saveDatabase();
+    res.json(story);
+  });
+
+  app.put('/api/admin/placements/recruiters', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { recruiters } = req.body as { recruiters?: string[] };
+    if (Array.isArray(recruiters)) {
+      db.settings.recruiters = recruiters.map((r) => String(r).trim()).filter(Boolean);
+      addAudit(actor, 'UPDATE_RECRUITERS', 'Placements', `${db.settings.recruiters.length} recruiters`);
+      saveDatabase();
+    }
+    res.json({ recruiters: db.settings.recruiters || [] });
+  });
+
+  app.post('/api/admin/placements/drives', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.upcomingDrives = pl.upcomingDrives ?? [];
+    const b = req.body;
+    if (!b.company || !b.roleTitle) {
+      res.status(400).json({ error: 'Company name and role title are required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...pl.upcomingDrives.map((d) => d.id)) + 1;
+    const drive = {
+      id: nextId,
+      company: String(b.company).trim(),
+      roleTitle: String(b.roleTitle).trim(),
+      packageLpa: String(b.packageLpa || 'Competitive').trim(),
+      driveDate: String(b.driveDate || new Date().toISOString().slice(0, 10)).trim(),
+      eligibleBranches: String(b.eligibleBranches || 'All B.Tech Branches').trim(),
+      applyUrl: b.applyUrl ? String(b.applyUrl).trim() : '',
+      status: (b.status === 'ongoing' || b.status === 'completed' ? b.status : 'upcoming') as 'upcoming' | 'ongoing' | 'completed',
+      sortOrder: pl.upcomingDrives.length + 1,
+    };
+    pl.upcomingDrives.push(drive);
+    addAudit(actor, 'CREATE_PLACEMENT_DRIVE', 'Placements', drive.company);
+    saveDatabase();
+    res.status(201).json(drive);
+  });
+
+  app.delete('/api/admin/placements/drives/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.upcomingDrives = pl.upcomingDrives ?? [];
+    const idx = pl.upcomingDrives.findIndex((d) => d.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Placement drive not found.' });
+      return;
+    }
+    const [removed] = pl.upcomingDrives.splice(idx, 1);
+    addAudit(actor, 'DELETE_PLACEMENT_DRIVE', 'Placements', removed.company);
     saveDatabase();
     res.json({ ok: true });
   });

@@ -6,8 +6,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  ExternalLink,
   FileText,
   Globe2,
+  Lock,
   Mail,
   MapPin,
   Phone,
@@ -17,7 +19,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import type { Conference, ConferenceSlide, SiteSettings } from '../types/cms';
-import { CONFERENCE_MODE_PRESETS } from '../lib/collegeFeaturesLogic';
+import { CONFERENCE_MODE_PRESETS, isExternalPaperSubmissionActive } from '../lib/collegeFeaturesLogic';
 import { formatBytes, sortByOrder } from '../lib/cmsLogic';
 import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
 import { CaptchaWidget } from './CaptchaWidget';
@@ -452,6 +454,8 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
   const committee = sortByOrder(selectedConf.people.filter((p) => p.kind === 'committee'));
   const trackOptions = selectedConf.tracks.map((t) => t.title);
   const feeOptions = selectedConf.feeTiers.map((f) => f.categoryLabel);
+  const externalPaperActive = isExternalPaperSubmissionActive(selectedConf);
+  const paperSubmissionClosed = selectedConf.submissionMode === 'closed';
 
   return (
     <div className="max-w-[1380px] mx-auto px-4 py-8 space-y-6">
@@ -571,7 +575,11 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
                         activeSection === 'submit' ? 'bg-amber-500 text-slate-950' : 'bg-white/15 text-white hover:bg-white/25'
                       }`}
                     >
-                      Submit Paper / Abstract
+                      {externalPaperActive
+                        ? `Submit via ${selectedConf.externalSubmissionLabel || 'External Portal'} ↗`
+                        : paperSubmissionClosed
+                          ? 'Paper Submissions Closed'
+                          : 'Submit Paper / Abstract'}
                     </button>
                     <button
                       type="button"
@@ -782,6 +790,22 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
                 </div>
               </section>
             )}
+
+            {/* Admin-Customizable Extra Conference Sections */}
+            {Array.isArray(selectedConf.customSections) &&
+              sortByOrder(selectedConf.customSections).map((sec) => (
+                <section
+                  key={sec.id}
+                  className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3"
+                >
+                  <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white">{sec.title}</h2>
+                  <CmsHtmlContent
+                    html={sec.contentHtml}
+                    className="text-stone-700 dark:text-slate-200"
+                    onNavigate={onNavigate}
+                  />
+                </section>
+              ))}
           </div>
 
           {/* Right Rail: Important Dates, Fee Tiers & Quick Actions */}
@@ -832,14 +856,27 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection('submit')}
-                    className="px-3 py-2 rounded-lg text-xs font-bold text-white"
-                    style={{ backgroundColor: 'var(--primary-color)' }}
-                  >
-                    Submit Paper
-                  </button>
+                  {externalPaperActive && selectedConf.externalSubmissionUrl ? (
+                    <a
+                      href={selectedConf.externalSubmissionUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-bold text-white"
+                      style={{ backgroundColor: 'var(--primary-color)' }}
+                    >
+                      <span>{selectedConf.externalSubmissionLabel || 'CMT Portal'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection('submit')}
+                      className="px-3 py-2 rounded-lg text-xs font-bold text-white"
+                      style={{ backgroundColor: 'var(--primary-color)' }}
+                    >
+                      {paperSubmissionClosed ? 'Submissions Closed' : 'Submit Paper'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setActiveSection('register')}
@@ -866,154 +903,237 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
         </div>
       )}
 
-      {/* Paper / Abstract Submission Form */}
+      {/* Paper / Abstract Submission Section (Auto-disabled when external link or closed is configured) */}
       {activeSection === 'submit' && (
         <section className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 max-w-3xl space-y-4">
           <div className="flex items-center gap-2">
-            <Send className="w-5 h-5 text-amber-600" />
+            {externalPaperActive ? (
+              <ExternalLink className="w-5 h-5 text-amber-600" />
+            ) : paperSubmissionClosed ? (
+              <Lock className="w-5 h-5 text-rose-600" />
+            ) : (
+              <Send className="w-5 h-5 text-amber-600" />
+            )}
             <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white">
               Online Paper / Abstract Submission — {selectedConf.shortName}
             </h2>
           </div>
 
-          {paperStatus && (
-            <div
-              className={`p-3.5 rounded-lg border text-xs ${
-                paperStatus.ok
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200'
-                  : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200'
-              }`}
-            >
-              <p className="font-semibold">{paperStatus.msg}</p>
-              {paperStatus.code && (
-                <p className="mt-1 font-mono font-bold">Save this Tracking Code: {paperStatus.code}</p>
-              )}
+          {paperSubmissionClosed ? (
+            <div className="p-5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/30 space-y-2 text-xs sm:text-sm">
+              <p className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
+                <Lock className="w-4 h-4 shrink-0" />
+                Paper Submissions Are Currently Closed for {selectedConf.shortName}
+              </p>
+              <p className="text-stone-700 dark:text-slate-300">
+                The Technical Program Committee has closed manuscript intake for this edition. You may still proceed with Delegate Registration or contact the conference secretariat at{' '}
+                <strong>{selectedConf.contactEmail}</strong>.
+              </p>
             </div>
-          )}
+          ) : externalPaperActive && selectedConf.externalSubmissionUrl ? (
+            <div className="p-5 rounded-xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 space-y-4">
+              <div className="space-y-1.5">
+                <span className="inline-block px-2.5 py-0.5 rounded bg-amber-600 text-white text-[11px] font-bold uppercase tracking-wider">
+                  Third-Party Submission Portal Active · Local Submission Disabled
+                </span>
+                <h3 className="font-display text-lg font-bold text-stone-900 dark:text-white">
+                  Submit Manuscripts via {selectedConf.externalSubmissionLabel || 'Official External Portal'}
+                </h3>
+                <p className="text-xs sm:text-sm text-stone-700 dark:text-slate-300 leading-relaxed">
+                  Local website manuscript upload is disabled because all peer-review submissions for{' '}
+                  <strong>{selectedConf.shortName}</strong> are managed centrally through{' '}
+                  <strong>{selectedConf.externalSubmissionLabel || 'the external conference management system'}</strong>.
+                </p>
+              </div>
 
-          <form onSubmit={handlePaperSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold mb-1">Full Paper / Manuscript Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={paperTitle}
-                  onChange={(e) => setPaperTitle(e.target.value)}
-                  placeholder="Enter research paper title"
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <CustomSelectInput
-                  label="Technical Track"
-                  required
-                  value={trackTitle}
-                  onChange={setTrackTitle}
-                  options={trackOptions.length > 0 ? trackOptions : ['General Engineering Track']}
-                  customPlaceholder="Enter custom technical track..."
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Corresponding Author Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={authorName}
-                  onChange={(e) => setAuthorName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Author Email *</label>
-                <input
-                  type="email"
-                  required
-                  value={authorEmail}
-                  onChange={(e) => setAuthorEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Mobile / Phone</label>
-                <input
-                  type="text"
-                  value={authorPhone}
-                  onChange={(e) => setAuthorPhone(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1">Institution / Organization Affiliation *</label>
-                <input
-                  type="text"
-                  required
-                  value={affiliation}
-                  onChange={(e) => setAffiliation(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold mb-1">Co-Authors (comma-separated, optional)</label>
-                <input
-                  type="text"
-                  value={coAuthors}
-                  onChange={(e) => setCoAuthors(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold mb-1">Structured Abstract * (min 25 chars)</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={abstractText}
-                  onChange={(e) => setAbstractText(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-              <div className="sm:col-span-2 p-3 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/40 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-semibold">
-                    Upload Manuscript PDF / DOCX (Max {maxDocMb} MB)
-                  </span>
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer">
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>{uploadingPaper ? 'Uploading...' : 'Choose File'}</span>
-                    <input
-                      type="file"
-                      accept=".pdf,.docx,application/pdf"
-                      onChange={handleManuscriptUpload}
-                      className="sr-only"
-                    />
-                  </label>
+              {selectedConf.submissionInstructionsHtml && (
+                <div className="p-3.5 rounded-lg bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 text-xs">
+                  <CmsHtmlContent
+                    html={selectedConf.submissionInstructionsHtml}
+                    onNavigate={onNavigate}
+                  />
                 </div>
-                {manuscriptUrl && (
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                    Attached: {manuscriptUrl}
-                  </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href={selectedConf.externalSubmissionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-lg text-xs sm:text-sm font-bold text-white shadow-sm hover:opacity-95"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  <span>
+                    Open {selectedConf.externalSubmissionLabel || 'External Paper Submission Portal'}
+                  </span>
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                {selectedConf.templateUrl && (
+                  <a
+                    href={selectedConf.templateUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-3 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold"
+                  >
+                    <FileText className="w-4 h-4" /> Download IEEE / Format Template
+                  </a>
                 )}
               </div>
+              <p className="text-[11px] font-mono text-stone-500 break-all">
+                Verified External Endpoint: {selectedConf.externalSubmissionUrl}
+              </p>
             </div>
+          ) : (
+            <>
+              {selectedConf.submissionInstructionsHtml && (
+                <div className="p-3.5 rounded-lg bg-stone-50 dark:bg-slate-800/40 border border-stone-200 dark:border-slate-800 text-xs">
+                  <CmsHtmlContent
+                    html={selectedConf.submissionInstructionsHtml}
+                    onNavigate={onNavigate}
+                  />
+                </div>
+              )}
 
-            <CaptchaWidget
-              captchaId={paperCaptchaId}
-              captchaAnswer={paperCaptchaAnswer}
-              onCaptchaIdChange={setPaperCaptchaId}
-              onCaptchaAnswerChange={setPaperCaptchaAnswer}
-              refreshSignal={paperCaptchaRefresh}
-              label="Manuscript Submission CAPTCHA Verification"
-            />
+              {paperStatus && (
+                <div
+                  className={`p-3.5 rounded-lg border text-xs ${
+                    paperStatus.ok
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200'
+                      : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-200'
+                  }`}
+                >
+                  <p className="font-semibold">{paperStatus.msg}</p>
+                  {paperStatus.code && (
+                    <p className="mt-1 font-mono font-bold">Save this Tracking Code: {paperStatus.code}</p>
+                  )}
+                </div>
+              )}
 
-            <button
-              type="submit"
-              disabled={submittingPaper}
-              className="px-5 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-60"
-              style={{ backgroundColor: 'var(--primary-color)' }}
-            >
-              {submittingPaper ? 'Submitting Paper...' : 'Submit Paper for Peer Review'}
-            </button>
-          </form>
+              <form onSubmit={handlePaperSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold mb-1">Full Paper / Manuscript Title *</label>
+                    <input
+                      type="text"
+                      required
+                      value={paperTitle}
+                      onChange={(e) => setPaperTitle(e.target.value)}
+                      placeholder="Enter research paper title"
+                      className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <CustomSelectInput
+                      label="Technical Track"
+                      required
+                      value={trackTitle}
+                      onChange={setTrackTitle}
+                      options={trackOptions.length > 0 ? trackOptions : ['General Engineering Track']}
+                      customPlaceholder="Enter custom technical track..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Corresponding Author Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={authorName}
+                      onChange={(e) => setAuthorName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Author Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={authorEmail}
+                      onChange={(e) => setAuthorEmail(e.target.value)}
+                      className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Mobile / Phone</label>
+                    <input
+                      type="text"
+                      value={authorPhone}
+                      onChange={(e) => setAuthorPhone(e.target.value)}
+                      className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Institution / Organization Affiliation *</label>
+                    <input
+                      type="text"
+                      required
+                      value={affiliation}
+                      onChange={(e) => setAffiliation(e.target.value)}
+                      className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold mb-1">Co-Authors (comma-separated, optional)</label>
+                    <input
+                      type="text"
+                      value={coAuthors}
+                      onChange={(e) => setCoAuthors(e.target.value)}
+                      className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold mb-1">Structured Abstract * (min 25 chars)</label>
+                    <textarea
+                      rows={4}
+                      required
+                      value={abstractText}
+                      onChange={(e) => setAbstractText(e.target.value)}
+                      className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 p-3 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/40 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold">
+                        Upload Manuscript PDF / DOCX (Max {maxDocMb} MB)
+                      </span>
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{uploadingPaper ? 'Uploading...' : 'Choose File'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,application/pdf"
+                          onChange={handleManuscriptUpload}
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
+                    {manuscriptUrl && (
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        Attached: {manuscriptUrl}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <CaptchaWidget
+                  captchaId={paperCaptchaId}
+                  captchaAnswer={paperCaptchaAnswer}
+                  onCaptchaIdChange={setPaperCaptchaId}
+                  onCaptchaAnswerChange={setPaperCaptchaAnswer}
+                  refreshSignal={paperCaptchaRefresh}
+                  label="Manuscript Submission CAPTCHA Verification"
+                />
+
+                <button
+                  type="submit"
+                  disabled={submittingPaper}
+                  className="px-5 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-60"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  {submittingPaper ? 'Submitting Paper...' : 'Submit Paper for Peer Review'}
+                </button>
+              </form>
+            </>
+          )}
         </section>
       )}
 

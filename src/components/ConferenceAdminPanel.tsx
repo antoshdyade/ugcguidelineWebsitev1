@@ -29,6 +29,8 @@ import {
   CONFERENCE_MODE_PRESETS,
   CONFERENCE_ROLE_PRESETS,
   CONFERENCE_SCOPE_PRESETS,
+  CONFERENCE_SUBMISSION_PLATFORM_PRESETS,
+  isExternalPaperSubmissionActive,
 } from '../lib/collegeFeaturesLogic';
 import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
 import { CustomSelectInput } from './CustomSelectInput';
@@ -88,6 +90,8 @@ export function ConferenceAdminPanel({
   const [cSlideImg, setCSlideImg] = useState('/src/assets/images/hero_campus_aerial_1794512596442.jpg');
   const [cSlideCtaLabel, setCSlideCtaLabel] = useState('');
   const [cSlideCtaLink, setCSlideCtaLink] = useState('');
+  const [customSecTitle, setCustomSecTitle] = useState('');
+  const [customSecHtml, setCustomSecHtml] = useState('<p>Add custom accommodation, publication ethics, or sponsorship details here.</p>');
 
   useEffect(() => {
     setResearchSlides(settings.researchSliderSlides || []);
@@ -814,6 +818,179 @@ export function ConferenceAdminPanel({
                 minHeight={180}
               />
 
+              {/* Paper Submission Portal Mode: Built-in CMS vs Third-Party Platform (Microsoft CMT / EasyChair) */}
+              <div className="p-4 rounded-xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                      Paper Submission Mode &amp; Third-Party Portal Link (Microsoft CMT / EasyChair / Custom)
+                    </h3>
+                    <p className="text-[11px] text-stone-600 dark:text-slate-300">
+                      When a valid third-party submission link is active, local website paper submission is automatically disabled.
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase ${
+                      draft.submissionMode === 'closed'
+                        ? 'bg-rose-600 text-white'
+                        : isExternalPaperSubmissionActive(draft)
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'bg-emerald-600 text-white'
+                    }`}
+                  >
+                    {draft.submissionMode === 'closed'
+                      ? 'Submissions Closed'
+                      : isExternalPaperSubmissionActive(draft)
+                        ? 'External Link Active (Local Disabled)'
+                        : 'Built-in Local Form Active'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  {(
+                    [
+                      ['portal', 'Built-in Portal Submission Form'],
+                      ['external', 'Third-Party Link (CMT / EasyChair)'],
+                      ['closed', 'Close Paper Submissions'],
+                    ] as const
+                  ).map(([mVal, mLabel]) => (
+                    <label
+                      key={mVal}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer font-semibold ${
+                        (draft.submissionMode || (isExternalPaperSubmissionActive(draft) ? 'external' : 'portal')) === mVal
+                          ? 'border-amber-600 bg-white dark:bg-slate-900'
+                          : 'border-stone-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`sub-mode-${draft.id}`}
+                        checked={
+                          (draft.submissionMode || (isExternalPaperSubmissionActive(draft) ? 'external' : 'portal')) === mVal
+                        }
+                        onChange={() =>
+                          setDraft({
+                            ...draft,
+                            submissionMode: mVal,
+                            externalSubmissionUrl: mVal === 'portal' ? '' : draft.externalSubmissionUrl || '',
+                          })
+                        }
+                      />
+                      <span>{mLabel}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {(draft.submissionMode === 'external' || isExternalPaperSubmissionActive(draft)) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <CustomSelectInput
+                      label="Third-Party Platform Name"
+                      value={draft.externalSubmissionLabel || 'Microsoft CMT'}
+                      onChange={(val) => setDraft({ ...draft, externalSubmissionLabel: val })}
+                      options={[...CONFERENCE_SUBMISSION_PLATFORM_PRESETS]}
+                      customPlaceholder="Enter custom submission portal name..."
+                    />
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">External Paper Submission URL (https://...) *</label>
+                      <input
+                        type="url"
+                        value={draft.externalSubmissionUrl || ''}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            submissionMode: 'external',
+                            externalSubmissionUrl: e.target.value,
+                          })
+                        }
+                        placeholder="https://cmt3.research.microsoft.com/CONFERENCE2026"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold mb-1">
+                    Author Submission Instructions / Author Kit Notes (optional HTML)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={draft.submissionInstructionsHtml || ''}
+                    onChange={(e) => setDraft({ ...draft, submissionInstructionsHtml: e.target.value })}
+                    placeholder="<p>Prepare manuscript in IEEE double-column format (max 6 pages) and upload PDF via Microsoft CMT.</p>"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Custom Extensible Sections per Conference */}
+              <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-800/30 space-y-3">
+                <h3 className="text-sm font-bold">
+                  Additional Custom Sections ({(draft.customSections || []).length}) — Travel, Sponsors, Ethics
+                </h3>
+                <div className="grid grid-cols-1 gap-2">
+                  <input
+                    type="text"
+                    value={customSecTitle}
+                    onChange={(e) => setCustomSecTitle(e.target.value)}
+                    placeholder="Section Heading (e.g. Publication Ethics & Scopus Indexing Policy)"
+                    className="px-3 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <RichTextEditor
+                    label="Custom Section Body"
+                    value={customSecHtml}
+                    onChange={setCustomSecHtml}
+                    uploadBinary={uploadBinary}
+                    maxPhotoMb={maxPhotoMb}
+                    autoCropEnabled={autoCrop}
+                    minHeight={120}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!customSecTitle.trim()) return;
+                      const list = draft.customSections || [];
+                      setDraft({
+                        ...draft,
+                        customSections: [
+                          ...list,
+                          {
+                            id: Math.max(0, ...list.map((s) => s.id)) + 1,
+                            title: customSecTitle.trim(),
+                            contentHtml: customSecHtml,
+                            sortOrder: list.length + 1,
+                          },
+                        ],
+                      });
+                      setCustomSecTitle('');
+                    }}
+                    className="self-start px-3 py-1.5 rounded bg-stone-800 dark:bg-stone-700 text-white text-xs font-bold"
+                  >
+                    + Add Section Block
+                  </button>
+                </div>
+                {(draft.customSections || []).map((sec) => (
+                  <div
+                    key={sec.id}
+                    className="p-2.5 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="font-bold">{sec.title}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          customSections: (draft.customSections || []).filter((x) => x.id !== sec.id),
+                        })
+                      }
+                      className="p-1 text-rose-600"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
               <div className="flex flex-wrap items-center gap-5 text-xs font-semibold">
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
@@ -838,7 +1015,7 @@ export function ConferenceAdminPanel({
                 className="px-5 py-2.5 rounded-lg text-xs font-bold text-white"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                Save Program Overview, Slider &amp; CFP
+                Save Program Overview, Slider, Submission Mode &amp; CFP
               </button>
             </form>
           )}

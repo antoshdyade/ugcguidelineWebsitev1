@@ -41,6 +41,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $isFeatured = !empty($_POST['is_featured']) ? 1 : 0;
         $overviewHtml = (string)($_POST['overview_html'] ?? '');
         $cfpHtml = (string)($_POST['cfp_html'] ?? '');
+        $submissionMode = in_array($_POST['submission_mode'] ?? 'internal', ['internal', 'external', 'closed'], true)
+            ? (string)$_POST['submission_mode']
+            : 'internal';
+        $extSubUrl = trim((string)($_POST['external_submission_url'] ?? ''));
+        $extSubLabel = trim((string)($_POST['external_submission_label'] ?? ''));
+        $subInstructions = (string)($_POST['submission_instructions_html'] ?? '');
+        if ($extSubUrl !== '' && preg_match('#^https?://#i', $extSubUrl) === 1 && $submissionMode === 'internal') {
+            $submissionMode = 'external';
+        }
+        if ($submissionMode === 'external' && $extSubUrl !== '' && !filter_var($extSubUrl, FILTER_VALIDATE_URL)) {
+            $err = 'Please enter a valid https:// external paper submission portal URL (e.g. Microsoft CMT / EasyChair).';
+        }
 
         $slugRaw = trim((string)($_POST['slug'] ?? ''));
         if ($slugRaw === '') {
@@ -83,11 +95,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($err === '') {
             if ($editId > 0) {
                 $pdo->prepare(
-                    'UPDATE conferences SET slug=?, title=?, short_name=?, scope=?, theme=?, start_date=?, end_date=?, venue=?, mode=?, organizing_department=?, indexing_partners_json=?, contact_email=?, contact_phone=?, banner_url=?, hero_slides_json=?, overview_html=?, cfp_html=?, tracks_json=?, important_dates_json=?, people_json=?, schedule_json=?, fee_tiers_json=?, is_published=?, is_featured=? WHERE id=?'
+                    'UPDATE conferences SET slug=?, title=?, short_name=?, scope=?, theme=?, start_date=?, end_date=?, venue=?, mode=?, organizing_department=?, indexing_partners_json=?, contact_email=?, contact_phone=?, banner_url=?, hero_slides_json=?, overview_html=?, cfp_html=?, tracks_json=?, important_dates_json=?, people_json=?, schedule_json=?, fee_tiers_json=?, submission_mode=?, external_submission_url=?, external_submission_label=?, submission_instructions_html=?, is_published=?, is_featured=? WHERE id=?'
                 )->execute([
                     $slug, $title, $shortName, $scope, $theme, $startDate, $endDate, $venue, $mode, $orgDept,
                     json_encode($partners, JSON_UNESCAPED_UNICODE), $contactEmail, $contactPhone, $bannerUrl,
                     $heroSlidesJson, $overviewHtml, $cfpHtml, $tracksJson, $datesJson, $peopleJson, $scheduleJson, $feesJson,
+                    $submissionMode, $extSubUrl !== '' ? $extSubUrl : null, $extSubLabel !== '' ? $extSubLabel : null, $subInstructions,
                     $isPublished, $isFeatured, $editId,
                 ]);
                 logAudit($pdo, $user, 'UPDATE_CONFERENCE', 'Conference', $shortName . ': ' . $title);
@@ -95,11 +108,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $nextOrder = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM conferences')->fetchColumn()) + 1;
                 $pdo->prepare(
-                    'INSERT INTO conferences (slug, title, short_name, scope, theme, start_date, end_date, venue, mode, organizing_department, indexing_partners_json, contact_email, contact_phone, banner_url, hero_slides_json, overview_html, cfp_html, tracks_json, important_dates_json, people_json, schedule_json, fee_tiers_json, is_published, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                    'INSERT INTO conferences (slug, title, short_name, scope, theme, start_date, end_date, venue, mode, organizing_department, indexing_partners_json, contact_email, contact_phone, banner_url, hero_slides_json, overview_html, cfp_html, tracks_json, important_dates_json, people_json, schedule_json, fee_tiers_json, submission_mode, external_submission_url, external_submission_label, submission_instructions_html, is_published, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 )->execute([
                     $slug, $title, $shortName, $scope, $theme, $startDate, $endDate, $venue, $mode, $orgDept,
                     json_encode($partners, JSON_UNESCAPED_UNICODE), $contactEmail, $contactPhone, $bannerUrl,
                     $heroSlidesJson, $overviewHtml, $cfpHtml, $tracksJson, $datesJson, $peopleJson, $scheduleJson, $feesJson,
+                    $submissionMode, $extSubUrl !== '' ? $extSubUrl : null, $extSubLabel !== '' ? $extSubLabel : null, $subInstructions,
                     $isPublished, $isFeatured, $nextOrder,
                 ]);
                 logAudit($pdo, $user, 'ADD_CONFERENCE', 'Conference', $shortName . ': ' . $title);
@@ -320,6 +334,39 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <div style="display:flex;gap:1.25rem;margin-bottom:0.85rem;font-size:0.85rem;font-weight:600;">
         <label><input type="checkbox" name="is_published" value="1" <?= (!isset($editingConf['is_published']) || !empty($editingConf['is_published'])) ? 'checked' : '' ?>> Published on Website</label>
         <label><input type="checkbox" name="is_featured" value="1" <?= !empty($editingConf['is_featured']) ? 'checked' : '' ?>> Highlight as Featured</label>
+      </div>
+
+      <?php
+      $curSubMode = (string)($editingConf['submission_mode'] ?? 'internal');
+      if (!empty($editingConf['external_submission_url']) && $curSubMode === 'internal') {
+          $curSubMode = 'external';
+      }
+      ?>
+      <div class="card" style="background:#EFF6FF;border-color:#BFDBFE;margin-bottom:1rem;">
+        <strong style="display:block;font-size:0.9rem;color:#0F294A;margin-bottom:0.35rem;">
+          Paper Submission Mode &amp; Third-Party Link (Microsoft CMT / EasyChair / EDAS / Custom)
+        </strong>
+        <p style="font-size:0.79rem;color:#334155;margin:0 0 0.65rem;">
+          When an external paper submission URL (e.g. Microsoft CMT) is entered, the local manuscript submission form on the public conference page is <strong>automatically disabled and replaced with an external portal button</strong>.
+        </p>
+        <div class="grid-3" style="margin-bottom:0.65rem;">
+          <label style="font-size:0.82rem;font-weight:600;">Submission Mode
+            <select name="submission_mode" id="sel_sub_mode" style="width:100%;padding:0.5rem;margin-top:3px;">
+              <option value="internal" <?= $curSubMode === 'internal' ? 'selected' : '' ?>>Built-in CMS Paper Submission Form</option>
+              <option value="external" <?= $curSubMode === 'external' ? 'selected' : '' ?>>Third-Party External Link (Disables Local Form)</option>
+              <option value="closed" <?= $curSubMode === 'closed' ? 'selected' : '' ?>>Closed (Disable Submissions)</option>
+            </select>
+          </label>
+          <label style="font-size:0.82rem;font-weight:600;">External Portal Platform Label
+            <input type="text" name="external_submission_label" value="<?= e((string)($editingConf['external_submission_label'] ?? 'Microsoft CMT Portal')) ?>" placeholder="e.g. Microsoft CMT / EasyChair" style="width:100%;padding:0.5rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.82rem;font-weight:600;">External Submission Portal URL (https://...)
+            <input type="url" name="external_submission_url" value="<?= e((string)($editingConf['external_submission_url'] ?? '')) ?>" placeholder="https://cmt3.research.microsoft.com/..." style="width:100%;padding:0.5rem;margin-top:3px;">
+          </label>
+        </div>
+        <label style="display:block;font-size:0.82rem;font-weight:600;">Author Submission Guidelines / Track Instructions (Optional)
+          <textarea name="submission_instructions_html" rows="2" placeholder="Formatting template link, plagiarism threshold (&lt; 15%), or Microsoft CMT track instructions..." style="width:100%;padding:0.45rem;margin-top:3px;"><?= e((string)($editingConf['submission_instructions_html'] ?? '')) ?></textarea>
+        </label>
       </div>
 
       <div style="margin-bottom:1rem;">

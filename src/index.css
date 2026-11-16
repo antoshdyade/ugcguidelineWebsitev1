@@ -241,14 +241,16 @@ html.highlight-links h3 {
   border-radius: 10px;
 }
 
-/* Styled Tables & Color Themes */
-.cms-prose .cms-table-wrap {
+/* Styled Tables & Color Themes (both inside .cms-prose AND standalone .cms-table portals/admin) */
+.cms-prose .cms-table-wrap,
+.cms-table-wrap {
   width: 100%;
   overflow-x: auto;
   margin: 1.15rem 0;
 }
 
-.cms-prose table {
+.cms-prose table,
+table.cms-table {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
@@ -260,7 +262,9 @@ html.highlight-links h3 {
 }
 
 .cms-prose th,
-.cms-prose td {
+.cms-prose td,
+table.cms-table th,
+table.cms-table td {
   border: 1px solid #E5E7EB;
   padding: 0.65rem 0.9rem;
   text-align: left;
@@ -269,86 +273,110 @@ html.highlight-links h3 {
 
 .dark .cms-prose table,
 .dark .cms-prose th,
-.dark .cms-prose td {
+.dark .cms-prose td,
+.dark table.cms-table,
+.dark table.cms-table th,
+.dark table.cms-table td {
   border-color: #334155;
 }
 
-.cms-prose th {
+.cms-prose th,
+table.cms-table th {
   background-color: #F3F4F6;
   font-weight: 600;
 }
 
-.dark .cms-prose th {
+.dark .cms-prose th,
+.dark table.cms-table th {
   background-color: #1E293B;
 }
 
-.cms-prose table.cms-table-navy thead th {
+.cms-prose table.cms-table-navy thead th,
+table.cms-table.cms-table-navy thead th {
   background-color: #0F294A;
   color: #FFFFFF;
   border-color: #1E3A5F;
 }
-.cms-prose table.cms-table-navy tbody tr:nth-child(even) {
+.cms-prose table.cms-table-navy tbody tr:nth-child(even),
+table.cms-table.cms-table-navy tbody tr:nth-child(even) {
   background-color: #F8FAFC;
 }
-.dark .cms-prose table.cms-table-navy tbody tr:nth-child(even) {
+.dark .cms-prose table.cms-table-navy tbody tr:nth-child(even),
+.dark table.cms-table.cms-table-navy tbody tr:nth-child(even) {
   background-color: rgba(30, 41, 59, 0.55);
 }
 
-.cms-prose table.cms-table-amber thead th {
+.cms-prose table.cms-table-amber thead th,
+table.cms-table.cms-table-amber thead th {
   background-color: #B45309;
   color: #FFFFFF;
   border-color: #D97706;
 }
-.cms-prose table.cms-table-amber tbody tr:nth-child(even) {
+.cms-prose table.cms-table-amber tbody tr:nth-child(even),
+table.cms-table.cms-table-amber tbody tr:nth-child(even) {
   background-color: #FFFBEB;
 }
-.dark .cms-prose table.cms-table-amber tbody tr:nth-child(even) {
+.dark .cms-prose table.cms-table-amber tbody tr:nth-child(even),
+.dark table.cms-table.cms-table-amber tbody tr:nth-child(even) {
   background-color: rgba(180, 83, 9, 0.14);
 }
 
-.cms-prose table.cms-table-teal thead th {
+.cms-prose table.cms-table-teal thead th,
+table.cms-table.cms-table-teal thead th {
   background-color: #0F766E;
   color: #FFFFFF;
   border-color: #0D9488;
 }
-.cms-prose table.cms-table-teal tbody tr:nth-child(even) {
+.cms-prose table.cms-table-teal tbody tr:nth-child(even),
+table.cms-table.cms-table-teal tbody tr:nth-child(even) {
   background-color: #F0FDFA;
 }
-.dark .cms-prose table.cms-table-teal tbody tr:nth-child(even) {
+.dark .cms-prose table.cms-table-teal tbody tr:nth-child(even),
+.dark table.cms-table.cms-table-teal tbody tr:nth-child(even) {
   background-color: rgba(15, 118, 110, 0.16);
 }
 
-.cms-prose table.cms-table-emerald thead th {
+.cms-prose table.cms-table-emerald thead th,
+table.cms-table.cms-table-emerald thead th {
   background-color: #047857;
   color: #FFFFFF;
   border-color: #059669;
 }
-.cms-prose table.cms-table-emerald tbody tr:nth-child(even) {
+.cms-prose table.cms-table-emerald tbody tr:nth-child(even),
+table.cms-table.cms-table-emerald tbody tr:nth-child(even) {
   background-color: #ECFDF5;
 }
-.dark .cms-prose table.cms-table-emerald tbody tr:nth-child(even) {
+.dark .cms-prose table.cms-table-emerald tbody tr:nth-child(even),
+.dark table.cms-table.cms-table-emerald tbody tr:nth-child(even) {
   background-color: rgba(4, 120, 87, 0.16);
 }
 
-.cms-prose table.cms-table-slate thead th {
+.cms-prose table.cms-table-slate thead th,
+table.cms-table.cms-table-slate thead th {
   background-color: #334155;
   color: #FFFFFF;
   border-color: #475569;
 }
-.cms-prose table.cms-table-slate tbody tr:nth-child(even) {
+.cms-prose table.cms-table-slate tbody tr:nth-child(even),
+table.cms-table.cms-table-slate tbody tr:nth-child(even) {
   background-color: #F1F5F9;
 }
-.dark .cms-prose table.cms-table-slate tbody tr:nth-child(even) {
+.dark .cms-prose table.cms-table-slate tbody tr:nth-child(even),
+.dark table.cms-table.cms-table-slate tbody tr:nth-child(even) {
   background-color: rgba(51, 65, 85, 0.45);
 }
 
 .cms-prose table.cms-table-minimal,
 .cms-prose table.cms-table-minimal th,
-.cms-prose table.cms-table-minimal td {
+.cms-prose table.cms-table-minimal td,
+table.cms-table.cms-table-minimal,
+table.cms-table.cms-table-minimal th,
+table.cms-table.cms-table-minimal td {
   border-left: 0;
   border-right: 0;
 }
-.cms-prose table.cms-table-minimal thead th {
+.cms-prose table.cms-table-minimal thead th,
+table.cms-table.cms-table-minimal thead th {
   background: transparent;
   border-bottom: 2px solid #0F294A;
 }

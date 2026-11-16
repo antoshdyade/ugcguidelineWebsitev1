@@ -41,10 +41,12 @@ import {
   validateUploadMeta,
 } from '../lib/cmsLogic';
 import {
+  DEFAULT_PORTAL_MENU_ITEMS,
   DEPT_SUBPAGE_TYPE_PRESETS,
   DESIGN_PRESETS,
   DOCUMENT_CATEGORY_PRESETS,
   EVENT_CATEGORY_PRESETS,
+  partitionHeaderMenus,
   TELEPHONE_SECTION_PRESETS,
 } from '../lib/collegeFeaturesLogic';
 import {
@@ -84,9 +86,11 @@ import type {
   FacultyMember,
   GalleryAlbum,
   GrievanceTicket,
+  HeaderPortalMenuItem,
   HeroSlide,
   HomeComponentPlacement,
   LeadershipProfile,
+  MenuPlacementLocation,
   PlacementsData,
   SiteSettings,
   TelephoneEntry,
@@ -255,7 +259,14 @@ export function AdminDashboard({
   const [catDesc, setCatDesc] = useState('');
   const [catShowMenu, setCatShowMenu] = useState(true);
   const [catShowHome, setCatShowHome] = useState(true);
+  const [catMenuLocation, setCatMenuLocation] = useState<MenuPlacementLocation>('main');
   const [catCreatePage, setCatCreatePage] = useState(true);
+
+  // Portal & Custom Top-Bar / "More Portals" Link Manager state
+  const [newPortalLabel, setNewPortalLabel] = useState('');
+  const [newPortalUrl, setNewPortalUrl] = useState('/page/about-overview');
+  const [newPortalLocation, setNewPortalLocation] = useState<MenuPlacementLocation>('main');
+  const [editingPortalId, setEditingPortalId] = useState<number | null>(null);
 
   // Page Builder state
   const [pageFilterCat, setPageFilterCat] = useState<string>('all');
@@ -1065,6 +1076,54 @@ export function AdminDashboard({
         {/* 1B. CATEGORIES, NAVIGATION MENUS & HEADER/FOOTER BUILDER */}
         {activeTab === 'categories' && canCategories && state && (
           <div className="space-y-6">
+            {/* Live Header Menu Bar Preview */}
+            {(() => {
+              const portalList: HeaderPortalMenuItem[] =
+                settingsDraft?.portalMenuItems && settingsDraft.portalMenuItems.length > 0
+                  ? settingsDraft.portalMenuItems
+                  : DEFAULT_PORTAL_MENU_ITEMS;
+              const { mainCategories, moreCategories, mainPortalLinks, morePortalLinks } =
+                partitionHeaderMenus(state.categories, portalList);
+              return (
+                <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-sm font-bold text-stone-900 dark:text-white">
+                        Live Public Header Navigation Bar Preview
+                      </h2>
+                      <p className="text-[11px] text-stone-500">
+                        Manage ALL Categories AND standalone Portal Menus (Conferences, Placements, Grievance, Alumni, Gallery, Contact, Quick Links) — move any item between Main Bar, More Portals, or Hidden.
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className="rounded-lg px-3 py-2 flex flex-wrap items-center gap-1.5 text-white text-xs"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    <span className="px-2 py-1 rounded bg-white/20 font-bold">Home</span>
+                    {mainCategories.map((c) => (
+                      <span key={`prev-cat-${c.id}`} className="px-2 py-1 rounded bg-white/10">
+                        {c.shortLabel || c.name} ▾
+                      </span>
+                    ))}
+                    {mainPortalLinks.map((p) => (
+                      <span
+                        key={`prev-portal-${p.id}`}
+                        className="px-2 py-1 rounded bg-amber-400/20 text-amber-200 font-semibold"
+                      >
+                        {p.label}
+                      </span>
+                    ))}
+                    {(moreCategories.length > 0 || morePortalLinks.length > 0) && (
+                      <span className="px-2.5 py-1 rounded bg-slate-950/50 border border-white/25 font-bold">
+                        More Portals ({moreCategories.length + morePortalLinks.length}) ▾
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
               <form
                 onSubmit={async (e) => {
@@ -1076,7 +1135,8 @@ export function AdminDashboard({
                         shortLabel: catShort || catName,
                         ugcCode: catUgcCode,
                         description: catDesc,
-                        showInMenu: catShowMenu,
+                        showInMenu: catMenuLocation !== 'hidden',
+                        menuLocation: catMenuLocation,
                         showOnHome: catShowHome,
                       });
                       notify('ok', `Updated category "${catName}".`);
@@ -1087,7 +1147,8 @@ export function AdminDashboard({
                         slug: catSlug || catName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
                         ugcCode: catUgcCode,
                         description: catDesc,
-                        showInMenu: catShowMenu,
+                        showInMenu: catMenuLocation !== 'hidden',
+                        menuLocation: catMenuLocation,
                         showOnHome: catShowHome,
                         createDefaultPage: catCreatePage,
                       });
@@ -1100,6 +1161,7 @@ export function AdminDashboard({
                     setCatUgcCode('Autonomous Portal');
                     setCatDesc('');
                     setCatShowMenu(true);
+                    setCatMenuLocation('main');
                     setCatShowHome(true);
                     setCatCreatePage(true);
                   } catch (err) {
@@ -1121,6 +1183,7 @@ export function AdminDashboard({
                         setCatShort('');
                         setCatSlug('');
                         setCatDesc('');
+                        setCatMenuLocation('main');
                       }}
                       className="text-xs underline"
                     >
@@ -1129,7 +1192,7 @@ export function AdminDashboard({
                   )}
                 </div>
                 <p className="text-xs text-stone-500 dark:text-slate-400">
-                  Create top-level portal sections (such as Examination, Placement Cell, or NIRF Cell) that appear in the website header menu and homepage directory.
+                  Create top-level portal sections (such as Examination, Placement Cell, or NIRF Cell) and assign whether they sit directly on the Main Header Bar or inside More Portals.
                 </p>
 
                 <div>
@@ -1174,16 +1237,34 @@ export function AdminDashboard({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold mb-1">URL Slug (auto-generated)</label>
-                  <input
-                    type="text"
-                    disabled={Boolean(editingCatId)}
-                    value={catSlug}
-                    onChange={(e) => setCatSlug(e.target.value)}
-                    placeholder="e.g. examination"
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-60"
-                  />
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">URL Slug</label>
+                    <input
+                      type="text"
+                      disabled={Boolean(editingCatId)}
+                      value={catSlug}
+                      onChange={(e) => setCatSlug(e.target.value)}
+                      placeholder="e.g. examination"
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1">Header Menu Placement</label>
+                    <select
+                      value={catMenuLocation}
+                      onChange={(e) => {
+                        const loc = e.target.value as MenuPlacementLocation;
+                        setCatMenuLocation(loc);
+                        setCatShowMenu(loc !== 'hidden');
+                      }}
+                      className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    >
+                      <option value="main">Main Header Bar</option>
+                      <option value="more">Inside &ldquo;More Portals&rdquo;</option>
+                      <option value="hidden">Hidden from Top Menu</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
@@ -1198,10 +1279,6 @@ export function AdminDashboard({
                 </div>
 
                 <div className="space-y-1.5 text-xs">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={catShowMenu} onChange={(e) => setCatShowMenu(e.target.checked)} />
-                    <span>Show in Top Header Navigation Bar</span>
-                  </label>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={catShowHome} onChange={(e) => setCatShowHome(e.target.checked)} />
                     <span>Show in Homepage Categories Directory</span>
@@ -1224,13 +1301,17 @@ export function AdminDashboard({
               </form>
 
               <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-                <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 flex items-center justify-between">
-                  <span className="font-bold text-sm">Website Categories &amp; Menu Order ({state.categories.length})</span>
-                  <span className="text-[11px] text-stone-500">Top 7 visible items show directly in desktop bar; rest under &ldquo;More Portals&rdquo;</span>
+                <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-bold text-sm">Category Dropdown Menus ({state.categories.length})</span>
+                  <span className="text-[11px] text-stone-500">
+                    Click Main Bar / More Portals / Hidden to route any category
+                  </span>
                 </div>
                 <div className="divide-y divide-stone-100 dark:divide-slate-800">
                   {state.categories.map((cat, idx) => {
                     const count = state.pages.filter((p) => p.categorySlug === cat.slug).length;
+                    const effLoc: MenuPlacementLocation =
+                      cat.menuLocation || (cat.showInMenu === false ? 'hidden' : idx < 6 ? 'main' : 'more');
                     const moveCategory = async (dir: -1 | 1) => {
                       const target = idx + dir;
                       if (target < 0 || target >= state.categories.length) return;
@@ -1239,6 +1320,18 @@ export function AdminDashboard({
                       await adminFetch('/api/admin/categories/reorder', 'PUT', { orderedIds: ids });
                       notify('ok', `Reordered "${cat.name}".`);
                     };
+                    const setCatPlacement = (loc: MenuPlacementLocation) =>
+                      adminFetch(`/api/admin/categories/${cat.id}`, 'PUT', {
+                        menuLocation: loc,
+                        showInMenu: loc !== 'hidden',
+                      }).then(() =>
+                        notify(
+                          'ok',
+                          `Moved "${cat.shortLabel || cat.name}" to ${
+                            loc === 'main' ? 'Main Header Bar' : loc === 'more' ? 'More Portals' : 'Hidden'
+                          }.`,
+                        ),
+                      );
                     return (
                       <div key={cat.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
                         <div className="min-w-0">
@@ -1254,7 +1347,7 @@ export function AdminDashboard({
                           <p className="text-xs text-stone-500 dark:text-slate-400 truncate mt-0.5">{cat.description}</p>
                         </div>
 
-                        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                        <div className="flex items-center gap-1 flex-wrap shrink-0">
                           <button
                             type="button"
                             disabled={idx === 0}
@@ -1273,21 +1366,41 @@ export function AdminDashboard({
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              adminFetch(`/api/admin/categories/${cat.id}`, 'PUT', {
-                                showInMenu: cat.showInMenu === false,
-                              }).then(() => notify('ok', `Updated menu visibility for ${cat.name}`))
-                            }
-                            className={`px-2 py-1 rounded text-[11px] font-semibold border ${
-                              cat.showInMenu !== false
-                                ? 'border-emerald-300 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-300'
-                                : 'border-stone-300 text-stone-500'
-                            }`}
-                          >
-                            {cat.showInMenu !== false ? 'In Menu' : 'Menu Hidden'}
-                          </button>
+                          <div className="inline-flex rounded-md border border-stone-300 dark:border-slate-700 overflow-hidden text-[11px] font-semibold">
+                            <button
+                              type="button"
+                              onClick={() => setCatPlacement('main')}
+                              className={`px-2 py-1 ${
+                                effLoc === 'main'
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-white dark:bg-slate-800 text-stone-600 dark:text-slate-300'
+                              }`}
+                            >
+                              Main Bar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCatPlacement('more')}
+                              className={`px-2 py-1 border-x border-stone-300 dark:border-slate-700 ${
+                                effLoc === 'more'
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-white dark:bg-slate-800 text-stone-600 dark:text-slate-300'
+                              }`}
+                            >
+                              More Portals
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCatPlacement('hidden')}
+                              className={`px-2 py-1 ${
+                                effLoc === 'hidden'
+                                  ? 'bg-stone-600 text-white'
+                                  : 'bg-white dark:bg-slate-800 text-stone-500'
+                              }`}
+                            >
+                              Hidden
+                            </button>
+                          </div>
                           <button
                             type="button"
                             onClick={() => {
@@ -1295,7 +1408,7 @@ export function AdminDashboard({
                               setPageCat(cat.slug);
                               setActiveTab('pages');
                             }}
-                            className="px-2.5 py-1 rounded text-xs font-semibold text-white"
+                            className="px-2 py-1 rounded text-xs font-semibold text-white"
                             style={{ backgroundColor: 'var(--primary-color)' }}
                           >
                             Pages ({count}) &rarr;
@@ -1310,6 +1423,7 @@ export function AdminDashboard({
                               setCatUgcCode(cat.ugcCode ?? '');
                               setCatDesc(cat.description ?? '');
                               setCatShowMenu(cat.showInMenu !== false);
+                              setCatMenuLocation(effLoc);
                               setCatShowHome(cat.showOnHome !== false);
                             }}
                             className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs"
@@ -1338,6 +1452,240 @@ export function AdminDashboard({
                 </div>
               </div>
             </div>
+
+            {/* Standalone Portal & Custom Header Menus (Conferences, Placements, Grievance, Alumni, Gallery, Contact, Quick Links, Custom) */}
+            {settingsDraft && (() => {
+              const portalList: HeaderPortalMenuItem[] =
+                settingsDraft.portalMenuItems && settingsDraft.portalMenuItems.length > 0
+                  ? settingsDraft.portalMenuItems
+                  : DEFAULT_PORTAL_MENU_ITEMS;
+
+              const persistPortalList = async (nextList: HeaderPortalMenuItem[], msg: string) => {
+                const renumbered = nextList.map((item, i) => ({ ...item, sortOrder: i + 1 }));
+                setSettingsDraft({ ...settingsDraft, portalMenuItems: renumbered });
+                await adminFetch('/api/admin/settings', 'PUT', { portalMenuItems: renumbered });
+                notify('ok', msg);
+              };
+
+              return (
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!newPortalLabel.trim() || !newPortalUrl.trim()) return;
+                      if (editingPortalId) {
+                        const updated = portalList.map((item) =>
+                          item.id === editingPortalId
+                            ? {
+                                ...item,
+                                label: newPortalLabel.trim(),
+                                url: newPortalUrl.trim(),
+                                menuLocation: newPortalLocation,
+                              }
+                            : item,
+                        );
+                        setEditingPortalId(null);
+                        setNewPortalLabel('');
+                        await persistPortalList(updated, `Updated header portal menu "${newPortalLabel}".`);
+                      } else {
+                        const newItem: HeaderPortalMenuItem = {
+                          id: Math.max(0, ...portalList.map((i) => i.id)) + 1,
+                          label: newPortalLabel.trim(),
+                          url: newPortalUrl.trim(),
+                          menuLocation: newPortalLocation,
+                          sortOrder: portalList.length + 1,
+                        };
+                        setNewPortalLabel('');
+                        await persistPortalList([...portalList, newItem], `Added menu item "${newItem.label}".`);
+                      }
+                    }}
+                    className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base font-bold">
+                        {editingPortalId ? 'Edit Header / Portal Menu Link' : 'Add Portal / Custom Header Menu Link'}
+                      </h3>
+                      {editingPortalId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPortalId(null);
+                            setNewPortalLabel('');
+                          }}
+                          className="text-xs underline"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-stone-500">
+                      Add new top-bar buttons or More Portals entries (e.g. NIRF Cell, Scholarships, Moodle LMS) and route any existing portal link.
+                    </p>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Menu Button Label *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newPortalLabel}
+                        onChange={(e) => setNewPortalLabel(e.target.value)}
+                        placeholder="e.g. NIRF Ranking / ERP Portal"
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Target Page / Portal Route *</label>
+                      <LinkTargetPicker
+                        value={newPortalUrl}
+                        onChange={setNewPortalUrl}
+                        categories={state.categories}
+                        pages={state.pages}
+                        departments={state.departments}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1">Menu Placement</label>
+                      <select
+                        value={newPortalLocation}
+                        onChange={(e) => setNewPortalLocation(e.target.value as MenuPlacementLocation)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      >
+                        <option value="main">Main Header Bar</option>
+                        <option value="more">Inside &ldquo;More Portals&rdquo; Dropdown</option>
+                        <option value="hidden">Hidden</option>
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      className="w-full py-2 rounded-lg text-xs font-bold text-white"
+                      style={{ backgroundColor: 'var(--primary-color)' }}
+                    >
+                      {editingPortalId ? 'Save Header Link Changes' : '+ Add Header Portal Menu'}
+                    </button>
+                  </form>
+
+                  <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-stone-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-bold text-sm">
+                        Homepage Portal &amp; Standalone Header Menus ({portalList.length})
+                      </span>
+                      <span className="text-[11px] text-stone-500">
+                        Reorder or move items into More Portals to keep the top bar clean
+                      </span>
+                    </div>
+                    <div className="divide-y divide-stone-100 dark:divide-slate-800 text-xs">
+                      {portalList.map((item, idx) => (
+                        <div key={`${item.id}-${item.url}`} className="p-3.5 flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-bold text-sm text-stone-900 dark:text-white">{item.label}</p>
+                            <p className="font-mono text-[11px] text-stone-500">{item.url}</p>
+                          </div>
+                          <div className="flex items-center gap-1 flex-wrap shrink-0">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                const arr = [...portalList];
+                                [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                persistPortalList(arr, `Moved "${item.label}" up.`);
+                              }}
+                              className="p-1.5 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === portalList.length - 1}
+                              onClick={() => {
+                                const arr = [...portalList];
+                                [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                persistPortalList(arr, `Moved "${item.label}" down.`);
+                              }}
+                              className="p-1.5 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="inline-flex rounded-md border border-stone-300 dark:border-slate-700 overflow-hidden text-[11px] font-semibold">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  persistPortalList(
+                                    portalList.map((x) => (x.id === item.id ? { ...x, menuLocation: 'main' } : x)),
+                                    `Moved "${item.label}" to Main Header Bar.`,
+                                  )
+                                }
+                                className={`px-2 py-1 ${
+                                  item.menuLocation === 'main'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-white dark:bg-slate-800 text-stone-600 dark:text-slate-300'
+                                }`}
+                              >
+                                Main Bar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  persistPortalList(
+                                    portalList.map((x) => (x.id === item.id ? { ...x, menuLocation: 'more' } : x)),
+                                    `Moved "${item.label}" inside More Portals.`,
+                                  )
+                                }
+                                className={`px-2 py-1 border-x border-stone-300 dark:border-slate-700 ${
+                                  item.menuLocation === 'more'
+                                    ? 'bg-amber-600 text-white'
+                                    : 'bg-white dark:bg-slate-800 text-stone-600 dark:text-slate-300'
+                                }`}
+                              >
+                                More Portals
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  persistPortalList(
+                                    portalList.map((x) => (x.id === item.id ? { ...x, menuLocation: 'hidden' } : x)),
+                                    `Hid "${item.label}" from header.`,
+                                  )
+                                }
+                                className={`px-2 py-1 ${
+                                  item.menuLocation === 'hidden'
+                                    ? 'bg-stone-600 text-white'
+                                    : 'bg-white dark:bg-slate-800 text-stone-500'
+                                }`}
+                              >
+                                Hidden
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingPortalId(item.id);
+                                setNewPortalLabel(item.label);
+                                setNewPortalUrl(item.url);
+                                setNewPortalLocation(item.menuLocation);
+                              }}
+                              className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                persistPortalList(
+                                  portalList.filter((x) => x.id !== item.id),
+                                  `Removed header portal menu "${item.label}".`,
+                                )
+                              }
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Header Quick-Access Links & Footer Columns Visual Builder */}
             {canSettings && settingsDraft && (
@@ -6184,6 +6532,7 @@ export function AdminDashboard({
                 coordinatorPhone: '',
                 stats: [],
                 stories: [],
+                upcomingDrives: [],
               }
             }
             grievances={state.grievances || []}
@@ -6207,6 +6556,7 @@ export function AdminDashboard({
                 coordinatorPhone: '',
                 stats: [],
                 stories: [],
+                upcomingDrives: [],
               }
             }
             grievances={state.grievances || []}

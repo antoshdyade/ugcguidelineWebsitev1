@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import type { CmsDatabase } from '../types/cms';
-import { CURRENT_SCHEMA_VERSION } from '../lib/collegeFeaturesLogic';
+import {
+  CURRENT_SCHEMA_VERSION,
+  DEFAULT_GRIEVANCE_PORTAL_CONFIG,
+  DEFAULT_INTAKE_PROGRAMS,
+  DEFAULT_PORTAL_MENU_ITEMS,
+} from '../lib/collegeFeaturesLogic';
 import { buildCustomSliderHtml, buildPhotoProfileCardHtml, buildSinglePhotoProfileCardInnerHtml } from '../lib/editorBlocks';
 
 export function hashPassword(password: string): string {
@@ -2392,6 +2397,9 @@ export function createSeedDatabase(): CmsDatabase {
           ctaLink: '/conference/ai-edge-workshop-2026',
         },
       ],
+      portalMenuItems: structuredClone(DEFAULT_PORTAL_MENU_ITEMS),
+      grievancePortal: structuredClone(DEFAULT_GRIEVANCE_PORTAL_CONFIG),
+      intakePrograms: structuredClone(DEFAULT_INTAKE_PROGRAMS),
     },
     alumni: createSeedAlumniData(),
     conferences: [
@@ -2885,6 +2893,30 @@ export function createSeedDatabase(): CmsDatabase {
           photoUrl: '/src/assets/images/leadership_principal_1794512597061.jpg',
           quote:
             'Hands-on CAD/FEA training in our Centre of Excellence prepared me thoroughly for core R&D technical interviews.',
+          sortOrder: 2,
+        },
+      ],
+      upcomingDrives: [
+        {
+          id: 1,
+          company: 'Persistent Systems',
+          roleTitle: 'Software Engineer (Full Stack & Cloud)',
+          packageLpa: '₹7.5 – ₹11.0 LPA',
+          driveDate: '2026-12-08',
+          eligibleBranches: 'B.Tech CSE, E&TC, Electrical (CGPA >= 7.0)',
+          applyUrl: '/placements',
+          status: 'upcoming',
+          sortOrder: 1,
+        },
+        {
+          id: 2,
+          company: 'Bharat Forge & Atlas Copco Joint Pool Drive',
+          roleTitle: 'Graduate Engineer Trainee (R&D / Design)',
+          packageLpa: '₹6.5 – ₹9.2 LPA',
+          driveDate: '2026-12-14',
+          eligibleBranches: 'B.Tech Mechanical, Civil, Electrical',
+          applyUrl: '/placements',
+          status: 'upcoming',
           sortOrder: 2,
         },
       ],

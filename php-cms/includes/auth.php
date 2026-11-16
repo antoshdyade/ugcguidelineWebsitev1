@@ -178,6 +178,225 @@ function grievanceRolePresets(): array
     ];
 }
 
+function conferenceSubmissionPlatformPresets(): array
+{
+    return [
+        'Microsoft CMT Portal'      => 'https://cmt3.research.microsoft.com/',
+        'EasyChair Conference System' => 'https://easychair.org/',
+        'EDAS Conference System'    => 'https://edas.info/',
+        'Google Form / Custom Portal' => 'https://forms.gle/',
+    ];
+}
+
+function isExternalConferenceSubmission(array $conf): bool
+{
+    $mode = (string)($conf['submission_mode'] ?? 'internal');
+    if ($mode === 'closed') {
+        return false;
+    }
+    $url = trim((string)($conf['external_submission_url'] ?? ''));
+    return $url !== '' && preg_match('#^https?://#i', $url) === 1;
+}
+
+function defaultPortalMenuItems(): array
+{
+    return [
+        ['id' => 'conferences', 'label' => 'Conferences', 'href' => 'conferences.php', 'matchScripts' => ['conferences.php', 'conference.php'], 'menuLocation' => 'main', 'sortOrder' => 1, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'placements',  'label' => 'Placements',  'href' => 'placements.php',  'matchScripts' => ['placements.php'], 'menuLocation' => 'main', 'sortOrder' => 2, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'grievance',   'label' => 'Grievance & Anti-Ragging', 'href' => 'grievance.php', 'matchScripts' => ['grievance.php'], 'menuLocation' => 'main', 'sortOrder' => 3, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'alumni',      'label' => 'Alumni',      'href' => 'alumni.php',      'matchScripts' => ['alumni.php'], 'menuLocation' => 'main', 'sortOrder' => 4, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'gallery',     'label' => 'Gallery',     'href' => 'gallery.php',     'matchScripts' => ['gallery.php'], 'menuLocation' => 'more', 'sortOrder' => 5, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'contact',     'label' => 'Contact Us',  'href' => 'contact.php',     'matchScripts' => ['contact.php'], 'menuLocation' => 'more', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'quick-links', 'label' => 'Quick Links & Disclosures', 'href' => 'quick-links.php', 'matchScripts' => ['quick-links.php'], 'menuLocation' => 'more', 'sortOrder' => 7, 'isSystem' => true, 'openInNewTab' => false],
+    ];
+}
+
+function getPortalMenuItems(PDO $pdo): array
+{
+    $defaults = defaultPortalMenuItems();
+    $byId = [];
+    foreach ($defaults as $d) {
+        $byId[$d['id']] = $d;
+    }
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'portal_menu_items' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $decoded = json_decode((string)$raw, true);
+            if (is_array($decoded)) {
+                $seen = [];
+                $out = [];
+                foreach ($decoded as $item) {
+                    if (!is_array($item) || empty($item['id']) || empty($item['label'])) {
+                        continue;
+                    }
+                    $id = (string)$item['id'];
+                    $seen[$id] = true;
+                    $base = $byId[$id] ?? ['matchScripts' => [], 'isSystem' => false, 'openInNewTab' => false];
+                    $loc = in_array($item['menuLocation'] ?? 'main', ['main', 'more', 'hidden'], true) ? $item['menuLocation'] : 'main';
+                    $out[] = [
+                        'id'           => $id,
+                        'label'        => trim((string)$item['label']),
+                        'href'         => trim((string)($item['href'] ?? $base['href'] ?? 'index.php')),
+                        'matchScripts' => $base['matchScripts'] ?? [],
+                        'menuLocation' => $loc,
+                        'sortOrder'    => (int)($item['sortOrder'] ?? 99),
+                        'isSystem'     => !empty($base['isSystem']),
+                        'openInNewTab' => !empty($item['openInNewTab']),
+                    ];
+                }
+                foreach ($defaults as $def) {
+                    if (empty($seen[$def['id']])) {
+                        $out[] = $def;
+                    }
+                }
+                usort($out, static fn(array $a, array $b) => ($a['sortOrder'] <=> $b['sortOrder']));
+                return $out;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $defaults;
+}
+
+function savePortalMenuItems(PDO $pdo, array $items): void
+{
+    $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('portal_menu_items', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+        ->execute([json_encode(array_values($items), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+}
+
+function partitionHeaderMenus(array $categories, array $portalItems): array
+{
+    $mainCats = [];
+    $moreCats = [];
+    foreach ($categories as $cat) {
+        $loc = (string)($cat['menu_location'] ?? '');
+        if (!in_array($loc, ['main', 'more', 'hidden'], true)) {
+            $loc = !empty($cat['show_in_menu']) ? 'main' : 'hidden';
+        }
+        if ($loc === 'hidden' || (isset($cat['show_in_menu']) && (int)$cat['show_in_menu'] === 0 && $loc !== 'more')) {
+            continue;
+        }
+        if ($loc === 'more') {
+            $moreCats[] = $cat;
+        } else {
+            $mainCats[] = $cat;
+        }
+    }
+    $mainPortals = [];
+    $morePortals = [];
+    foreach ($portalItems as $p) {
+        $loc = (string)($p['menuLocation'] ?? 'main');
+        if ($loc === 'main') {
+            $mainPortals[] = $p;
+        } elseif ($loc === 'more') {
+            $morePortals[] = $p;
+        }
+    }
+    return [
+        'mainCats'    => $mainCats,
+        'moreCats'    => $moreCats,
+        'mainPortals' => $mainPortals,
+        'morePortals' => $morePortals,
+    ];
+}
+
+function defaultGrievancePortalConfig(): array
+{
+    return [
+        'heroBadge'            => 'UGC SGRC (2023) & AICTE Statutory Redressal Helpdesk',
+        'heroTitle'            => 'Online Grievance Redressal & Anti-Ragging Portal',
+        'heroSubtitle'         => 'Statutory Student Grievance Redressal Committee (SGRC), Ombudsperson Escalation, 24x7 Anti-Ragging Squad, and Internal Complaint Committee (ICC) confidential portal.',
+        'ombudspersonName'     => 'Hon. Justice / Prof. (Dr.) A. V. Deshmukh',
+        'ombudspersonTitle'    => 'University Appointed Ombudsperson (PAHSUS)',
+        'ombudspersonEmail'    => 'ombudsperson@coe.sveri.ac.in',
+        'ombudspersonPhone'    => '+91-02186-216060',
+        'ombudspersonPhoto'    => 'assets/images/principal.jpg',
+        'antiRaggingSquadPhone' => '+91-9545553888 (24x7 Squad)',
+        'womenCellOfficer'     => 'Dr. Pratibha S. Kulkarni (Presiding Officer - ICC)',
+        'womenCellPhone'       => '+91-94230-62201',
+        'ugcUndertakingUrl'    => 'https://www.antiragging.in/',
+        'charterHtml'          => '<h3>Statutory Grievance Redressal SLA &amp; Escalation Matrix</h3><p>All grievances receive an automated tracking code immediately upon submission and are reviewed under strict UGC SGRC Regulations 2023 timelines.</p><table class="cms-table cms-table-navy"><thead><tr><th>Level</th><th>Authority / Committee</th><th>Mandated Response SLA</th><th>Jurisdiction</th></tr></thead><tbody><tr><td>Level 1</td><td>Departmental Mentor / Class Coordinator</td><td>Within 3 Working Days</td><td>Academic, attendance, lab &amp; timetable queries</td></tr><tr><td>Level 2</td><td>Student Grievance Redressal Committee (SGRC)</td><td>Within 10 Working Days</td><td>Exams, scholarships, hostel, fee refunds &amp; campus facilities</td></tr><tr><td>Level 3</td><td>Principal &amp; Institutional Ombudsperson</td><td>Within 15 Working Days</td><td>Appeals, ICC, Equal Opportunity &amp; SC/ST Cell review</td></tr><tr><td>Emergency</td><td>Anti-Ragging Squad / National UGC Helpline</td><td>Immediate (&lt; 2 Hours)</td><td>Zero-tolerance campus safety &amp; ragging complaints (1800-180-5522)</td></tr></tbody></table>',
+        'committeeMembers'     => [
+            ['id' => 'sgrc1', 'name' => 'Dr. B. P. Ronge', 'role' => 'Chairperson (SGRC)', 'designation' => 'Principal & Director', 'department' => 'Administration', 'email' => 'principal@coe.sveri.ac.in', 'phone' => '+91-02186-216063', 'photoUrl' => 'assets/images/principal.jpg'],
+            ['id' => 'sgrc2', 'name' => 'Dr. P. K. Deshmukh', 'role' => 'Convener & Anti-Ragging Chief', 'designation' => 'Professor & Dean Student Welfare', 'department' => 'Student Affairs', 'email' => 'antiragging@coe.sveri.ac.in', 'phone' => '+91-9545553888', 'photoUrl' => 'assets/images/principal.jpg'],
+            ['id' => 'sgrc3', 'name' => 'Dr. Pratibha S. Kulkarni', 'role' => 'Presiding Officer (ICC / Women Cell)', 'designation' => 'Associate Professor', 'department' => 'First Year Engineering', 'email' => 'icc@coe.sveri.ac.in', 'phone' => '+91-94230-62201', 'photoUrl' => 'assets/images/faculty_default.jpg'],
+        ],
+    ];
+}
+
+function getGrievancePortalConfig(PDO $pdo): array
+{
+    $def = defaultGrievancePortalConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'grievance_portal_config' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                return array_merge($def, $dec);
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function saveGrievancePortalConfig(PDO $pdo, array $cfg): void
+{
+    $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('grievance_portal_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+        ->execute([json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+}
+
+function defaultSanctionedIntakePrograms(): array
+{
+    return [
+        ['id' => 'in1', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Computer Science & Engineering', 'code' => '622024510', 'intake' => 180, 'nbaStatus' => 'NBA Accredited (Up to 2027)', 'annualFee' => 'Rs. 1,14,000'],
+        ['id' => 'in2', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Electronics & Telecommunication Engg.', 'code' => '622037210', 'intake' => 120, 'nbaStatus' => 'NBA Accredited', 'annualFee' => 'Rs. 1,14,000'],
+        ['id' => 'in3', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Mechanical Engineering', 'code' => '622061210', 'intake' => 120, 'nbaStatus' => 'NBA Accredited', 'annualFee' => 'Rs. 1,14,000'],
+        ['id' => 'in4', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Civil Engineering', 'code' => '622019110', 'intake' => 120, 'nbaStatus' => 'AICTE Approved', 'annualFee' => 'Rs. 1,14,000'],
+        ['id' => 'in5', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Electrical Engineering', 'code' => '622029310', 'intake' => 60, 'nbaStatus' => 'AICTE Approved', 'annualFee' => 'Rs. 1,14,000'],
+        ['id' => 'in6', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Electronics & Computer Engineering', 'code' => '622084410', 'intake' => 60, 'nbaStatus' => 'AICTE Approved', 'annualFee' => 'Rs. 1,14,000'],
+        ['id' => 'in7', 'degreeLevel' => 'PG (M.Tech / MBA)', 'programName' => 'M.Tech Structural, Design, CSE & E&TC + MBA', 'code' => '622010110', 'intake' => 96, 'nbaStatus' => 'University Approved', 'annualFee' => 'Rs. 88,000'],
+    ];
+}
+
+function getSanctionedIntakePrograms(PDO $pdo): array
+{
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'sanctioned_intake_programs' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec) && count($dec) > 0) {
+                return $dec;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return defaultSanctionedIntakePrograms();
+}
+
+function defaultPlacementDrives(): array
+{
+    return [
+        ['id' => 'drv1', 'company' => 'TCS Digital & Prime Recruitment Drive', 'roleTitle' => 'Systems Engineer / Prime Developer', 'packageLpa' => '7.0 – 9.0 LPA', 'eligibleBranches' => 'CSE, E&TC, ECS, Electrical', 'driveDate' => '2026-11-28', 'venue' => 'Central T&P Auditorium', 'status' => 'Registrations Open', 'registrationUrl' => ''],
+        ['id' => 'drv2', 'company' => 'Bharat Forge EV & Design Center', 'roleTitle' => 'Graduate Engineer Trainee (R&D)', 'packageLpa' => '6.5 LPA', 'eligibleBranches' => 'Mechanical, Electrical', 'driveDate' => '2026-12-06', 'venue' => 'T&P Seminar Hall B', 'status' => 'Upcoming', 'registrationUrl' => ''],
+    ];
+}
+
+function getPlacementDrives(PDO $pdo): array
+{
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'placement_upcoming_drives' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                return $dec;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return defaultPlacementDrives();
+}
+
 function defaultResearchSliderSlides(): array
 {
     return [
@@ -674,9 +893,37 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB"
         );
+        foreach ([
+            "ALTER TABLE categories ADD COLUMN menu_location ENUM('main','more','hidden') DEFAULT 'main' AFTER show_in_menu",
+            "ALTER TABLE conferences ADD COLUMN hero_slides_json LONGTEXT NULL AFTER banner_url",
+            "ALTER TABLE conferences ADD COLUMN submission_mode ENUM('internal','external','closed') DEFAULT 'internal' AFTER fee_tiers_json",
+            "ALTER TABLE conferences ADD COLUMN external_submission_url VARCHAR(500) NULL AFTER submission_mode",
+            "ALTER TABLE conferences ADD COLUMN external_submission_label VARCHAR(160) NULL AFTER external_submission_url",
+            "ALTER TABLE conferences ADD COLUMN submission_instructions_html MEDIUMTEXT NULL AFTER external_submission_label",
+            "ALTER TABLE grievances ADD COLUMN is_anonymous TINYINT(1) DEFAULT 0 AFTER urgency",
+            "ALTER TABLE grievances ADD COLUMN attachment_url VARCHAR(300) NULL AFTER is_anonymous",
+        ] as $alterSql) {
+            try {
+                $pdo->exec($alterSql);
+            } catch (Throwable $ignoredCol) {
+            }
+        }
         try {
-            $pdo->exec("ALTER TABLE conferences ADD COLUMN hero_slides_json LONGTEXT NULL AFTER banner_url");
-        } catch (Throwable $ignoredHeroCol) {
+            $pdo->exec("UPDATE categories SET menu_location = 'hidden' WHERE show_in_menu = 0 AND menu_location = 'main'");
+        } catch (Throwable $ignoredSyncLoc) {
+        }
+        foreach ([
+            'portal_menu_items'         => defaultPortalMenuItems(),
+            'grievance_portal_config'   => defaultGrievancePortalConfig(),
+            'sanctioned_intake_programs' => defaultSanctionedIntakePrograms(),
+            'placement_upcoming_drives' => defaultPlacementDrives(),
+        ] as $kvKey => $kvDefault) {
+            $chk = $pdo->prepare("SELECT key_name FROM cms_kv_store WHERE key_name = ? LIMIT 1");
+            $chk->execute([$kvKey]);
+            if (!$chk->fetchColumn()) {
+                $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+                    ->execute([$kvKey, json_encode($kvDefault, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+            }
         }
 
         $pdo->exec(

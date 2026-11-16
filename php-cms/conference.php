@@ -29,13 +29,24 @@ if (!$conf) {
 $confId = (int)$conf['id'];
 $msg = '';
 $err = '';
+$submissionMode = (string)($conf['submission_mode'] ?? 'internal');
+$isExternalSubmission = isExternalConferenceSubmission($conf);
+$isSubmissionsClosed = ($submissionMode === 'closed');
+$externalLabel = trim((string)($conf['external_submission_label'] ?? '')) ?: 'External Conference Portal (e.g. Microsoft CMT)';
+$externalUrl = trim((string)($conf['external_submission_url'] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $formAction = (string)($_POST['form_action'] ?? '');
 
     if ($formAction === 'submit_paper') {
-        if (!verifyCaptchaAnswer($_POST['captcha_answer'] ?? null, 'conf_paper')) {
+        if ($isExternalSubmission) {
+            http_response_code(403);
+            $err = 'Local manuscript submission is disabled for this event because papers are managed via the external portal (' . $externalLabel . ').';
+        } elseif ($isSubmissionsClosed) {
+            http_response_code(403);
+            $err = 'Paper submissions for this conference/event are currently closed by the organizer.';
+        } elseif (!verifyCaptchaAnswer($_POST['captcha_answer'] ?? null, 'conf_paper')) {
             $err = 'Invalid CAPTCHA verification code for paper submission. Please try again.';
         } else {
             $paperTitle = trim((string)($_POST['paper_title'] ?? ''));
@@ -126,7 +137,13 @@ require_once __DIR__ . '/includes/header.php';
 <div style="margin-bottom:0.85rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
   <a href="<?= e(baseUrl('conferences.php')) ?>" class="btn-outline btn-sm">&larr; All Conferences, Workshops &amp; Events</a>
   <div style="display:flex;gap:0.45rem;flex-wrap:wrap;">
-    <a href="#submit-paper" class="btn-primary btn-sm">Submit Abstract / Paper</a>
+    <?php if ($isExternalSubmission): ?>
+      <a href="<?= e($externalUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn-primary btn-sm">Submit Paper on <?= e($externalLabel) ?> &#8599;</a>
+    <?php elseif ($isSubmissionsClosed): ?>
+      <span class="badge badge-warn">Paper Submissions Closed</span>
+    <?php else: ?>
+      <a href="#submit-paper" class="btn-primary btn-sm">Submit Abstract / Paper</a>
+    <?php endif; ?>
     <a href="#register" class="btn-secondary btn-sm">Delegate Registration</a>
   </div>
 </div>
@@ -219,20 +236,22 @@ require_once __DIR__ . '/includes/header.php';
     <?php if (!empty($schedule)): ?>
       <section class="card">
         <h2 style="margin-top:0;color:var(--primary-color);">Program Schedule</h2>
-        <table class="data-table">
-          <thead><tr><th>Day</th><th>Time</th><th>Session</th><th>Speaker / Chair</th><th>Hall</th></tr></thead>
-          <tbody>
-            <?php foreach ($schedule as $sc): ?>
-              <tr>
-                <td><strong><?= e((string)($sc['day'] ?? '')) ?></strong></td>
-                <td><?= e((string)($sc['timeSlot'] ?? '')) ?></td>
-                <td><?= e((string)($sc['sessionTitle'] ?? '')) ?></td>
-                <td><?= e((string)($sc['speaker'] ?? '')) ?></td>
-                <td><?= e((string)($sc['hall'] ?? '')) ?></td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
+        <div class="cms-table-wrap">
+          <table class="cms-table cms-table-navy">
+            <thead><tr><th>Day</th><th>Time</th><th>Session</th><th>Speaker / Chair</th><th>Hall</th></tr></thead>
+            <tbody>
+              <?php foreach ($schedule as $sc): ?>
+                <tr>
+                  <td><strong><?= e((string)($sc['day'] ?? '')) ?></strong></td>
+                  <td><?= e((string)($sc['timeSlot'] ?? '')) ?></td>
+                  <td><?= e((string)($sc['sessionTitle'] ?? '')) ?></td>
+                  <td><?= e((string)($sc['speaker'] ?? '')) ?></td>
+                  <td><?= e((string)($sc['hall'] ?? '')) ?></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
       </section>
     <?php endif; ?>
   </div>
@@ -269,9 +288,43 @@ require_once __DIR__ . '/includes/header.php';
   </aside>
 </div>
 
-<section class="grid-2" style="margin-bottom:2rem;">
+<section class="grid-2" style="margin-bottom:2rem;align-items:start;">
+  <?php if ($isExternalSubmission): ?>
+    <div id="submit-paper" class="card" style="border-top:4px solid var(--primary-color);background:#F8FAFC;">
+      <span class="badge badge-ok" style="margin-bottom:0.5rem;">Third-Party Paper Submission Portal Active</span>
+      <h2 style="margin:0.2rem 0 0.5rem;color:var(--primary-color);">Submit Paper via <?= e($externalLabel) ?></h2>
+      <p style="font-size:0.86rem;color:var(--text-muted);margin-bottom:0.85rem;">
+        Local portal manuscript submission is automatically disabled for this conference because peer review and camera-ready uploads are managed through <strong><?= e($externalLabel) ?></strong>.
+      </p>
+      <?php if (!empty($conf['submission_instructions_html'])): ?>
+        <div class="cms-prose" style="padding:0.75rem;border:1px solid var(--border-color);border-radius:8px;background:var(--card-bg);margin-bottom:0.9rem;font-size:0.85rem;">
+          <?= (string)$conf['submission_instructions_html'] ?>
+        </div>
+      <?php endif; ?>
+      <a href="<?= e($externalUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn-primary" style="display:inline-flex;align-items:center;gap:0.4rem;">
+        Open <?= e($externalLabel) ?> Submission Portal &#8599;
+      </a>
+      <div style="margin-top:0.65rem;font-size:0.76rem;color:var(--text-muted);word-break:break-all;">
+        Official Portal Link: <a href="<?= e($externalUrl) ?>" target="_blank" rel="noopener noreferrer"><?= e($externalUrl) ?></a>
+      </div>
+    </div>
+  <?php elseif ($isSubmissionsClosed): ?>
+    <div id="submit-paper" class="card" style="border-top:4px solid #B45309;background:#FFFBEB;">
+      <span class="badge badge-warn" style="margin-bottom:0.5rem;">Paper Submissions Closed</span>
+      <h2 style="margin:0.2rem 0 0.5rem;color:#78350F;">Manuscript Submissions Currently Closed</h2>
+      <p style="font-size:0.86rem;color:#78350F;margin-bottom:0.75rem;">
+        The paper submission window for <?= e($conf['short_name']) ?> is closed. Please contact the conference organizing chair (<?= e((string)$conf['contact_email']) ?>) or complete attendee delegate registration alongside.
+      </p>
+      <?php if (!empty($conf['submission_instructions_html'])): ?>
+        <div class="cms-prose" style="font-size:0.84rem;"><?= (string)$conf['submission_instructions_html'] ?></div>
+      <?php endif; ?>
+    </div>
+  <?php else: ?>
   <form id="submit-paper" method="post" enctype="multipart/form-data" class="card">
     <h2 style="margin-top:0;color:var(--primary-color);">Submit Paper / Research Abstract</h2>
+    <?php if (!empty($conf['submission_instructions_html'])): ?>
+      <div class="cms-prose" style="margin-bottom:0.75rem;font-size:0.84rem;"><?= (string)$conf['submission_instructions_html'] ?></div>
+    <?php endif; ?>
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
     <input type="hidden" name="form_action" value="submit_paper">
 
@@ -317,6 +370,7 @@ require_once __DIR__ . '/includes/header.php';
     <?= renderCaptchaWidget('conf_paper', baseUrl('includes/captcha.php'), 'Paper Submission CAPTCHA *') ?>
     <button type="submit" class="btn-primary" style="width:100%;">Submit Paper &amp; Generate Tracking ID</button>
   </form>
+  <?php endif; ?>
 
   <form id="register" method="post" class="card">
     <h2 style="margin-top:0;color:var(--primary-color);">Delegate / Attendee Registration</h2>

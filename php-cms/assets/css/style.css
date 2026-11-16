@@ -1388,14 +1388,29 @@ html.dark .ticker-bar {
 .cms-prose a.cms-btn-amber { background: #B45309; color: #fff; }
 .cms-prose a.cms-btn-light { background: #FFFFFF; color: #0F294A; }
 .cms-prose a.cms-btn-outline { border: 1px solid #CBD5E1; color: #1E293B; background: #fff; }
-.cms-prose table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.88rem; }
-.cms-prose th, .cms-prose td { border: 1px solid var(--border-color); padding: 0.6rem 0.85rem; text-align: left; }
-.cms-prose table.cms-table-navy thead th { background: #0F294A; color: #fff; }
-.cms-prose table.cms-table-amber thead th { background: #B45309; color: #fff; }
-.cms-prose table.cms-table-teal thead th { background: #0F766E; color: #fff; }
-.cms-prose table.cms-table-emerald thead th { background: #047857; color: #fff; }
-.cms-prose table.cms-table-slate thead th { background: #334155; color: #fff; }
-.cms-prose table.cms-table-minimal thead th { background: transparent; border-bottom: 2px solid #0F294A; }
+.cms-prose table,
+table.cms-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.cms-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.cms-prose th, .cms-prose td,
+table.cms-table th, table.cms-table td { border: 1px solid var(--border-color); padding: 0.65rem 0.9rem; text-align: left; vertical-align: middle; }
+.cms-prose thead th,
+table.cms-table thead th { font-weight: 700; }
+.cms-prose tbody tr:nth-child(even),
+table.cms-table tbody tr:nth-child(even) { background: rgba(15, 41, 74, 0.025); }
+.cms-prose table.cms-table-navy thead th,
+table.cms-table.cms-table-navy thead th { background: #0F294A; color: #fff; border-color: #1E3A5F; }
+.cms-prose table.cms-table-amber thead th,
+table.cms-table.cms-table-amber thead th { background: #B45309; color: #fff; border-color: #92400E; }
+.cms-prose table.cms-table-teal thead th,
+table.cms-table.cms-table-teal thead th { background: #0F766E; color: #fff; border-color: #115E59; }
+.cms-prose table.cms-table-emerald thead th,
+table.cms-table.cms-table-emerald thead th { background: #047857; color: #fff; border-color: #065F46; }
+.cms-prose table.cms-table-slate thead th,
+table.cms-table.cms-table-slate thead th { background: #334155; color: #fff; border-color: #1E293B; }
+.cms-prose table.cms-table-minimal thead th,
+table.cms-table.cms-table-minimal thead th { background: transparent; border-bottom: 2px solid #0F294A; }
+.cms-progress-track { width: 88px; height: 7px; border-radius: 999px; background: #E7E5E4; overflow: hidden; display: inline-block; vertical-align: middle; }
+.cms-progress-fill { height: 100%; background: #047857; border-radius: 999px; }
 
 .cms-gallery-grid {
   display: grid;
