@@ -9,7 +9,7 @@ $pdo = getDB();
 ensureCmsSchemaUpgraded($pdo);
 
 $subTab = $_GET['sub'] ?? 'profiles';
-if (!in_array($subTab, ['profiles', 'jobs', 'events', 'discussions', 'settings'], true)) {
+if (!in_array($subTab, ['profiles', 'achievers', 'jobs', 'events', 'pledges', 'discussions', 'settings'], true)) {
     $subTab = 'profiles';
 }
 
@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tbl = $_POST['table'] ?? '';
         $id = (int)($_POST['id'] ?? 0);
         $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
-        if (in_array($tbl, ['alumni_profiles', 'alumni_jobs', 'alumni_events'], true) && swapSortOrder($pdo, $tbl, $id, $dir)) {
+        if (in_array($tbl, ['alumni_profiles', 'alumni_jobs', 'alumni_events', 'alumni_achievers'], true) && swapSortOrder($pdo, $tbl, $id, $dir)) {
             $msg = 'Display order updated.';
         }
     } elseif ($action === 'save_profile') {
@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = trim((string)($_POST['title'] ?? ''));
         $company = trim((string)($_POST['company'] ?? ''));
         $location = trim((string)($_POST['location'] ?? ''));
-        $jobType = in_array($_POST['job_type'] ?? 'Full-Time', ['Full-Time', 'Internship', 'Referral', 'Part-Time'], true) ? $_POST['job_type'] : 'Full-Time';
+        $jobType = mb_substr(trim((string)($_POST['job_type'] ?? 'Full-Time')) ?: 'Full-Time', 0, 80);
         $deptFocus = strtoupper(trim((string)($_POST['department_focus'] ?? 'ALL'))) ?: 'ALL';
         $expRange = trim((string)($_POST['experience_range'] ?? '0-2 Years')) ?: '0-2 Years';
         $comp = trim((string)($_POST['compensation'] ?? ''));
@@ -270,12 +270,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         kvSet($pdo, 'alumni_settings', $newSettings);
         logAudit($pdo, $user, 'UPDATE_ALUMNI_SETTINGS', 'AlumniSettings', 'Portal settings saved');
         $msg = 'Alumni portal settings updated.';
+    } elseif ($action === 'save_achiever') {
+        $subTab = 'achievers';
+        $editId = (int)($_POST['edit_achiever_id'] ?? 0);
+        $fullName = trim((string)($_POST['full_name'] ?? ''));
+        $batchYear = (int)($_POST['batch_year'] ?? 2016);
+        $deptCode = strtoupper(trim((string)($_POST['department_code'] ?? 'CSE'))) ?: 'CSE';
+        $designation = trim((string)($_POST['designation'] ?? ''));
+        $org = trim((string)($_POST['organization'] ?? ''));
+        $awardTitle = trim((string)($_POST['award_title'] ?? ''));
+        $citation = trim((string)($_POST['citation'] ?? ''));
+        $linkedin = trim((string)($_POST['linkedin_url'] ?? ''));
+        $photoUrl = trim((string)($_POST['existing_photo_url'] ?? 'assets/images/principal.jpg')) ?: 'assets/images/principal.jpg';
+
+        if (!empty($_FILES['photo']['name'])) {
+            $up = handleCmsUpload($pdo, $_FILES['photo'], __DIR__ . '/../uploads', 'photo');
+            if (!$up['ok']) {
+                $err = $up['error'];
+            } else {
+                $photoUrl = $up['file_url'];
+            }
+        }
+        if ($err === '') {
+            if ($fullName === '' || $awardTitle === '') {
+                $err = 'Achiever full name and award title are required.';
+            } elseif ($editId > 0) {
+                $pdo->prepare(
+                    'UPDATE alumni_achievers SET full_name=?, batch_year=?, department_code=?, designation=?, organization=?, award_title=?, citation=?, photo_url=?, linkedin_url=? WHERE id=?'
+                )->execute([$fullName, $batchYear, $deptCode, $designation, $org, $awardTitle, $citation, $photoUrl, $linkedin ?: null, $editId]);
+                logAudit($pdo, $user, 'UPDATE_ALUMNI_ACHIEVER', 'AlumniAchiever', $fullName);
+                $msg = 'Distinguished achiever updated: ' . $fullName;
+            } else {
+                $nextSort = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order),0) FROM alumni_achievers')->fetchColumn()) + 1;
+                $pdo->prepare(
+                    'INSERT INTO alumni_achievers (full_name, batch_year, department_code, designation, organization, award_title, citation, photo_url, linkedin_url, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)'
+                )->execute([$fullName, $batchYear, $deptCode, $designation, $org, $awardTitle, $citation, $photoUrl, $linkedin ?: null, $nextSort]);
+                logAudit($pdo, $user, 'CREATE_ALUMNI_ACHIEVER', 'AlumniAchiever', $fullName);
+                $msg = 'Distinguished achiever added: ' . $fullName;
+            }
+        }
+    } elseif ($action === 'delete_achiever') {
+        $subTab = 'achievers';
+        $id = (int)($_POST['id'] ?? 0);
+        $pdo->prepare('DELETE FROM alumni_achievers WHERE id = ?')->execute([$id]);
+        logAudit($pdo, $user, 'DELETE_ALUMNI_ACHIEVER', 'AlumniAchiever', "#$id");
+        $msg = 'Achiever card deleted.';
+    } elseif ($action === 'set_pledge_status') {
+        $subTab = 'pledges';
+        $id = (int)($_POST['id'] ?? 0);
+        $st = in_array($_POST['status'] ?? '', ['pending', 'acknowledged', 'fulfilled'], true) ? $_POST['status'] : 'acknowledged';
+        $pdo->prepare('UPDATE alumni_pledges SET status = ? WHERE id = ?')->execute([$st, $id]);
+        logAudit($pdo, $user, 'UPDATE_ALUMNI_PLEDGE', 'AlumniPledge', "#$id -> $st");
+        $msg = "Pledge #$id marked as $st.";
+    } elseif ($action === 'delete_pledge') {
+        $subTab = 'pledges';
+        $id = (int)($_POST['id'] ?? 0);
+        $pdo->prepare('DELETE FROM alumni_pledges WHERE id = ?')->execute([$id]);
+        logAudit($pdo, $user, 'DELETE_ALUMNI_PLEDGE', 'AlumniPledge', "#$id");
+        $msg = 'Pledge record deleted.';
     }
 }
 
 $profiles = $pdo->query('SELECT * FROM alumni_profiles ORDER BY sort_order ASC, id ASC')->fetchAll();
 $jobs = $pdo->query('SELECT * FROM alumni_jobs ORDER BY sort_order ASC, id DESC')->fetchAll();
 $events = $pdo->query('SELECT * FROM alumni_events ORDER BY sort_order ASC, event_date ASC')->fetchAll();
+$achievers = $pdo->query('SELECT * FROM alumni_achievers ORDER BY sort_order ASC, id DESC')->fetchAll();
+$pledges = $pdo->query('SELECT * FROM alumni_pledges ORDER BY id DESC')->fetchAll();
 $discussionTopics = $pdo->query('SELECT * FROM alumni_discussion_topics ORDER BY sort_order ASC, id ASC')->fetchAll();
 $discussionPosts = $pdo->query('SELECT * FROM alumni_discussion_posts ORDER BY is_pinned DESC, id DESC')->fetchAll();
 $discussionComments = $pdo->query('SELECT * FROM alumni_discussion_comments ORDER BY id ASC')->fetchAll();
@@ -285,6 +345,14 @@ foreach ($discussionComments as $dc) {
 }
 $departmentsList = $pdo->query('SELECT code, name FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
 $alumniSettings = getAlumniSettings($pdo);
+
+$editAchiever = null;
+if (!empty($_GET['edit_achiever'])) {
+    $eaId = (int)$_GET['edit_achiever'];
+    foreach ($achievers as $ac) {
+        if ((int)$ac['id'] === $eaId) { $editAchiever = $ac; break; }
+    }
+}
 
 $editProfile = null;
 if (!empty($_GET['edit_profile'])) {
@@ -318,20 +386,37 @@ if (!empty($_GET['edit_topic'])) {
 $pendingProfilesCount = count(array_filter($profiles, static fn($r) => ($r['status'] ?? '') === 'pending'));
 $pendingJobsCount = count(array_filter($jobs, static fn($r) => ($r['status'] ?? '') === 'pending'));
 $pendingPostsCount = count(array_filter($discussionPosts, static fn($r) => ($r['status'] ?? '') === 'pending'));
+$pendingPledgesCount = count(array_filter($pledges, static fn($r) => ($r['status'] ?? '') === 'pending'));
 
-$adminPageTitle = 'Alumni Network, Jobs & Discussions';
+$adminPageTitle = 'Alumni Network, Achievers, Pledges & Discussions';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
+
+<datalist id="alumni-degree-presets">
+  <?php foreach (alumniDegreePresets() as $dp): ?><option value="<?= e($dp) ?>"><?php endforeach; ?>
+</datalist>
+<datalist id="alumni-chapter-presets">
+  <?php foreach (alumniChapterPresets() as $cp): ?><option value="<?= e($cp) ?>"><?php endforeach; ?>
+</datalist>
+<datalist id="alumni-jobtype-presets">
+  <?php foreach (alumniJobTypePresets() as $jp): ?><option value="<?= e($jp) ?>"><?php endforeach; ?>
+</datalist>
 
 <div class="admin-subtabs">
   <a href="?sub=profiles" class="admin-subtab <?= $subTab === 'profiles' ? 'is-active' : '' ?>">
     Alumni Directory &amp; Queue (<?= count($profiles) ?><?= $pendingProfilesCount > 0 ? " · {$pendingProfilesCount} Pending" : '' ?>)
+  </a>
+  <a href="?sub=achievers" class="admin-subtab <?= $subTab === 'achievers' ? 'is-active' : '' ?>">
+    Distinguished Achievers (<?= count($achievers) ?>)
   </a>
   <a href="?sub=jobs" class="admin-subtab <?= $subTab === 'jobs' ? 'is-active' : '' ?>">
     Jobs &amp; Referrals (<?= count($jobs) ?><?= $pendingJobsCount > 0 ? " · {$pendingJobsCount} Pending" : '' ?>)
   </a>
   <a href="?sub=events" class="admin-subtab <?= $subTab === 'events' ? 'is-active' : '' ?>">
     Chapters &amp; Reunions (<?= count($events) ?>)
+  </a>
+  <a href="?sub=pledges" class="admin-subtab <?= $subTab === 'pledges' ? 'is-active' : '' ?>">
+    Endowment Pledges (<?= count($pledges) ?><?= $pendingPledgesCount > 0 ? " · {$pendingPledgesCount} New" : '' ?>)
   </a>
   <a href="?sub=discussions" class="admin-subtab <?= $subTab === 'discussions' ? 'is-active' : '' ?>">
     Discussions &amp; Topics (<?= count($discussionPosts) ?><?= $pendingPostsCount > 0 ? " · {$pendingPostsCount} Pending" : '' ?>)
@@ -362,11 +447,11 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         </select>
       </label>
       <label>Department Full Name<input type="text" name="department_name" value="<?= e($editProfile['department_name'] ?? 'Computer Science & Engineering') ?>" style="width:100%;"></label>
-      <label>Degree<input type="text" name="degree" value="<?= e($editProfile['degree'] ?? 'B.Tech') ?>" style="width:100%;"></label>
+      <label>Degree (Select or Type Custom)<input type="text" name="degree" list="alumni-degree-presets" value="<?= e($editProfile['degree'] ?? 'B.Tech') ?>" style="width:100%;"></label>
       <label>Current Company<input type="text" name="current_company" value="<?= e($editProfile['current_company'] ?? '') ?>" style="width:100%;"></label>
       <label>Designation<input type="text" name="designation" value="<?= e($editProfile['designation'] ?? '') ?>" style="width:100%;"></label>
       <label>Location<input type="text" name="location" value="<?= e($editProfile['location'] ?? '') ?>" style="width:100%;"></label>
-      <label>Chapter<input type="text" name="chapter" value="<?= e($editProfile['chapter'] ?? 'Pune Chapter') ?>" style="width:100%;"></label>
+      <label>Chapter (Select or Type Custom)<input type="text" name="chapter" list="alumni-chapter-presets" value="<?= e($editProfile['chapter'] ?? 'Pune Chapter') ?>" style="width:100%;"></label>
       <label>Status
         <select name="status" style="width:100%;">
           <?php foreach (['approved', 'pending', 'rejected'] as $st): ?>
@@ -437,12 +522,8 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <label>Title *<input type="text" name="title" required value="<?= e($editJob['title'] ?? '') ?>" style="width:100%;"></label>
       <label>Company *<input type="text" name="company" required value="<?= e($editJob['company'] ?? '') ?>" style="width:100%;"></label>
       <label>Location *<input type="text" name="location" required value="<?= e($editJob['location'] ?? '') ?>" style="width:100%;"></label>
-      <label>Job Type
-        <select name="job_type" style="width:100%;">
-          <?php foreach (['Full-Time', 'Internship', 'Referral', 'Part-Time'] as $jt): ?>
-            <option value="<?= e($jt) ?>" <?= ($editJob['job_type'] ?? 'Full-Time') === $jt ? 'selected' : '' ?>><?= e($jt) ?></option>
-          <?php endforeach; ?>
-        </select>
+      <label>Job Type (Select or Type Custom)
+        <input type="text" name="job_type" list="alumni-jobtype-presets" value="<?= e($editJob['job_type'] ?? 'Full-Time') ?>" style="width:100%;">
       </label>
       <label>Department Focus
         <select name="department_focus" style="width:100%;">
@@ -549,6 +630,94 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         </div>
       </div>
     <?php endforeach; ?>
+  </div>
+
+<?php elseif ($subTab === 'achievers'): ?>
+  <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
+    <h2 style="margin-top:0;"><?= $editAchiever ? 'Edit Distinguished Achiever: ' . e($editAchiever['full_name']) : 'Add Distinguished Alumni Achiever' ?></h2>
+    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+    <input type="hidden" name="action" value="save_achiever">
+    <input type="hidden" name="edit_achiever_id" value="<?= (int)($editAchiever['id'] ?? 0) ?>">
+    <input type="hidden" name="existing_photo_url" value="<?= e($editAchiever['photo_url'] ?? 'assets/images/principal.jpg') ?>">
+    <div class="grid-3" style="margin-bottom:0.75rem;">
+      <label>Achiever Full Name *<input type="text" name="full_name" required value="<?= e($editAchiever['full_name'] ?? '') ?>" style="width:100%;"></label>
+      <label>Batch Year *<input type="number" name="batch_year" min="1998" max="2035" required value="<?= (int)($editAchiever['batch_year'] ?? 2016) ?>" style="width:100%;"></label>
+      <label>Department
+        <select name="department_code" style="width:100%;">
+          <?php foreach ($departmentsList as $dl): ?><option value="<?= e($dl['code']) ?>" <?= ($editAchiever['department_code'] ?? '') === $dl['code'] ? 'selected' : '' ?>><?= e($dl['code']) ?> — <?= e($dl['name']) ?></option><?php endforeach; ?>
+        </select>
+      </label>
+      <label>Current Role / Title<input type="text" name="designation" value="<?= e($editAchiever['designation'] ?? '') ?>" style="width:100%;"></label>
+      <label>Organization<input type="text" name="organization" value="<?= e($editAchiever['organization'] ?? '') ?>" style="width:100%;"></label>
+      <label>Award / Honor Title *<input type="text" name="award_title" required value="<?= e($editAchiever['award_title'] ?? '') ?>" placeholder="Distinguished Young Engineer Alumni Award" style="width:100%;"></label>
+      <label>LinkedIn URL (Optional)<input type="url" name="linkedin_url" value="<?= e($editAchiever['linkedin_url'] ?? '') ?>" style="width:100%;"></label>
+      <label>Achiever Photo (1:1 Auto-Crop)<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" data-aspect="1:1" style="display:block;margin-top:4px;"></label>
+    </div>
+    <label style="display:block;margin-bottom:0.75rem;">Achievement Citation
+      <textarea name="citation" rows="2" style="width:100%;"><?= e($editAchiever['citation'] ?? '') ?></textarea>
+    </label>
+    <div style="display:flex;gap:0.5rem;">
+      <button type="submit" class="btn-primary"><?= $editAchiever ? 'Update Achiever Card' : 'Add Achiever Card' ?></button>
+      <?php if ($editAchiever): ?><a href="?sub=achievers" class="btn-outline">Cancel</a><?php endif; ?>
+    </div>
+  </form>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Distinguished Achievers Hall of Pride (<?= count($achievers) ?>)</h2>
+    <?php foreach ($achievers as $ach): ?>
+      <div class="admin-list-row">
+        <div style="display:flex;gap:0.85rem;align-items:center;flex:1;min-width:240px;">
+          <img src="<?= e(mediaUrl($ach['photo_url'] ?? '', 'assets/images/principal.jpg')) ?>" alt="" style="width:48px;height:48px;border-radius:10px;object-fit:cover;">
+          <div>
+            <strong><?= e($ach['full_name']) ?> (<?= (int)$ach['batch_year'] ?> <?= e($ach['department_code']) ?>)</strong>
+            <div style="font-size:0.78rem;font-weight:700;color:#B45309;"><?= e($ach['award_title']) ?></div>
+            <div style="font-size:0.78rem;color:#57534E;"><?= e($ach['designation'] ?: '') ?><?= !empty($ach['organization']) ? ' · ' . e($ach['organization']) : '' ?></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_alumni"><input type="hidden" name="table" value="alumni_achievers"><input type="hidden" name="id" value="<?= (int)$ach['id'] ?>"><input type="hidden" name="dir" value="up"><button type="submit" class="btn-outline btn-sm">&uarr;</button></form>
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_alumni"><input type="hidden" name="table" value="alumni_achievers"><input type="hidden" name="id" value="<?= (int)$ach['id'] ?>"><input type="hidden" name="dir" value="down"><button type="submit" class="btn-outline btn-sm">&darr;</button></form>
+          <a href="?sub=achievers&edit_achiever=<?= (int)$ach['id'] ?>" class="btn-outline btn-sm">Edit</a>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete this achiever card?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_achiever"><input type="hidden" name="id" value="<?= (int)$ach['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
+        </div>
+      </div>
+    <?php endforeach; ?>
+    <?php if (empty($achievers)): ?><p style="color:var(--text-muted);margin:0;">No achiever cards added yet.</p><?php endif; ?>
+  </div>
+
+<?php elseif ($subTab === 'pledges'): ?>
+  <div class="card">
+    <h2 style="margin-top:0;">Alumni Endowment &amp; Lab Support Pledges (<?= count($pledges) ?>)</h2>
+    <?php if (empty($pledges)): ?>
+      <p style="color:var(--text-muted);margin:0;">No alumni pledges received yet.</p>
+    <?php else: ?>
+      <?php foreach ($pledges as $pl):
+        $pst = $pl['status'] ?? 'pending';
+        $pBadge = $pst === 'fulfilled' ? 'badge-ok' : ($pst === 'acknowledged' ? 'badge-warn' : 'badge-err');
+      ?>
+        <div class="admin-list-row">
+          <div style="flex:1;min-width:250px;">
+            <div style="display:flex;align-items:center;gap:0.45rem;flex-wrap:wrap;">
+              <strong><?= e($pl['full_name']) ?> (<?= (int)$pl['batch_year'] ?> <?= e($pl['department_code']) ?>)</strong>
+              <span class="badge <?= $pBadge ?>"><?= strtoupper(e($pst)) ?></span>
+              <span class="alumni-pill"><?= e($pl['pledge_type']) ?></span>
+            </div>
+            <div style="font-size:0.84rem;font-weight:700;margin-top:3px;"><?= e($pl['amount_or_support']) ?></div>
+            <div style="font-size:0.78rem;color:#57534E;"><?= e($pl['email']) ?><?= !empty($pl['phone']) ? ' · ' . e($pl['phone']) : '' ?> · Submitted <?= e($pl['submitted_at']) ?></div>
+            <?php if (!empty($pl['message'])): ?><div style="font-size:0.8rem;color:#44403C;margin-top:4px;"><?= e($pl['message']) ?></div><?php endif; ?>
+          </div>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+            <?php if ($pst !== 'acknowledged'): ?>
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="set_pledge_status"><input type="hidden" name="id" value="<?= (int)$pl['id'] ?>"><input type="hidden" name="status" value="acknowledged"><button type="submit" class="btn-primary btn-sm">Acknowledge</button></form>
+            <?php endif; ?>
+            <?php if ($pst !== 'fulfilled'): ?>
+              <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="set_pledge_status"><input type="hidden" name="id" value="<?= (int)$pl['id'] ?>"><input type="hidden" name="status" value="fulfilled"><button type="submit" class="btn-outline btn-sm">Mark Fulfilled</button></form>
+            <?php endif; ?>
+            <form method="post" style="display:inline;" onsubmit="return confirm('Delete this pledge record?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_pledge"><input type="hidden" name="id" value="<?= (int)$pl['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
   </div>
 
 <?php elseif ($subTab === 'discussions'): ?>

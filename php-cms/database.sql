@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS alumni_jobs (
   title VARCHAR(200) NOT NULL,
   company VARCHAR(160) NOT NULL,
   location VARCHAR(160) NOT NULL,
-  job_type ENUM('Full-Time','Internship','Referral','Part-Time') DEFAULT 'Full-Time',
+  job_type VARCHAR(80) DEFAULT 'Full-Time',
   department_focus VARCHAR(80) DEFAULT 'ALL',
   experience_range VARCHAR(80) DEFAULT '0-2 Years',
   compensation VARCHAR(100) NULL,
@@ -372,6 +372,34 @@ CREATE TABLE IF NOT EXISTS alumni_discussion_comments (
   author_batch VARCHAR(80) NOT NULL,
   body TEXT NOT NULL,
   created_at VARCHAR(32) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS alumni_achievers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  full_name VARCHAR(160) NOT NULL,
+  batch_year SMALLINT UNSIGNED NOT NULL,
+  department_code VARCHAR(32) NOT NULL,
+  designation VARCHAR(160) NULL,
+  organization VARCHAR(160) NULL,
+  award_title VARCHAR(220) NOT NULL,
+  citation TEXT NULL,
+  photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
+  linkedin_url VARCHAR(500) NULL,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS alumni_pledges (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  full_name VARCHAR(160) NOT NULL,
+  email VARCHAR(160) NOT NULL,
+  phone VARCHAR(40) NULL,
+  batch_year SMALLINT UNSIGNED NOT NULL,
+  department_code VARCHAR(32) NOT NULL,
+  pledge_type VARCHAR(160) NOT NULL,
+  amount_or_support VARCHAR(255) NOT NULL,
+  message TEXT NULL,
+  status ENUM('pending','acknowledged','fulfilled') DEFAULT 'pending',
+  submitted_at VARCHAR(32) NOT NULL
 ) ENGINE=InnoDB;
 
 -- ============================================================================
@@ -555,9 +583,17 @@ INSERT INTO alumni_events (id, title, chapter, event_date, venue, organizer, des
 (2, 'Pune Chapter Industry Connect & Tech Networking Mixer', 'Pune Chapter', '2026-11-29', 'MCCIA Trade Tower, Senapati Bapat Road, Pune', 'Pune Chapter Committee (Batch 2010-2024)', 'Evening networking mixer for Pune-based SVERI engineers across IT, Automotive EV, and Infrastructure sectors with live placement referral desks.', 'assets/images/hero_campus.jpg', '', 86, 1, 2),
 (3, 'Bengaluru VLSI & Cloud Architecture Mentorship Roundtable', 'Bengaluru Chapter', '2026-12-12', 'Koramangala Tech Hub / Hybrid Live Stream', 'Bengaluru Chapter Leads', 'Structured 1-on-1 career mentorship session pairing senior Bengaluru alumni with pre-final year students.', 'assets/images/hero_library.jpg', '', 54, 1, 3);
 
+INSERT INTO alumni_achievers (id, full_name, batch_year, department_code, designation, organization, award_title, citation, photo_url, linkedin_url, sort_order) VALUES
+(1, 'Rohan Deshmukh', 2016, 'CSE', 'Principal Cloud Architect', 'Microsoft India', 'Distinguished Young Engineer Alumni Award 2026', 'Recognized for scaling enterprise cloud systems and sponsoring 15+ rural engineering internships annually.', 'assets/images/principal.jpg', 'https://linkedin.com', 1),
+(2, 'Snehal Patwardhan', 2018, 'ENTC', 'Staff SoC Verification Engineer', 'Qualcomm India', 'VLSI Innovation & Women in STEM Excellence Award', 'Honored for multi-million-gate System-on-Chip verification leadership and annual student bootcamps.', 'assets/images/hero_library.jpg', 'https://linkedin.com', 2);
+
+INSERT INTO alumni_pledges (id, full_name, email, phone, batch_year, department_code, pledge_type, amount_or_support, message, status, submitted_at) VALUES
+(1, 'Aditya Kulkarni', 'aditya.k@alumni.svcoer.edu.in', '+91-98220-77112', 2015, 'MECH', 'Laboratory / Equipment Sponsorship', 'EV Battery Thermal Bench & 2-Day CAD Industry Workshop', 'Committed to equipping our Mechanical Department EV Centre of Excellence for final-year B.Tech capstone teams.', 'acknowledged', '2026-10-18');
+
 INSERT INTO cms_kv_store (key_name, val_json) VALUES
-('alumni_settings', '{"heroTitle":"SVERI''s COE Alumni Association & Global Network","heroSubtitle":"Connecting 11,500+ engineering graduates, mentors, industry leaders, and chapter communities across Pune, Bengaluru, Mumbai, USA, Europe & Pandharpur.","associationRegNo":"MH/SOL/ALU-2016/06220","coordinatorName":"Prof. D. B. Kulkarni","coordinatorEmail":"alumni@coe.sveri.ac.in","allowSelfRegistration":true,"allowPublicJobPosting":true}'),
-('alumni_seeded_v1', '1')
+('alumni_settings', '{"heroTitle":"SVERI''s COE Alumni Association & Global Network","heroSubtitle":"Connecting 11,500+ engineering graduates, mentors, industry leaders, and chapter communities across Pune, Bengaluru, Mumbai, USA, Europe & Pandharpur.","associationRegNo":"MH/SOL/ALU-2016/06220","coordinatorName":"Prof. D. B. Kulkarni","coordinatorEmail":"alumni@coe.sveri.ac.in","allowSelfRegistration":true,"allowPublicJobPosting":true,"enableDiscussions":true,"requireDiscussionApproval":false}'),
+('alumni_seeded_v1', '1'),
+('alumni_extras_seeded_v1', '1')
 ON DUPLICATE KEY UPDATE val_json = VALUES(val_json);
 
 -- 17. Conferences, Workshops, FDPs & Events + Placements + Grievances

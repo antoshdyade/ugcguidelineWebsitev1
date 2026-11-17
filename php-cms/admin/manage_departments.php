@@ -341,9 +341,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$deptList = $user['role'] === 'department_admin'
-    ? (function () use ($pdo, $user) { $s = $pdo->prepare('SELECT * FROM departments WHERE id = ?'); $s->execute([(int)$user['assigned_department_id']]); return $s->fetchAll(); })()
-    : $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
+$allowedDeptIds = array_values(array_unique(array_filter(array_map('intval', array_merge(
+    is_array($user['allowed_department_ids'] ?? null) ? $user['allowed_department_ids'] : [],
+    !empty($user['assigned_department_id']) ? [(int)$user['assigned_department_id']] : []
+)))));
+if (!$isFullDeptAdmin && !empty($allowedDeptIds)) {
+    $placeholders = implode(',', array_fill(0, count($allowedDeptIds), '?'));
+    $stDepts = $pdo->prepare("SELECT * FROM departments WHERE id IN ($placeholders) ORDER BY sort_order ASC, id ASC");
+    $stDepts->execute($allowedDeptIds);
+    $deptList = $stDepts->fetchAll();
+} else {
+    $deptList = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
+}
 
 $activeDeptId = (int)($_GET['dept_id'] ?? ($deptList[0]['id'] ?? 1));
 requireRoleAccess('departments', $activeDeptId);
@@ -419,7 +428,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         </div>
         <textarea name="overview" rows="2" required placeholder="Department overview..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"></textarea>
         <label style="display:block;margin-bottom:0.75rem;font-size:0.85rem;">Upload Department Hero Banner (JPG/PNG/WEBP):
-          <input type="file" name="hero_image" accept="image/jpeg,image/png,image/webp">
+          <input type="file" name="hero_image" accept="image/jpeg,image/png,image/webp" data-aspect="16:9">
         </label>
         <button type="submit" class="btn-primary">Create Department Microsite</button>
       </form>
@@ -448,7 +457,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <textarea name="mission" rows="2" placeholder="Mission" style="padding:0.5rem;"><?= e($activeDept['mission'] ?? '') ?></textarea>
       </div>
       <label style="display:block;margin-bottom:0.75rem;font-size:0.85rem;">Upload New Hero Banner Image (Current: <code><?= e($activeDept['hero_image_url']) ?></code>):
-        <input type="file" name="hero_image" accept="image/jpeg,image/png,image/webp">
+        <input type="file" name="hero_image" accept="image/jpeg,image/png,image/webp" data-aspect="16:9">
       </label>
       <button type="submit" class="btn-primary">Save Department Profile</button>
     </form>
@@ -478,7 +487,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <input type="text" name="lib_timings" value="<?= e($activeLib['timings'] ?? 'Mon–Sat, 8:30 AM – 6:30 PM') ?>" style="width:100%;padding:0.45rem;">
         </label>
         <label>Library Photo Upload (JPG/PNG/WEBP)
-          <input type="file" name="library_photo" accept="image/jpeg,image/png,image/webp" style="display:block;margin-top:4px;">
+          <input type="file" name="library_photo" accept="image/jpeg,image/png,image/webp" data-aspect="4:3" style="display:block;margin-top:4px;">
         </label>
       </div>
       <div class="grid-2" style="margin-bottom:0.6rem;">
@@ -536,7 +545,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
               <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
               <input type="hidden" name="subpage_id" value="<?= (int)$editSub['id'] ?>">
               <input type="text" name="photo_caption" placeholder="Photo Caption" style="width:100%;padding:0.45rem;margin-bottom:0.4rem;">
-              <input type="file" name="gallery_photo" accept="image/jpeg,image/png,image/webp" required style="margin-bottom:0.4rem;display:block;">
+              <input type="file" name="gallery_photo" accept="image/jpeg,image/png,image/webp" data-aspect="4:3" required style="margin-bottom:0.4rem;display:block;">
               <button type="submit" class="btn-primary" style="font-size:0.8rem;">+ Upload Photo to Micro-Page</button>
             </form>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:0.5rem;">
@@ -570,7 +579,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
                 <input type="text" name="item_badge" value="Notice" placeholder="Badge (Notice / Syllabus / Winner)" style="padding:0.4rem;">
               </div>
               <textarea name="item_summary" rows="2" placeholder="Summary details..." style="width:100%;padding:0.4rem;margin-bottom:0.35rem;"></textarea>
-              <label style="display:block;font-size:0.78rem;margin-bottom:0.35rem;">Item Thumbnail Photo (Optional): <input type="file" name="item_photo" accept="image/jpeg,image/png,image/webp"></label>
+              <label style="display:block;font-size:0.78rem;margin-bottom:0.35rem;">Item Thumbnail Photo (Optional): <input type="file" name="item_photo" accept="image/jpeg,image/png,image/webp" data-aspect="4:3"></label>
               <label style="display:block;font-size:0.78rem;margin-bottom:0.35rem;">Attach File (PDF/DOCX): <input type="file" name="item_file"></label>
               <input type="url" name="item_link_url" placeholder="Or Paste Google Drive / External Download URL (https://...)" style="width:100%;padding:0.4rem;margin-bottom:0.35rem;">
               <input type="text" name="item_link_label" placeholder="Button Label (e.g. Open Google Drive)" style="width:100%;padding:0.4rem;margin-bottom:0.45rem;">
@@ -676,7 +685,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             </div>
           </div>
 
-          <label style="display:block;font-size:0.85rem;margin-bottom:0.45rem;">Faculty Photo: <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"></label>
+          <label style="display:block;font-size:0.85rem;margin-bottom:0.45rem;">Faculty Photo: <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" data-aspect="1:1"></label>
           <label style="display:block;margin-bottom:0.5rem;"><input type="checkbox" name="is_hod" <?= !empty($editFac['is_hod']) ? 'checked' : '' ?>> Mark as HoD</label>
           <button type="submit" class="btn-primary"><?= $editFac ? 'Update Faculty' : 'Add Faculty' ?></button>
           <?php if ($editFac): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Cancel</a><?php endif; ?>
@@ -721,7 +730,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <input type="number" name="area_sqft" required value="<?= (int)($editLab['area_sqft'] ?? 1200) ?>" placeholder="Area (Sq.Ft.)" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
           <input type="text" name="incharge" required value="<?= e($editLab['incharge'] ?? '') ?>" placeholder="Lab In-Charge" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
           <textarea name="equipment_summary" rows="3" required placeholder="Equipment & software details..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"><?= e($editLab['equipment_summary'] ?? '') ?></textarea>
-          <label style="display:block;font-size:0.85rem;margin-bottom:0.65rem;">Laboratory Photo (JPG/PNG/WEBP): <input type="file" name="lab_photo" accept="image/jpeg,image/png,image/webp"></label>
+          <label style="display:block;font-size:0.85rem;margin-bottom:0.65rem;">Laboratory Photo (JPG/PNG/WEBP): <input type="file" name="lab_photo" accept="image/jpeg,image/png,image/webp" data-aspect="4:3"></label>
           <button type="submit" class="btn-primary"><?= $editLab ? 'Update Laboratory' : 'Add Laboratory' ?></button>
           <?php if ($editLab): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Cancel</a><?php endif; ?>
         </form>

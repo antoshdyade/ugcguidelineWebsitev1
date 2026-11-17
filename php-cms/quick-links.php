@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
 
 $cat = trim($_GET['cat'] ?? 'All');
@@ -23,7 +24,9 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $docs = $stmt->fetchAll();
 
-$categories = ['All', 'Fee Structure', 'Academic Calendar', 'Syllabus', 'UGC & AICTE Approvals', 'NAAC / NBA / NIRF', 'Annual Reports & Audits', 'Circulars & Forms'];
+$presetCats = ['Fee Structure', 'Academic Calendar', 'Syllabus', 'UGC & AICTE Approvals', 'NAAC / NBA / NIRF', 'Annual Reports & Audits', 'Circulars & Forms', 'Conference Proceedings', 'Placement Brochures'];
+$dbCats = $pdo->query('SELECT DISTINCT category FROM documents WHERE category IS NOT NULL AND category <> "" ORDER BY category ASC')->fetchAll(PDO::FETCH_COLUMN);
+$categories = array_merge(['All'], array_values(array_unique(array_merge($presetCats, $dbCats ?: []))));
 $pageTitle = 'Quick Links & Document Repository';
 require_once __DIR__ . '/includes/header.php';
 ?>

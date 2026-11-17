@@ -49,7 +49,12 @@ try {
     $dbConnected = true;
     $tables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
     $tablesCount = count($tables);
-    $hasHomeComponents = in_array('custom_home_components', $tables, true);
+    $hasHomeComponents = in_array('custom_home_components', $tables, true)
+        && in_array('conferences', $tables, true)
+        && in_array('placement_stats', $tables, true)
+        && in_array('grievances', $tables, true)
+        && in_array('alumni_achievers', $tables, true)
+        && in_array('alumni_pledges', $tables, true);
     if (in_array('users', $tables, true)) {
         $usersCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
     }
@@ -158,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         <tr><td>Backups Directory</td><td><?= $backupsWritable ? 'PASS' : 'WARN' ?></td><td><code>backups/</code> <?= $backupsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
         <tr><td>PHP Sessions</td><td><?= $sessionOk ? 'PASS' : 'FAIL' ?></td><td>Save path: <code><?= e($sessionPath) ?></code></td></tr>
         <tr><td>MySQL Connection</td><td><?= $dbConnected ? 'PASS' : 'FAIL' ?></td><td><?= $dbConnected ? ('Connected to ' . e(DB_NAME) . " ($tablesCount tables, $usersCount users)") : e($dbError) ?></td></tr>
-        <tr><td>Enhanced Schema (Custom Home &amp; Dept Fields)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v2 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
+        <tr><td>Enhanced Schema (Portals, Conferences, Alumni &amp; v4 Tables)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v4 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
       </tbody>
     </table>
 

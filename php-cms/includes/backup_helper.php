@@ -31,6 +31,8 @@ function backupTablesList(): array
         'alumni_discussion_topics',
         'alumni_discussion_posts',
         'alumni_discussion_comments',
+        'alumni_achievers',
+        'alumni_pledges',
         'conferences',
         'conference_submissions',
         'conference_registrations',

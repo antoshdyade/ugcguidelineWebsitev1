@@ -11,7 +11,7 @@ $alumniSettings = getAlumniSettings($pdo);
 $loggedAlumni = currentAlumni();
 
 $activeTab = $_GET['tab'] ?? 'directory';
-if (!in_array($activeTab, ['directory', 'jobs', 'events', 'discussions', 'register', 'login'], true)) {
+if (!in_array($activeTab, ['directory', 'achievers', 'jobs', 'events', 'pledge', 'discussions', 'register', 'login'], true)) {
     $activeTab = 'directory';
 }
 
@@ -60,15 +60,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fullName = trim((string)($_POST['full_name'] ?? ''));
             $email = strtolower(trim((string)($_POST['email'] ?? '')));
             $pw = (string)($_POST['password'] ?? '');
+            $pwConfirm = (string)($_POST['confirm_password'] ?? '');
             $phone = trim((string)($_POST['phone'] ?? ''));
             $gradYear = (int)($_POST['graduation_year'] ?? 0);
             $deptCode = strtoupper(trim((string)($_POST['department_code'] ?? 'CSE')));
             $deptName = trim((string)($_POST['department_name'] ?? $deptCode));
-            $degree = trim((string)($_POST['degree'] ?? 'B.Tech'));
+            $degreeSel = trim((string)($_POST['degree'] ?? 'B.Tech'));
+            $degreeCustom = trim((string)($_POST['degree_custom'] ?? ''));
+            $degree = ($degreeSel === '__custom__' ? $degreeCustom : $degreeSel) ?: 'B.Tech';
             $company = trim((string)($_POST['current_company'] ?? ''));
             $designation = trim((string)($_POST['designation'] ?? ''));
             $location = trim((string)($_POST['location'] ?? ''));
-            $chapter = trim((string)($_POST['chapter'] ?? 'Pandharpur Home Chapter')) ?: 'Pandharpur Home Chapter';
+            $chapterSel = trim((string)($_POST['chapter'] ?? 'Pandharpur Home Chapter'));
+            $chapterCustom = trim((string)($_POST['chapter_custom'] ?? ''));
+            $chapter = ($chapterSel === '__custom__' ? $chapterCustom : $chapterSel) ?: 'Pandharpur Home Chapter';
             $linkedin = trim((string)($_POST['linkedin_url'] ?? ''));
             $bio = trim((string)($_POST['bio'] ?? ''));
             $openToMentor = isset($_POST['open_to_mentorship']) ? 1 : 0;
@@ -77,6 +82,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $err = 'Please enter a valid full name, institutional/personal email, and graduation year (1998–2035).';
             } elseif (strlen($pw) < 6) {
                 $err = 'Please set an account password of at least 6 characters for Alumni Login.';
+            } elseif ($pwConfirm !== '' && $pw !== $pwConfirm) {
+                $err = 'Portal password and confirm password do not match.';
+            } elseif (!isset($_POST['confirm_password']) || $pw !== $pwConfirm) {
+                $err = 'Please confirm your alumni portal password.';
             } elseif ($linkedin !== '' && !validateExternalUrl($linkedin)) {
                 $err = 'LinkedIn / portfolio link must be a valid http(s) URL.';
             } else {
@@ -123,9 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $title = trim((string)($_POST['title'] ?? ''));
             $company = trim((string)($_POST['company'] ?? ''));
             $location = trim((string)($_POST['location'] ?? ''));
-            $jobType = in_array($_POST['job_type'] ?? 'Full-Time', ['Full-Time', 'Internship', 'Referral', 'Part-Time'], true)
-                ? $_POST['job_type']
-                : 'Full-Time';
+            $jtSel = trim((string)($_POST['job_type'] ?? 'Full-Time'));
+            $jtCustom = trim((string)($_POST['job_type_custom'] ?? ''));
+            $jobType = mb_substr(($jtSel === '__custom__' ? $jtCustom : $jtSel) ?: 'Full-Time', 0, 80);
             $deptFocus = strtoupper(trim((string)($_POST['department_focus'] ?? 'ALL'))) ?: 'ALL';
             $expRange = trim((string)($_POST['experience_range'] ?? '0-2 Years')) ?: '0-2 Years';
             $comp = trim((string)($_POST['compensation'] ?? ''));
@@ -204,6 +213,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('UPDATE alumni_events SET rsvp_count = rsvp_count + 1 WHERE id = ? AND is_active = 1')->execute([$eventId]);
             $msg = 'Your RSVP has been recorded! We look forward to welcoming you at the chapter meet.';
         }
+    } elseif ($action === 'submit_pledge') {
+        $activeTab = 'pledge';
+        if (!verifyCaptchaAnswer($_POST['captcha_answer'] ?? null, 'alumni_pledge')) {
+            $err = 'Incorrect or expired security CAPTCHA code. Please try again.';
+        } else {
+            $plName = trim((string)($_POST['full_name'] ?? ''));
+            $plEmail = strtolower(trim((string)($_POST['email'] ?? '')));
+            $plPhone = trim((string)($_POST['phone'] ?? ''));
+            $plBatch = (int)($_POST['batch_year'] ?? 2020);
+            $plDept = strtoupper(trim((string)($_POST['department_code'] ?? 'CSE'))) ?: 'CSE';
+            $plTypeSel = trim((string)($_POST['pledge_type'] ?? 'Laboratory / Equipment Sponsorship'));
+            $plTypeCustom = trim((string)($_POST['pledge_type_custom'] ?? ''));
+            $plType = mb_substr(($plTypeSel === '__custom__' ? $plTypeCustom : $plTypeSel) ?: 'Endowment Support', 0, 160);
+            $plAmount = trim((string)($_POST['amount_or_support'] ?? ''));
+            $plMsg = trim((string)($_POST['message'] ?? ''));
+
+            if ($plName === '' || !filter_var($plEmail, FILTER_VALIDATE_EMAIL) || $plBatch < 1998 || $plBatch > 2035) {
+                $err = 'Please provide a valid full name, email address, and batch year (1998–2035).';
+            } elseif ($plAmount === '') {
+                $err = 'Please specify your pledge amount or mentorship/equipment commitment details.';
+            } else {
+                $pdo->prepare(
+                    'INSERT INTO alumni_pledges (full_name, email, phone, batch_year, department_code, pledge_type, amount_or_support, message, status, submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+                )->execute([
+                    $plName, $plEmail, $plPhone !== '' ? $plPhone : null, $plBatch, $plDept,
+                    $plType, mb_substr($plAmount, 0, 255), $plMsg !== '' ? $plMsg : null,
+                    'pending', gmdate('Y-m-d'),
+                ]);
+                $msg = 'Thank you for your generous commitment! Your Give Back pledge has been recorded and forwarded to the Alumni Coordinator.';
+            }
+        }
     }
 }
 
@@ -211,6 +251,7 @@ $departmentsList = $pdo->query('SELECT code, name FROM departments ORDER BY sort
 $approvedProfiles = $pdo->query("SELECT * FROM alumni_profiles WHERE status = 'approved' ORDER BY sort_order ASC, id ASC")->fetchAll();
 $openJobs = $pdo->query("SELECT * FROM alumni_jobs WHERE status = 'open' ORDER BY sort_order ASC, id DESC")->fetchAll();
 $activeEvents = $pdo->query('SELECT * FROM alumni_events WHERE is_active = 1 ORDER BY sort_order ASC, event_date ASC')->fetchAll();
+$achieversList = $pdo->query('SELECT * FROM alumni_achievers ORDER BY sort_order ASC, id DESC')->fetchAll();
 
 // Filter directory
 $dirQ = trim((string)($_GET['q'] ?? ''));
@@ -281,6 +322,15 @@ require_once __DIR__ . '/includes/header.php';
       <p style="margin:0;color:#E2E8F0;font-size:0.94rem;line-height:1.55;">
         <?= e($alumniSettings['heroSubtitle']) ?>
       </p>
+      <div style="display:flex;flex-wrap:wrap;gap:0.55rem;margin-top:0.95rem;">
+        <?php if ($loggedAlumni): ?>
+          <a href="?tab=discussions" class="btn-primary" style="background:#D97706;border-color:#D97706;">Open Member Discussions &rarr;</a>
+        <?php else: ?>
+          <a href="?tab=login" class="btn-primary" style="background:#D97706;border-color:#D97706;">Alumni Member Sign In &rarr;</a>
+        <?php endif; ?>
+        <a href="?tab=register" class="btn-outline" style="background:rgba(255,255,255,0.12);color:#fff;border-color:rgba(255,255,255,0.35);">Register as Alumni</a>
+        <a href="?tab=jobs" class="btn-outline" style="background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.28);">Explore Jobs &amp; Referrals (<?= count($openJobs) ?>)</a>
+      </div>
     </div>
     <div style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:0.85rem 1.1rem;font-size:0.82rem;min-width:220px;">
       <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.07em;color:#FDE68A;font-weight:700;">Alumni Cell Coordinator</div>
@@ -324,11 +374,13 @@ require_once __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <nav class="alumni-tabbar" aria-label="Alumni Portal Sections">
-  <a href="?tab=directory" class="alumni-tabbtn <?= $activeTab === 'directory' ? 'is-active' : '' ?>">Verified Alumni Directory (<?= count($approvedProfiles) ?>)</a>
-  <a href="?tab=jobs" class="alumni-tabbtn <?= $activeTab === 'jobs' ? 'is-active' : '' ?>">Job &amp; Internship Board (<?= count($openJobs) ?>)</a>
+  <a href="?tab=directory" class="alumni-tabbtn <?= $activeTab === 'directory' ? 'is-active' : '' ?>">Alumni Directory (<?= count($approvedProfiles) ?>)</a>
+  <a href="?tab=achievers" class="alumni-tabbtn <?= $activeTab === 'achievers' ? 'is-active' : '' ?>">Distinguished Achievers (<?= count($achieversList) ?>)</a>
+  <a href="?tab=jobs" class="alumni-tabbtn <?= $activeTab === 'jobs' ? 'is-active' : '' ?>">Jobs &amp; Internships (<?= count($openJobs) ?>)</a>
   <a href="?tab=events" class="alumni-tabbtn <?= $activeTab === 'events' ? 'is-active' : '' ?>">Chapters &amp; Reunions (<?= count($activeEvents) ?>)</a>
+  <a href="?tab=pledge" class="alumni-tabbtn <?= $activeTab === 'pledge' ? 'is-active' : '' ?>">Give Back / Endowment</a>
   <a href="?tab=discussions" class="alumni-tabbtn <?= $activeTab === 'discussions' ? 'is-active' : '' ?>">Discussions (Members Only)</a>
-  <a href="?tab=register" class="alumni-tabbtn <?= $activeTab === 'register' ? 'is-active' : '' ?>">Register as Alumni</a>
+  <a href="?tab=register" class="alumni-tabbtn <?= $activeTab === 'register' ? 'is-active' : '' ?>">Alumni Registration</a>
   <?php if (!$loggedAlumni): ?>
     <a href="?tab=login" class="alumni-tabbtn <?= $activeTab === 'login' ? 'is-active' : '' ?>">Alumni Login</a>
   <?php endif; ?>
@@ -414,8 +466,8 @@ require_once __DIR__ . '/includes/header.php';
     </label>
     <label style="font-size:0.8rem;font-weight:600;">Type
       <select name="jtype" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
-        <option value="ALL">All Types</option>
-        <?php foreach (['Full-Time', 'Internship', 'Referral', 'Part-Time'] as $jt): ?>
+        <option value="ALL">All Opportunity Types</option>
+        <?php foreach (alumniJobTypePresets() as $jt): ?>
           <option value="<?= e($jt) ?>" <?= $jobTypeFilter === $jt ? 'selected' : '' ?>><?= e($jt) ?></option>
         <?php endforeach; ?>
       </select>
@@ -481,9 +533,13 @@ require_once __DIR__ . '/includes/header.php';
           <label style="font-size:0.8rem;font-weight:600;">Company / Organization *<input type="text" name="company" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Location *<input type="text" name="location" required placeholder="Pune / Hybrid" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Opportunity Type
-            <select name="job_type" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
-              <option value="Full-Time">Full-Time</option><option value="Internship">Internship</option><option value="Referral">Referral</option><option value="Part-Time">Part-Time</option>
+            <select name="job_type" onchange="var c=this.parentNode.querySelector('.custom-opt-inp');if(c){c.style.display=this.value==='__custom__'?'block':'none';c.required=this.value==='__custom__';}" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+              <?php foreach (alumniJobTypePresets() as $jtOpt): ?>
+                <option value="<?= e($jtOpt) ?>"><?= e($jtOpt) ?></option>
+              <?php endforeach; ?>
+              <option value="__custom__">+ Custom Opportunity Type...</option>
             </select>
+            <input type="text" name="job_type_custom" class="custom-opt-inp" placeholder="Enter custom opportunity type..." style="display:none;width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
           </label>
           <label style="font-size:0.8rem;font-weight:600;">Department Focus
             <select name="department_focus" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
@@ -534,6 +590,86 @@ require_once __DIR__ . '/includes/header.php';
     <?php endif; ?>
   </div>
 
+<?php elseif ($activeTab === 'achievers'): ?>
+  <div class="card" style="margin-bottom:1.25rem;">
+    <h2 style="margin:0 0 0.25rem;font-family:'Playfair Display',serif;">Distinguished Alumni Achievers &amp; Hall of Pride</h2>
+    <p style="margin:0;font-size:0.86rem;color:var(--text-muted);">Recognizing outstanding engineering graduates leading technology, research, public service, and entrepreneurship worldwide.</p>
+  </div>
+  <div class="grid-2">
+    <?php foreach ($achieversList as $ach): ?>
+      <article class="alumni-card">
+        <div style="display:flex;gap:1rem;align-items:flex-start;">
+          <img src="<?= e(mediaUrl($ach['photo_url'] ?? '', 'assets/images/principal.jpg')) ?>" alt="<?= e($ach['full_name']) ?>" style="width:78px;height:78px;border-radius:12px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">
+          <div style="min-width:0;flex:1;">
+            <span class="badge badge-warn" style="margin-bottom:0.35rem;display:inline-block;"><?= e($ach['award_title']) ?></span>
+            <h3 style="margin:0 0 0.2rem;font-size:1.05rem;"><?= e($ach['full_name']) ?></h3>
+            <div style="font-size:0.84rem;font-weight:600;color:var(--secondary-color);"><?= e($ach['designation'] ?: '') ?><?= !empty($ach['organization']) ? ' · ' . e($ach['organization']) : '' ?></div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">Class of <?= (int)$ach['batch_year'] ?> · <?= e($ach['department_code']) ?></div>
+            <?php if (!empty($ach['citation'])): ?>
+              <p style="font-size:0.84rem;color:var(--text-muted);margin:0.5rem 0 0;line-height:1.5;"><?= e($ach['citation']) ?></p>
+            <?php endif; ?>
+            <?php if (!empty($ach['linkedin_url'])): ?>
+              <div style="margin-top:0.55rem;"><a href="<?= e($ach['linkedin_url']) ?>" target="_blank" rel="noopener noreferrer" style="font-size:0.78rem;font-weight:700;color:var(--primary-color);text-decoration:none;">LinkedIn Profile &nearr;</a></div>
+            <?php endif; ?>
+          </div>
+        </div>
+      </article>
+    <?php endforeach; ?>
+    <?php if (empty($achieversList)): ?>
+      <div class="card" style="grid-column:1/-1;text-align:center;color:var(--text-muted);">No distinguished alumni achievers published yet.</div>
+    <?php endif; ?>
+  </div>
+
+<?php elseif ($activeTab === 'pledge'): ?>
+  <div class="card" style="max-width:780px;margin:0 auto;">
+    <h2 style="margin:0 0 0.25rem;font-family:'Playfair Display',serif;">Give Back: Endowment, Lab Equipment &amp; Scholarship Pledge</h2>
+    <p style="margin:0 0 1rem;font-size:0.86rem;color:var(--text-muted);">Support departmental Centres of Excellence, student merit scholarships, industrial visits, library grants, and guest expert lectures.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="submit_pledge">
+      <div class="grid-2" style="margin-bottom:0.75rem;">
+        <label style="font-size:0.8rem;font-weight:600;">Alumni Full Name *
+          <input type="text" name="full_name" required value="<?= e($_POST['full_name'] ?? ($loggedAlumni['full_name'] ?? '')) ?>" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+        </label>
+        <label style="font-size:0.8rem;font-weight:600;">Email Address *
+          <input type="email" name="email" required value="<?= e($_POST['email'] ?? ($loggedAlumni['email'] ?? '')) ?>" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+        </label>
+        <label style="font-size:0.8rem;font-weight:600;">Phone / WhatsApp
+          <input type="text" name="phone" value="<?= e($_POST['phone'] ?? ($loggedAlumni['phone'] ?? '')) ?>" placeholder="+91-98..." style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+        </label>
+        <div class="grid-2">
+          <label style="font-size:0.8rem;font-weight:600;">Batch Year
+            <input type="number" name="batch_year" min="1998" max="2035" required value="<?= (int)($_POST['batch_year'] ?? ($loggedAlumni['graduation_year'] ?? 2018)) ?>" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Department
+            <select name="department_code" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+              <?php foreach ($departmentsList as $dl): ?>
+                <option value="<?= e($dl['code']) ?>" <?= ($loggedAlumni['department_code'] ?? '') === $dl['code'] ? 'selected' : '' ?>><?= e($dl['code']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+        </div>
+      </div>
+      <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.75rem;">Contribution / Support Area *
+        <select name="pledge_type" onchange="var c=this.parentNode.querySelector('.custom-opt-inp');if(c){c.style.display=this.value==='__custom__'?'block':'none';c.required=this.value==='__custom__';}" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+          <?php foreach (alumniPledgeTypePresets() as $pt): ?>
+            <option value="<?= e($pt) ?>"><?= e($pt) ?></option>
+          <?php endforeach; ?>
+          <option value="__custom__">+ Custom Contribution / Mentorship Area...</option>
+        </select>
+        <input type="text" name="pledge_type_custom" class="custom-opt-inp" placeholder="Enter custom contribution or mentorship pledge..." style="display:none;width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+      </label>
+      <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.75rem;">Pledge Amount / Commitment Details *
+        <input type="text" name="amount_or_support" required value="<?= e($_POST['amount_or_support'] ?? '') ?>" placeholder="e.g. Rs. 50,000 Scholarship Fund / 2 IoT Kits / 3 Guest Lectures" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+      </label>
+      <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.85rem;">Message / Department Note
+        <textarea name="message" rows="2" style="width:100%;padding:0.55rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"><?= e($_POST['message'] ?? '') ?></textarea>
+      </label>
+      <?= renderCaptchaWidget('alumni_pledge', baseUrl('includes/captcha.php'), 'Endowment Pledge CAPTCHA *') ?>
+      <button type="submit" class="btn-primary">Submit Endowment / Mentorship Pledge</button>
+    </form>
+  </div>
+
 <?php elseif ($activeTab === 'discussions'): ?>
   <?php if (!$loggedAlumni): ?>
     <div class="card" style="max-width:640px;margin:0 auto;text-align:center;padding:2rem;">
@@ -549,11 +685,19 @@ require_once __DIR__ . '/includes/header.php';
   <?php else:
     $topics = $pdo->query('SELECT * FROM alumni_discussion_topics WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
     $topicFilterId = isset($_GET['topic']) ? (int)$_GET['topic'] : 0;
+    $discQ = trim((string)($_GET['dq'] ?? ''));
     $postSql = "SELECT * FROM alumni_discussion_posts WHERE status = 'approved'";
     $postParams = [];
     if ($topicFilterId > 0) {
         $postSql .= ' AND topic_id = ?';
         $postParams[] = $topicFilterId;
+    }
+    if ($discQ !== '') {
+        $postSql .= ' AND (title LIKE ? OR content LIKE ? OR author_name LIKE ?)';
+        $likeDq = '%' . $discQ . '%';
+        $postParams[] = $likeDq;
+        $postParams[] = $likeDq;
+        $postParams[] = $likeDq;
     }
     $postSql .= ' ORDER BY is_pinned DESC, id DESC';
     $stPosts = $pdo->prepare($postSql);
@@ -569,11 +713,19 @@ require_once __DIR__ . '/includes/header.php';
         $topicTitleMap[(int)$tRow['id']] = $tRow['title'];
     }
   ?>
-    <div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-bottom:1.15rem;">
-      <a href="?tab=discussions" class="alumni-tabbtn <?= $topicFilterId === 0 ? 'is-active' : '' ?>" style="padding:0.38rem 0.75rem;font-size:0.78rem;">All Topics</a>
-      <?php foreach ($topics as $tp): ?>
-        <a href="?tab=discussions&topic=<?= (int)$tp['id'] ?>" class="alumni-tabbtn <?= $topicFilterId === (int)$tp['id'] ? 'is-active' : '' ?>" style="padding:0.38rem 0.75rem;font-size:0.78rem;"><?= e($tp['title']) ?></a>
-      <?php endforeach; ?>
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.65rem;margin-bottom:1.15rem;">
+      <div style="display:flex;flex-wrap:wrap;gap:0.45rem;">
+        <a href="?tab=discussions" class="alumni-tabbtn <?= $topicFilterId === 0 ? 'is-active' : '' ?>" style="padding:0.38rem 0.75rem;font-size:0.78rem;">All Topics</a>
+        <?php foreach ($topics as $tp): ?>
+          <a href="?tab=discussions&topic=<?= (int)$tp['id'] ?>" class="alumni-tabbtn <?= $topicFilterId === (int)$tp['id'] ? 'is-active' : '' ?>" style="padding:0.38rem 0.75rem;font-size:0.78rem;"><?= e($tp['title']) ?></a>
+        <?php endforeach; ?>
+      </div>
+      <form method="get" style="display:flex;gap:0.4rem;align-items:center;">
+        <input type="hidden" name="tab" value="discussions">
+        <?php if ($topicFilterId > 0): ?><input type="hidden" name="topic" value="<?= $topicFilterId ?>"><?php endif; ?>
+        <input type="search" name="dq" value="<?= e($discQ) ?>" placeholder="Search member threads..." style="padding:0.4rem 0.65rem;border:1px solid var(--border-color);border-radius:7px;font-size:0.82rem;min-width:190px;">
+        <button type="submit" class="btn-outline btn-sm">Search</button>
+      </form>
     </div>
 
     <div class="grid-2" style="align-items:start;">
@@ -681,6 +833,7 @@ require_once __DIR__ . '/includes/header.php';
           <label style="font-size:0.8rem;font-weight:600;">Full Name *<input type="text" name="full_name" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Email Address *<input type="email" name="email" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Portal Password (Min 6 chars) *<input type="password" name="password" required minlength="6" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Confirm Password *<input type="password" name="confirm_password" required minlength="6" placeholder="Re-enter password" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Mobile / Phone<input type="text" name="phone" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Graduation Year *<input type="number" name="graduation_year" min="1998" max="2035" value="2020" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Department *
@@ -688,11 +841,23 @@ require_once __DIR__ . '/includes/header.php';
               <?php foreach ($departmentsList as $dl): ?><option value="<?= e($dl['code']) ?>"><?= e($dl['code']) ?> — <?= e($dl['name']) ?></option><?php endforeach; ?>
             </select>
           </label>
-          <label style="font-size:0.8rem;font-weight:600;">Degree Program<input type="text" name="degree" value="B.Tech" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-          <label style="font-size:0.8rem;font-weight:600;">Current Company / Organization<input type="text" name="current_company" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-          <label style="font-size:0.8rem;font-weight:600;">Current Role / Designation<input type="text" name="designation" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Degree Program
+            <select name="degree" onchange="var c=this.parentNode.querySelector('.custom-opt-inp');if(c){c.style.display=this.value==='__custom__'?'block':'none';c.required=this.value==='__custom__';}" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+              <?php foreach (alumniDegreePresets() as $degOpt): ?><option value="<?= e($degOpt) ?>"><?= e($degOpt) ?></option><?php endforeach; ?>
+              <option value="__custom__">+ Custom Degree...</option>
+            </select>
+            <input type="text" name="degree_custom" class="custom-opt-inp" placeholder="Enter custom degree..." style="display:none;width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Current Company / Organization *<input type="text" name="current_company" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Current Role / Designation *<input type="text" name="designation" required style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">City &amp; Country<input type="text" name="location" placeholder="Pune, India" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
-          <label style="font-size:0.8rem;font-weight:600;">Regional Chapter<input type="text" name="chapter" value="Pune Chapter" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
+          <label style="font-size:0.8rem;font-weight:600;">Preferred Alumni Chapter
+            <select name="chapter" onchange="var c=this.parentNode.querySelector('.custom-opt-inp');if(c){c.style.display=this.value==='__custom__'?'block':'none';c.required=this.value==='__custom__';}" style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+              <?php foreach (alumniChapterPresets() as $chOpt): ?><option value="<?= e($chOpt) ?>" <?= $chOpt === 'Pune Chapter' ? 'selected' : '' ?>><?= e($chOpt) ?></option><?php endforeach; ?>
+              <option value="__custom__">+ Custom City / Global Chapter...</option>
+            </select>
+            <input type="text" name="chapter_custom" class="custom-opt-inp" placeholder="Enter custom city / global chapter..." style="display:none;width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;">
+          </label>
           <label style="font-size:0.8rem;font-weight:600;">LinkedIn / Website URL<input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/..." style="width:100%;padding:0.48rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></label>
           <label style="font-size:0.8rem;font-weight:600;">Profile Photo (1:1 Auto-Crop)
             <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" data-aspect="1:1" style="display:block;margin-top:4px;">

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/auth.php';
 ensureCmsSchemaUpgraded($pdo);
 $settings = getSiteSettings($pdo);
 $allHeaderCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();

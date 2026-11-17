@@ -62,21 +62,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $selCats = array_values(array_filter(array_map('strval', $_POST['allowed_categories'] ?? [])));
         $selPages = array_values(array_filter(array_map('intval', $_POST['allowed_page_ids'] ?? [])));
         $selModules = array_values(array_filter(array_map('strval', $_POST['allowed_modules'] ?? [])));
+        $newPassword = trim((string)($_POST['new_password'] ?? ''));
         if ($role === 'specific_page_editor' && empty($selCats) && empty($selPages) && empty($selModules)) {
             $err = 'Please select at least one individual page, category, or admin module for Specific Page / Category Access Only.';
+        } elseif ($newPassword !== '' && strlen($newPassword) < 6) {
+            $err = 'Reset password must be at least 6 characters long.';
         } else {
-            $pdo->prepare('UPDATE users SET role = ?, assigned_department_id = ?, allowed_categories_json = ?, allowed_page_ids_json = ?, allowed_modules_json = ?, allowed_department_ids_json = ? WHERE id = ?')
-                ->execute([
-                    $role,
-                    $deptId,
-                    !empty($selCats) ? json_encode($selCats) : null,
-                    !empty($selPages) ? json_encode($selPages) : null,
-                    !empty($selModules) ? json_encode($selModules) : null,
-                    !empty($selDepts) ? json_encode($selDepts) : null,
-                    $targetId,
-                ]);
-            logAudit($pdo, $user, 'UPDATE_RBAC_SCOPE', 'User', 'User #' . $targetId . ' (' . $role . ')');
-            $msg = 'Per-page, category & module RBAC permissions updated.';
+            if ($newPassword !== '') {
+                $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+                $pdo->prepare('UPDATE users SET role = ?, assigned_department_id = ?, allowed_categories_json = ?, allowed_page_ids_json = ?, allowed_modules_json = ?, allowed_department_ids_json = ?, password_hash = ? WHERE id = ?')
+                    ->execute([
+                        $role,
+                        $deptId,
+                        !empty($selCats) ? json_encode($selCats) : null,
+                        !empty($selPages) ? json_encode($selPages) : null,
+                        !empty($selModules) ? json_encode($selModules) : null,
+                        !empty($selDepts) ? json_encode($selDepts) : null,
+                        $newHash,
+                        $targetId,
+                    ]);
+            } else {
+                $pdo->prepare('UPDATE users SET role = ?, assigned_department_id = ?, allowed_categories_json = ?, allowed_page_ids_json = ?, allowed_modules_json = ?, allowed_department_ids_json = ? WHERE id = ?')
+                    ->execute([
+                        $role,
+                        $deptId,
+                        !empty($selCats) ? json_encode($selCats) : null,
+                        !empty($selPages) ? json_encode($selPages) : null,
+                        !empty($selModules) ? json_encode($selModules) : null,
+                        !empty($selDepts) ? json_encode($selDepts) : null,
+                        $targetId,
+                    ]);
+            }
+            logAudit($pdo, $user, 'UPDATE_RBAC_SCOPE', 'User', 'User #' . $targetId . ' (' . $role . ')' . ($newPassword !== '' ? ' + Password Reset' : ''));
+            $msg = 'Per-page, category & module RBAC permissions updated' . ($newPassword !== '' ? ' (with new password).' : '.');
         }
     } elseif ($action === 'toggle') {
         $pdo->prepare('UPDATE users SET is_active = NOT is_active WHERE id = ? AND id != ?')->execute([(int)$_POST['user_id'], $user['id']]);
@@ -173,7 +191,7 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
       <input type="hidden" name="action" value="update_rbac">
       <input type="hidden" name="user_id" value="<?= (int)$editingUser['id'] ?>">
 
-      <div class="grid-2" style="margin-bottom:0.85rem;">
+      <div class="grid-3" style="margin-bottom:0.85rem;">
         <label>Role
           <select name="role" style="width:100%;padding:0.5rem;">
             <?php foreach (['super_admin' => 'Super Admin', 'content_editor' => 'Content Editor / PRO', 'department_admin' => 'Department Admin', 'iqac_officer' => 'IQAC / Compliance Officer', 'exam_controller' => 'Controller of Examinations (CoE)', 'specific_page_editor' => 'Specific Page / Category Access Only'] as $rk => $rl): ?>
@@ -187,6 +205,9 @@ $renderPerPageSelector = static function (array $selectedIds, string $uid) use (
               <option value="<?= (int)$d['id'] ?>" <?= (int)$editingUser['assigned_department_id'] === (int)$d['id'] ? 'selected' : '' ?>><?= e($d['name']) ?></option>
             <?php endforeach; ?>
           </select>
+        </label>
+        <label>Reset Password (Optional, min 6 chars)
+          <input type="password" name="new_password" autocomplete="new-password" placeholder="Leave blank to keep existing" style="width:100%;padding:0.5rem;">
         </label>
       </div>
 

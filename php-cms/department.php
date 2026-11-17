@@ -1,7 +1,9 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 
 $deptSlug = $_GET['dept'] ?? 'computer-science';
 $subSlug  = $_GET['sub'] ?? 'about';
@@ -11,7 +13,15 @@ $dStmt->execute([$deptSlug]);
 $dept = $dStmt->fetch();
 
 if (!$dept) {
-    $dept = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC LIMIT 1')->fetch();
+    $dept = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC LIMIT 1')->fetch();
+}
+
+if (!$dept) {
+    $pageTitle = 'Departments';
+    require_once __DIR__ . '/includes/header.php';
+    echo '<section class="card" style="padding:2rem;text-align:center;"><h2>No Departments Configured</h2><p style="color:var(--text-muted);">Please add engineering departments from the CMS Admin Portal.</p></section>';
+    require_once __DIR__ . '/includes/footer.php';
+    exit;
 }
 
 $subStmt = $pdo->prepare('SELECT * FROM department_subpages WHERE department_id = ? AND is_published = 1 ORDER BY sort_order ASC, id ASC');
@@ -153,7 +163,7 @@ require_once __DIR__ . '/includes/header.php';
           <?php if (!empty($deptLibrary['description'])): ?>
             <p style="font-size:0.92rem;color:var(--text-muted);line-height:1.6;margin-top:0;"><?= e($deptLibrary['description']) ?></p>
           <?php endif; ?>
-          <table class="data-table">
+          <table class="cms-table cms-table-navy">
             <tbody>
               <tr><th>Reference Volumes</th><td><?= e((string)($deptLibrary['volumesCount'] ?? '—')) ?></td></tr>
               <tr><th>Print / E-Journals</th><td><?= e((string)($deptLibrary['journalsCount'] ?? '—')) ?></td></tr>

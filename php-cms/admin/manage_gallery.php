@@ -11,18 +11,25 @@ $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
-    if ($action === 'add_album') {
-        $coverUrl = 'assets/images/hero_campus.jpg';
+    if ($action === 'add_album' || $action === 'update_album') {
+        $coverUrl = trim((string)($_POST['existing_cover'] ?? 'assets/images/hero_campus.jpg'));
         if (!empty($_FILES['cover_image']['name'])) {
             $up = handleCmsUpload($pdo, $_FILES['cover_image'], __DIR__ . '/../uploads', 'photo');
             if ($up['ok']) $coverUrl = $up['file_url'];
             else $err = $up['error'];
         }
         if ($err === '') {
-            $pdo->prepare('INSERT INTO gallery_albums (title, category, event_date, cover_url) VALUES (?, ?, ?, ?)')
-                ->execute([trim($_POST['title']), trim($_POST['category']), $_POST['event_date'], $coverUrl]);
-            logAudit($pdo, $user, 'CREATE_ALBUM', 'Gallery', $_POST['title']);
-            $msg = 'Gallery album created.';
+            if ($action === 'update_album' && !empty($_POST['album_id'])) {
+                $pdo->prepare('UPDATE gallery_albums SET title = ?, category = ?, event_date = ?, cover_url = ? WHERE id = ?')
+                    ->execute([trim($_POST['title']), trim($_POST['category']), $_POST['event_date'], $coverUrl, (int)$_POST['album_id']]);
+                logAudit($pdo, $user, 'UPDATE_ALBUM', 'Gallery', $_POST['title']);
+                $msg = 'Gallery album updated.';
+            } else {
+                $pdo->prepare('INSERT INTO gallery_albums (title, category, event_date, cover_url) VALUES (?, ?, ?, ?)')
+                    ->execute([trim($_POST['title']), trim($_POST['category']), $_POST['event_date'], $coverUrl]);
+                logAudit($pdo, $user, 'CREATE_ALBUM', 'Gallery', $_POST['title']);
+                $msg = 'Gallery album created.';
+            }
         }
     } elseif ($action === 'add_photo') {
         $imgUrl = '';
@@ -38,15 +45,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($err === '') {
             $err = 'Please select an image file to upload.';
         }
+    } elseif ($action === 'delete_photo' && !empty($_POST['photo_id'])) {
+        $pdo->prepare('DELETE FROM gallery_photos WHERE id = ?')->execute([(int)$_POST['photo_id']]);
+        logAudit($pdo, $user, 'DELETE_PHOTO', 'Gallery', 'Photo #' . (int)$_POST['photo_id']);
+        $msg = 'Photo removed from album.';
     } elseif ($action === 'move_album' && !empty($_POST['id'])) {
         $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
         if (swapSortOrder($pdo, 'gallery_albums', (int)$_POST['id'], $dir, null, null, 'event_date DESC, id DESC')) {
             $msg = 'Gallery album order updated.';
         }
     } elseif ($action === 'delete_album') {
+        $pdo->prepare('DELETE FROM gallery_photos WHERE album_id = ?')->execute([(int)$_POST['id']]);
         $pdo->prepare('DELETE FROM gallery_albums WHERE id = ?')->execute([(int)$_POST['id']]);
         $msg = 'Album deleted.';
     }
+}
+
+$editAlbum = null;
+if (!empty($_GET['edit_album'])) {
+    $st = $pdo->prepare('SELECT * FROM gallery_albums WHERE id = ? LIMIT 1');
+    $st->execute([(int)$_GET['edit_album']]);
+    $editAlbum = $st->fetch() ?: null;
 }
 
 $albums = $pdo->query('SELECT * FROM gallery_albums ORDER BY sort_order ASC, event_date DESC, id DESC')->fetchAll();
@@ -58,19 +77,30 @@ foreach ($photosStmt->fetchAll() as $ph) {
 $adminPageTitle = 'Picture Gallery & Event Photo Albums';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
+  <datalist id="gallery-cat-presets">
+    <option value="Campus"></option>
+    <option value="Convocation"></option>
+    <option value="Technical Fest"></option>
+    <option value="Cultural & Sports"></option>
+    <option value="Workshops & Seminars"></option>
+    <option value="Placements & Alumni"></option>
+  </datalist>
 
   <div class="grid-2" style="margin-bottom:1.5rem;">
-    <form method="post" enctype="multipart/form-data" class="card">
-      <h2 style="margin-top:0;">Create New Album</h2>
+    <form method="post" enctype="multipart/form-data" class="card" <?= $editAlbum ? 'style="border:2px solid var(--secondary-color);"' : '' ?>>
+      <h2 style="margin-top:0;"><?= $editAlbum ? 'Edit Album: ' . e($editAlbum['title']) : 'Create New Album' ?></h2>
       <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-      <input type="hidden" name="action" value="add_album">
-      <input type="text" name="title" required placeholder="Album Title" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
+      <input type="hidden" name="action" value="<?= $editAlbum ? 'update_album' : 'add_album' ?>">
+      <?php if ($editAlbum): ?><input type="hidden" name="album_id" value="<?= (int)$editAlbum['id'] ?>"><?php endif; ?>
+      <input type="hidden" name="existing_cover" value="<?= e($editAlbum['cover_url'] ?? 'assets/images/hero_campus.jpg') ?>">
+      <input type="text" name="title" required value="<?= e($editAlbum['title'] ?? '') ?>" placeholder="Album Title" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
       <div class="grid-2" style="margin-bottom:0.5rem;">
-        <input type="text" name="category" value="Campus" required placeholder="Category" style="padding:0.5rem;">
-        <input type="date" name="event_date" value="<?= date('Y-m-d') ?>" required style="padding:0.5rem;">
+        <input type="text" name="category" list="gallery-cat-presets" value="<?= e($editAlbum['category'] ?? 'Campus') ?>" required placeholder="Category" style="padding:0.5rem;">
+        <input type="date" name="event_date" value="<?= e($editAlbum['event_date'] ?? date('Y-m-d')) ?>" required style="padding:0.5rem;">
       </div>
-      <label style="display:block;font-size:0.85rem;margin-bottom:0.75rem;">Cover Photo: <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" required></label>
-      <button type="submit" class="btn-primary">Create Album</button>
+      <label style="display:block;font-size:0.85rem;margin-bottom:0.75rem;">Cover Photo<?= $editAlbum ? ' (Optional to replace)' : '' ?>: <input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" data-aspect="4:3" <?= $editAlbum ? '' : 'required' ?>></label>
+      <button type="submit" class="btn-primary"><?= $editAlbum ? 'Update Album' : 'Create Album' ?></button>
+      <?php if ($editAlbum): ?><a href="manage_gallery.php" class="btn-secondary" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
     </form>
 
     <form method="post" enctype="multipart/form-data" class="card">
@@ -83,7 +113,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <?php endforeach; ?>
       </select>
       <input type="text" name="caption" required placeholder="Photo Caption" style="width:100%;padding:0.5rem;margin-bottom:0.5rem;">
-      <label style="display:block;font-size:0.85rem;margin-bottom:0.75rem;">Select Image (JPG/PNG/WEBP): <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></label>
+      <label style="display:block;font-size:0.85rem;margin-bottom:0.75rem;">Select Image (JPG/PNG/WEBP): <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" data-aspect="4:3" required></label>
       <button type="submit" class="btn-primary">Upload Photo</button>
     </form>
   </div>
@@ -94,9 +124,25 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <img src="<?= e(mediaUrl($al['cover_url'] ?? '')) ?>" alt="<?= e($al['title']) ?>" style="width:100%;height:150px;object-fit:cover;border-radius:6px;">
         <h3 style="margin:0.5rem 0 0.2rem;"><?= e($al['title']) ?></h3>
         <small style="color:var(--text-muted);"><?= e($al['category']) ?> · <?= count($phs) ?> photos</small>
-        <div style="display:flex;gap:0.4rem;align-items:center;margin-top:0.5rem;">
+        <?php if (!empty($phs)): ?>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0.35rem;margin-top:0.65rem;">
+            <?php foreach ($phs as $ph): ?>
+              <div style="border:1px solid var(--border-color);border-radius:6px;overflow:hidden;background:#FAF9F6;">
+                <img src="<?= e(mediaUrl($ph['image_url'] ?? '')) ?>" alt="<?= e($ph['caption'] ?? '') ?>" style="width:100%;height:54px;object-fit:cover;display:block;">
+                <form method="post" style="padding:2px;" onsubmit="return confirm('Delete this photo?');">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="delete_photo">
+                  <input type="hidden" name="photo_id" value="<?= (int)$ph['id'] ?>">
+                  <button type="submit" class="btn-secondary" style="width:100%;padding:2px;font-size:0.68rem;">&times; Remove</button>
+                </form>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+        <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.65rem;">
           <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_album"><input type="hidden" name="id" value="<?= (int)$al['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
-          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_album"><input type="hidden" name="id" value="<?= (int)$al['id'] ?>"><button class="btn-secondary">Delete Album</button></form>
+          <a href="?edit_album=<?= (int)$al['id'] ?>" class="btn-primary" style="padding:2px 8px;font-size:0.78rem;">Edit</a>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete this album and all its photos?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_album"><input type="hidden" name="id" value="<?= (int)$al['id'] ?>"><button class="btn-secondary" style="padding:2px 8px;font-size:0.78rem;">Delete</button></form>
         </div>
       </div>
     <?php endforeach; ?>

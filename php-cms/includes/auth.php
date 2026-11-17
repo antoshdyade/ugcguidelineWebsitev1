@@ -188,6 +188,56 @@ function conferenceSubmissionPlatformPresets(): array
     ];
 }
 
+function alumniDegreePresets(): array
+{
+    return [
+        'B.Tech',
+        'B.E.',
+        'M.Tech',
+        'M.E.',
+        'MBA',
+        'MCA',
+        'Ph.D.',
+        'Diploma in Engineering',
+    ];
+}
+
+function alumniChapterPresets(): array
+{
+    return [
+        'Pandharpur Home Chapter',
+        'Pune Chapter',
+        'Bengaluru Chapter',
+        'Mumbai Chapter',
+        'Hyderabad Chapter',
+        'Delhi NCR Chapter',
+        'North America Chapter',
+        'Europe & UK Chapter',
+    ];
+}
+
+function alumniJobTypePresets(): array
+{
+    return [
+        'Full-Time',
+        'Internship',
+        'Referral',
+        'Consultancy',
+        'Part-Time / Visiting Faculty',
+    ];
+}
+
+function alumniPledgeTypePresets(): array
+{
+    return [
+        'Laboratory / Equipment Sponsorship',
+        'Merit-cum-Means Student Scholarship',
+        'Campus Expert Talk / Workshop',
+        'Industrial Visit / Internship Host',
+        'Library Book & Digital Archive Grant',
+    ];
+}
+
 function isExternalConferenceSubmission(array $conf): bool
 {
     $mode = (string)($conf['submission_mode'] ?? 'internal');
@@ -752,6 +802,36 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 created_at VARCHAR(32) NOT NULL
             ) ENGINE=InnoDB"
         );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS alumni_achievers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                full_name VARCHAR(160) NOT NULL,
+                batch_year SMALLINT UNSIGNED NOT NULL,
+                department_code VARCHAR(32) NOT NULL,
+                designation VARCHAR(160) NULL,
+                organization VARCHAR(160) NULL,
+                award_title VARCHAR(220) NOT NULL,
+                citation TEXT NULL,
+                photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
+                linkedin_url VARCHAR(500) NULL,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS alumni_pledges (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                full_name VARCHAR(160) NOT NULL,
+                email VARCHAR(160) NOT NULL,
+                phone VARCHAR(40) NULL,
+                batch_year SMALLINT UNSIGNED NOT NULL,
+                department_code VARCHAR(32) NOT NULL,
+                pledge_type VARCHAR(160) NOT NULL,
+                amount_or_support VARCHAR(255) NOT NULL,
+                message TEXT NULL,
+                status ENUM('pending','acknowledged','fulfilled') DEFAULT 'pending',
+                submitted_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB"
+        );
 
         $chkStmt = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'alumni_seeded_v1' LIMIT 1");
         $chkStmt->execute();
@@ -806,6 +886,43 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('alumni_settings', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
                 ->execute([json_encode(defaultAlumniSettings(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('alumni_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
+
+        // Seed Distinguished Achievers & Endowment Pledges once
+        $extChkStmt = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'alumni_extras_seeded_v1' LIMIT 1");
+        $extChkStmt->execute();
+        $extrasSeeded = (bool)$extChkStmt->fetchColumn();
+        if (!$extrasSeeded) {
+            if ((int)$pdo->query('SELECT COUNT(*) FROM alumni_achievers')->fetchColumn() === 0) {
+                $insAch = $pdo->prepare(
+                    'INSERT INTO alumni_achievers (full_name, batch_year, department_code, designation, organization, award_title, citation, photo_url, linkedin_url, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)'
+                );
+                $insAch->execute([
+                    'Rohan Deshmukh', 2016, 'CSE', 'Principal Cloud Architect', 'Microsoft India',
+                    'Distinguished Young Engineer Alumni Award 2026',
+                    'Recognized for scaling enterprise cloud systems and sponsoring 15+ rural engineering internships annually.',
+                    'assets/images/principal.jpg', 'https://linkedin.com', 1,
+                ]);
+                $insAch->execute([
+                    'Snehal Patwardhan', 2018, 'ENTC', 'Staff SoC Verification Engineer', 'Qualcomm India',
+                    'VLSI Innovation & Women in STEM Excellence Award',
+                    'Honored for multi-million-gate System-on-Chip verification leadership and annual student bootcamps.',
+                    'assets/images/hero_library.jpg', 'https://linkedin.com', 2,
+                ]);
+            }
+            if ((int)$pdo->query('SELECT COUNT(*) FROM alumni_pledges')->fetchColumn() === 0) {
+                $pdo->prepare(
+                    'INSERT INTO alumni_pledges (full_name, email, phone, batch_year, department_code, pledge_type, amount_or_support, message, status, submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+                )->execute([
+                    'Aditya Kulkarni', 'aditya.k@alumni.svcoer.edu.in', '+91-98220-77112', 2015, 'MECH',
+                    'Laboratory / Equipment Sponsorship',
+                    'EV Battery Thermal Bench & 2-Day CAD Industry Workshop',
+                    'Committed to equipping our Mechanical Department EV Centre of Excellence for final-year B.Tech capstone teams.',
+                    'acknowledged', '2026-10-18',
+                ]);
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('alumni_extras_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
                 ->execute();
         }
 
@@ -900,6 +1017,7 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             "ALTER TABLE conferences ADD COLUMN external_submission_url VARCHAR(500) NULL AFTER submission_mode",
             "ALTER TABLE conferences ADD COLUMN external_submission_label VARCHAR(160) NULL AFTER external_submission_url",
             "ALTER TABLE conferences ADD COLUMN submission_instructions_html MEDIUMTEXT NULL AFTER external_submission_label",
+            "ALTER TABLE alumni_jobs MODIFY COLUMN job_type VARCHAR(80) DEFAULT 'Full-Time'",
             "ALTER TABLE grievances ADD COLUMN is_anonymous TINYINT(1) DEFAULT 0 AFTER urgency",
             "ALTER TABLE grievances ADD COLUMN attachment_url VARCHAR(300) NULL AFTER is_anonymous",
         ] as $alterSql) {
@@ -1161,6 +1279,7 @@ function swapSortOrder(PDO $pdo, string $table, int $id, string $dir, ?string $s
         'alumni_profiles',
         'alumni_jobs',
         'alumni_events',
+        'alumni_achievers',
         'conferences',
         'placement_stats',
         'placement_stories',

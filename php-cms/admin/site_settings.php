@@ -51,8 +51,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        $approvedBodiesRows = [];
+        $abNames = $_POST['ab_name'] ?? [];
+        $abSubtitles = $_POST['ab_subtitle'] ?? [];
+        $abHrefs = $_POST['ab_href'] ?? [];
+        foreach ($abNames as $idx => $abName) {
+            $abName = trim((string)$abName);
+            $abSub = trim((string)($abSubtitles[$idx] ?? ''));
+            $abHref = trim((string)($abHrefs[$idx] ?? ''));
+            if ($abName !== '') {
+                $approvedBodiesRows[] = [
+                    'name' => $abName,
+                    'subtitle' => $abSub,
+                    'href' => $abHref !== '' ? $abHref : 'page.php?slug=about-overview',
+                ];
+            }
+        }
+
         $stmt = $pdo->prepare(
-            'UPDATE site_settings SET trust_name = ?, institution_name = ?, short_code = ?, logo_url = ?, affiliation = ?, aicte_code = ?, dte_code = ?, address = ?, phone = ?, email = ?, emergency_helpline = ?, anti_ragging_helpline = ?, primary_color = ?, secondary_color = ?, about_summary = ?, about_image_url = ?, vision_text = ?, mission_text = ?, recruiters = ?, home_sections_json = ?, highlights_json = ? WHERE id = 1'
+            'UPDATE site_settings SET trust_name = ?, institution_name = ?, short_code = ?, logo_url = ?, affiliation = ?, aicte_code = ?, dte_code = ?, address = ?, phone = ?, email = ?, emergency_helpline = ?, anti_ragging_helpline = ?, primary_color = ?, secondary_color = ?, about_summary = ?, about_image_url = ?, vision_text = ?, mission_text = ?, recruiters = ?, home_sections_json = ?, highlights_json = ?, approved_bodies_json = ? WHERE id = 1'
         );
         $stmt->execute([
             trim($_POST['trust_name']),
@@ -76,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             trim($_POST['recruiters']),
             json_encode($homeSections, JSON_UNESCAPED_UNICODE),
             json_encode($statsRows, JSON_UNESCAPED_UNICODE),
+            json_encode($approvedBodiesRows, JSON_UNESCAPED_UNICODE),
         ]);
         $maxPhotoMb = max(0.25, min(25.0, (float)($_POST['max_photo_mb'] ?? ($s['max_photo_mb'] ?? 2.0))));
         $maxDocMb   = max(0.5, min(50.0, (float)($_POST['max_doc_mb'] ?? ($s['max_doc_mb'] ?? 10.0))));
@@ -103,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $hs = $s['home_sections'] ?? [];
 $stats = $s['highlights_stats'] ?? [];
+$approvedBodies = $s['approved_bodies'] ?? [];
 $adminPageTitle = 'Site Settings, Branding, Design Studio & Homepage Charter';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
@@ -124,8 +143,8 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <label>AICTE Permanent ID <input type="text" name="aicte_code" value="<?= e($s['aicte_code']) ?>" style="width:100%;padding:0.5rem;"></label>
     </div>
     <div class="grid-2" style="margin-bottom:0.65rem;">
-      <label>Upload Institution Logo (PNG/JPG/WEBP): <input type="file" name="logo_file" accept="image/jpeg,image/png,image/webp"></label>
-      <label>Upload About Us Campus Photo: <input type="file" name="about_image_file" accept="image/jpeg,image/png,image/webp"></label>
+      <label>Upload Institution Logo (PNG/JPG/WEBP): <input type="file" name="logo_file" accept="image/jpeg,image/png,image/webp" data-aspect="1:1"></label>
+      <label>Upload About Us Campus Photo: <input type="file" name="about_image_file" accept="image/jpeg,image/png,image/webp" data-aspect="4:3"></label>
     </div>
     <label style="display:block;margin-bottom:0.65rem;">About Us Homepage Summary
       <textarea name="about_summary" rows="3" style="width:100%;padding:0.5rem;"><?= e($s['about_summary'] ?? '') ?></textarea>
@@ -251,6 +270,21 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <?php endfor; ?>
     </div>
 
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+      <h3 style="margin:0;">Approved &amp; Affiliated Bodies Cards</h3>
+      <button type="button" class="btn-secondary" style="font-size:0.78rem;" onclick="addApprovedBodyRow()">+ Add Statutory Body</button>
+    </div>
+    <div id="approved-bodies-list" style="display:grid;gap:0.45rem;margin-bottom:1rem;">
+      <?php foreach ($approvedBodies as $ab): ?>
+        <div class="approved-body-row" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:0.45rem;align-items:center;">
+          <input type="text" name="ab_name[]" value="<?= e($ab['name'] ?? '') ?>" placeholder="Body Name (e.g. AICTE New Delhi)" style="padding:0.42rem;">
+          <input type="text" name="ab_subtitle[]" value="<?= e($ab['subtitle'] ?? '') ?>" placeholder="Subtitle (e.g. Statutory Approval)" style="padding:0.42rem;">
+          <input type="text" name="ab_href[]" value="<?= e($ab['href'] ?? 'page.php?slug=about-overview') ?>" placeholder="Target Link" style="padding:0.42rem;">
+          <button type="button" class="btn-secondary" style="padding:0.4rem 0.65rem;" onclick="this.parentNode.remove()">&times;</button>
+        </div>
+      <?php endforeach; ?>
+    </div>
+
     <hr style="border:none;border-top:1px solid var(--border-color);margin:1.25rem 0;">
     <h2 style="margin-top:0;">Upload Size Controls &amp; Image Auto-Crop Policy</h2>
     <p style="font-size:0.84rem;color:var(--text-muted);margin-top:-0.35rem;margin-bottom:0.85rem;">
@@ -285,6 +319,18 @@ function applyDesignPresetHex(preset) {
   var s = document.getElementById('setting-secondary-hex');
   if (p) p.value = pair[0];
   if (s) s.value = pair[1];
+}
+function addApprovedBodyRow() {
+  var list = document.getElementById('approved-bodies-list');
+  if (!list) return;
+  var div = document.createElement('div');
+  div.className = 'approved-body-row';
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:0.45rem;align-items:center;';
+  div.innerHTML = '<input type="text" name="ab_name[]" placeholder="Body Name" style="padding:0.42rem;">'
+    + '<input type="text" name="ab_subtitle[]" placeholder="Subtitle" style="padding:0.42rem;">'
+    + '<input type="text" name="ab_href[]" value="page.php?slug=about-overview" placeholder="Target Link" style="padding:0.42rem;">'
+    + '<button type="button" class="btn-secondary" style="padding:0.4rem 0.65rem;" onclick="this.parentNode.remove()">&times;</button>';
+  list.appendChild(div);
 }
 </script>
 <?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>
