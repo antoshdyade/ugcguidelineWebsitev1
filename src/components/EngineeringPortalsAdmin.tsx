@@ -3,15 +3,17 @@ import {
   ArrowDown,
   ArrowUp,
   Award,
+  Bell,
   Building2,
   Calendar,
   Download,
   Edit3,
-  GraduationCap,
+  Layers,
   Plus,
   ShieldAlert,
   Trash2,
   TrendingUp,
+  Upload,
   Users,
 } from 'lucide-react';
 import type {
@@ -20,16 +22,17 @@ import type {
   GrievancePortalConfig,
   GrievanceStatus,
   GrievanceTicket,
+  PlacementCustomCard,
   PlacementsData,
-  SanctionedIntakeProgram,
   SiteSettings,
 } from '../types/cms';
 import {
   computePlacementMetrics,
   DEFAULT_GRIEVANCE_PORTAL_CONFIG,
-  DEFAULT_INTAKE_PROGRAMS,
+  PLACEMENT_CONGRATULATION_TYPE_PRESETS,
+  PLACEMENT_NOTICE_CATEGORY_PRESETS,
 } from '../lib/collegeFeaturesLogic';
-import { getUploadSizeLimitMb } from '../lib/imageCrop';
+import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
 import { CustomSelectInput } from './CustomSelectInput';
 import { ImageUploader } from './ImageUploader';
 import { RichTextEditor } from './RichTextEditor';
@@ -70,15 +73,21 @@ export function EngineeringPortalsAdmin({
   notify,
 }: EngineeringPortalsAdminProps) {
   const maxPhotoMb = getUploadSizeLimitMb(settings, 'photo');
+  const maxDocMb = getUploadSizeLimitMb(settings, 'document');
+  const maxDocBytes = getUploadSizeLimitBytes(settings, 'document');
   const autoCrop = settings.autoCropImages !== false;
   const branchOptions = Array.from(new Set([...departments.map((d) => d.name), 'MBA', 'MCA']));
 
   // Placements Desk & Form State
-  const [tpTab, setTpTab] = useState<'stats' | 'drives_recruiters' | 'stories' | 'intake'>('stats');
+  const [tpTab, setTpTab] = useState<'stats' | 'notices' | 'congratulations' | 'drives_recruiters' | 'custom_data'>('stats');
   const [summaryNote, setSummaryNote] = useState(placements.summaryNote ?? '');
   const [coordName, setCoordName] = useState(placements.coordinatorName ?? '');
   const [coordEmail, setCoordEmail] = useState(placements.coordinatorEmail ?? '');
   const [coordPhone, setCoordPhone] = useState(placements.coordinatorPhone ?? '');
+  const [brochureUrl, setBrochureUrl] = useState(placements.brochureUrl ?? '');
+  const [brochureLabel, setBrochureLabel] = useState(
+    placements.brochureLabel ?? 'Download T&P Information Brochure',
+  );
 
   // Branch-Wise Placement Stat Edit/Create State
   const [editingStatId, setEditingStatId] = useState<number | null>(null);
@@ -90,7 +99,17 @@ export function EngineeringPortalsAdmin({
   const [stAvg, setStAvg] = useState('5.6');
   const [stRecruiters, setStRecruiters] = useState('TCS, Infosys, Persistent Systems, Bosch');
 
-  // Placed Student Story Edit/Create State
+  // Student Notices & Info State
+  const [editingNoticeId, setEditingNoticeId] = useState<number | null>(null);
+  const [ntTitle, setNtTitle] = useState('');
+  const [ntDate, setNtDate] = useState(new Date().toISOString().slice(0, 10));
+  const [ntCategory, setNtCategory] = useState<string>(PLACEMENT_NOTICE_CATEGORY_PRESETS[0]);
+  const [ntSummary, setNtSummary] = useState('');
+  const [ntAttachmentUrl, setNtAttachmentUrl] = useState('');
+  const [ntLinkLabel, setNtLinkLabel] = useState('View Circular / PDF');
+  const [ntPinned, setNtPinned] = useState(false);
+
+  // Congratulations Desk (Placed Student & Winner Photo Cards) State
   const [editingStoryId, setEditingStoryId] = useState<number | null>(null);
   const [stuName, setStuName] = useState('');
   const [stuBranch, setStuBranch] = useState('B.Tech CSE');
@@ -99,29 +118,40 @@ export function EngineeringPortalsAdmin({
   const [stuBatch, setStuBatch] = useState('2026');
   const [stuPhoto, setStuPhoto] = useState('/src/assets/images/campus_convocation_1794512597749.jpg');
   const [stuQuote, setStuQuote] = useState('');
+  const [stuEntryType, setStuEntryType] = useState<string>(PLACEMENT_CONGRATULATION_TYPE_PRESETS[0]);
+  const [stuHeadline, setStuHeadline] = useState('');
+  const [stuRoleOrAward, setStuRoleOrAward] = useState('');
+  const [stuFeatured, setStuFeatured] = useState(false);
 
   // Upcoming Placement Drive State
+  const [editingDriveId, setEditingDriveId] = useState<number | null>(null);
   const [drCompany, setDrCompany] = useState('');
   const [drRole, setDrRole] = useState('');
   const [drPackage, setDrPackage] = useState('');
   const [drBranches, setDrBranches] = useState('B.Tech CSE, E&TC, IT');
   const [drDate, setDrDate] = useState(new Date().toISOString().slice(0, 10));
   const [drUrl, setDrUrl] = useState('');
-  const [drStatus, setDrStatus] = useState<'upcoming' | 'open' | 'completed'>('open');
+  const [drStatus, setDrStatus] = useState<'upcoming' | 'ongoing' | 'open' | 'completed'>('open');
 
   // Esteemed Recruiters State
   const [recruitersText, setRecruitersText] = useState((settings.recruiters || []).join('\n'));
 
-  // AICTE Sanctioned Intake Matrix State
-  const [intakeList, setIntakeList] = useState<SanctionedIntakeProgram[]>(
-    settings.intakePrograms && settings.intakePrograms.length > 0 ? settings.intakePrograms : DEFAULT_INTAKE_PROGRAMS,
-  );
-  const [inCode, setInCode] = useState('');
-  const [inProgram, setInProgram] = useState('');
-  const [inLevel, setInLevel] = useState('UG (4 Years)');
-  const [inSeats, setInSeats] = useState('60');
-  const [inStatus, setInStatus] = useState('AICTE Approved · Autonomous');
-  const [inFee, setInFee] = useState('₹1,14,500');
+  // Custom Placement Data Sections State
+  const [editingCustomId, setEditingCustomId] = useState<number | null>(null);
+  const [csTitle, setCsTitle] = useState('');
+  const [csSubtitle, setCsSubtitle] = useState('');
+  const [csType, setCsType] = useState<'table' | 'cards' | 'brochure' | 'html'>('table');
+  const [csHeadersText, setCsHeadersText] = useState('Parameter, Details, Target / Metric');
+  const [csRows, setCsRows] = useState<string[][]>([
+    ['Internship Support', 'Six-Month Final Year Industrial Project & Training', '100% Assistance'],
+  ]);
+  const [csCards, setCsCards] = useState<PlacementCustomCard[]>([
+    { title: '', subtitle: '', badge: '', description: '', linkUrl: '', linkLabel: '' },
+  ]);
+  const [csHtml, setCsHtml] = useState('<p>Enter custom T&amp;P rules, training schedule, or formatted tables using the visual editor.</p>');
+  const [csCtaLabel, setCsCtaLabel] = useState('Download Information Sheet');
+  const [csCtaUrl, setCsCtaUrl] = useState('');
+  const [csPublished, setCsPublished] = useState(true);
 
   // Grievances Queue & SGRC Configuration State
   const [grvTab, setGrvTab] = useState<'queue' | 'committee' | 'charter'>('queue');
@@ -146,18 +176,31 @@ export function EngineeringPortalsAdmin({
     setCoordName(placements.coordinatorName ?? '');
     setCoordEmail(placements.coordinatorEmail ?? '');
     setCoordPhone(placements.coordinatorPhone ?? '');
+    setBrochureUrl(placements.brochureUrl ?? '');
+    setBrochureLabel(placements.brochureLabel ?? 'Download T&P Information Brochure');
   }, [placements]);
 
   useEffect(() => {
     setRecruitersText((settings.recruiters || []).join('\n'));
-    if (settings.intakePrograms && settings.intakePrograms.length > 0) {
-      setIntakeList(settings.intakePrograms);
-    }
     setGpDraft({
       ...DEFAULT_GRIEVANCE_PORTAL_CONFIG,
       ...(settings.grievancePortal || {}),
     });
   }, [settings]);
+
+  const handleDocUpload = async (file: File, onSuccess: (url: string) => void) => {
+    if (file.size > maxDocBytes) {
+      notify('err', `Document exceeds configured upload limit of ${maxDocMb} MB.`);
+      return;
+    }
+    try {
+      const url = await uploadBinary(file);
+      onSuccess(url);
+      notify('ok', `Uploaded "${file.name}".`);
+    } catch (err) {
+      notify('err', (err as Error).message);
+    }
+  };
 
   if (mode === 'placements') {
     const statMetrics = computePlacementMetrics(placements.stats);
@@ -174,7 +217,27 @@ export function EngineeringPortalsAdmin({
             }`}
             style={tpTab === 'stats' ? { backgroundColor: 'var(--primary-color)' } : undefined}
           >
-            Branch-Wise Statistics ({placements.stats.length})
+            T&amp;P Overview &amp; Branch Stats ({placements.stats.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTpTab('notices')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+              tpTab === 'notices' ? 'text-white border-transparent' : 'border-stone-200 dark:border-slate-700'
+            }`}
+            style={tpTab === 'notices' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+          >
+            Student Notices &amp; Info ({(placements.notices || []).length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTpTab('congratulations')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+              tpTab === 'congratulations' ? 'text-white border-transparent' : 'border-stone-200 dark:border-slate-700'
+            }`}
+            style={tpTab === 'congratulations' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+          >
+            Congratulations Desk ({placements.stories.length})
           </button>
           <button
             type="button"
@@ -184,31 +247,21 @@ export function EngineeringPortalsAdmin({
             }`}
             style={tpTab === 'drives_recruiters' ? { backgroundColor: 'var(--primary-color)' } : undefined}
           >
-            Placement Drives ({(placements.upcomingDrives || []).length}) &amp; Recruiters
+            Campus Drives ({(placements.upcomingDrives || []).length}) &amp; Recruiters
           </button>
           <button
             type="button"
-            onClick={() => setTpTab('stories')}
+            onClick={() => setTpTab('custom_data')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-              tpTab === 'stories' ? 'text-white border-transparent' : 'border-stone-200 dark:border-slate-700'
+              tpTab === 'custom_data' ? 'text-white border-transparent' : 'border-stone-200 dark:border-slate-700'
             }`}
-            style={tpTab === 'stories' ? { backgroundColor: 'var(--primary-color)' } : undefined}
+            style={tpTab === 'custom_data' ? { backgroundColor: 'var(--primary-color)' } : undefined}
           >
-            Student Achiever Stories ({placements.stories.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTpTab('intake')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-              tpTab === 'intake' ? 'text-white border-transparent' : 'border-stone-200 dark:border-slate-700'
-            }`}
-            style={tpTab === 'intake' ? { backgroundColor: 'var(--primary-color)' } : undefined}
-          >
-            Sanctioned Programs &amp; Intake Matrix ({intakeList.length})
+            Custom Placement Data ({(placements.customSections || []).length})
           </button>
         </div>
 
-        {/* T&P Summary & Coordinator Settings */}
+        {/* T&P Summary, Brochure & Coordinator Settings + Branch Stats */}
         {tpTab === 'stats' && (
           <>
             <form
@@ -220,8 +273,10 @@ export function EngineeringPortalsAdmin({
                     coordinatorName: coordName,
                     coordinatorEmail: coordEmail,
                     coordinatorPhone: coordPhone,
+                    brochureUrl,
+                    brochureLabel,
                   });
-                  notify('ok', 'Saved Training & Placement Cell contact & summary.');
+                  notify('ok', 'Saved Training & Placement Cell contact, summary & brochure.');
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -230,7 +285,7 @@ export function EngineeringPortalsAdmin({
             >
               <h2 className="text-base font-bold flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-amber-600" />
-                Training &amp; Placement (T&amp;P) Desk Profile
+                Training &amp; Placement (T&amp;P) Desk Profile &amp; Brochure
               </h2>
               <textarea
                 rows={2}
@@ -262,12 +317,44 @@ export function EngineeringPortalsAdmin({
                   className="px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 rounded-lg bg-stone-50 dark:bg-slate-800/40 border border-stone-200 dark:border-slate-800">
+                <input
+                  type="text"
+                  value={brochureLabel}
+                  onChange={(e) => setBrochureLabel(e.target.value)}
+                  placeholder="Brochure Button Label (e.g. Download T&P Information Brochure)"
+                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                />
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold cursor-pointer shrink-0">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload PDF ({maxDocMb} MB)</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.docx"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (f) handleDocUpload(f, setBrochureUrl);
+                      }}
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    value={brochureUrl}
+                    onChange={(e) => setBrochureUrl(e.target.value)}
+                    placeholder="Brochure URL (/uploads/... or https://...)"
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                </div>
+              </div>
               <button
                 type="submit"
                 className="px-4 py-2 rounded-lg text-xs font-bold text-white"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                Save T&amp;P Cell Desk Info
+                Save T&amp;P Cell Desk &amp; Brochure
               </button>
             </form>
 
@@ -502,6 +589,220 @@ export function EngineeringPortalsAdmin({
           </>
         )}
 
+        {/* Student Notices & T&P Information Desk */}
+        {tpTab === 'notices' && (
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  const payload = {
+                    title: ntTitle,
+                    noticeDate: ntDate,
+                    category: ntCategory,
+                    summary: ntSummary,
+                    attachmentUrl: ntAttachmentUrl,
+                    linkLabel: ntLinkLabel,
+                    isPinned: ntPinned,
+                  };
+                  if (editingNoticeId) {
+                    await adminFetch(`/api/admin/placements/notices/${editingNoticeId}`, 'PUT', payload);
+                    notify('ok', `Updated notice "${ntTitle}".`);
+                    setEditingNoticeId(null);
+                  } else {
+                    await adminFetch('/api/admin/placements/notices', 'POST', payload);
+                    notify('ok', `Published notice "${ntTitle}".`);
+                  }
+                  setNtTitle('');
+                  setNtSummary('');
+                  setNtAttachmentUrl('');
+                  setNtPinned(false);
+                } catch (err) {
+                  notify('err', (err as Error).message);
+                }
+              }}
+              className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold flex items-center gap-1.5">
+                  <Bell className="w-4 h-4 text-amber-600" />
+                  {editingNoticeId ? 'Edit Student Notice' : 'Post Student Notice / Circular'}
+                </h3>
+                {editingNoticeId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingNoticeId(null);
+                      setNtTitle('');
+                      setNtSummary('');
+                      setNtAttachmentUrl('');
+                      setNtPinned(false);
+                    }}
+                    className="text-xs underline"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                required
+                value={ntTitle}
+                onChange={(e) => setNtTitle(e.target.value)}
+                placeholder="Notice Heading / Title *"
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <CustomSelectInput
+                  label="Notice Category"
+                  required
+                  value={ntCategory}
+                  onChange={setNtCategory}
+                  options={[...PLACEMENT_NOTICE_CATEGORY_PRESETS]}
+                  customPlaceholder="Custom category..."
+                />
+                <div>
+                  <label className="block text-[11px] font-semibold mb-1">Publish Date</label>
+                  <input
+                    type="date"
+                    value={ntDate}
+                    onChange={(e) => setNtDate(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+              </div>
+              <textarea
+                rows={3}
+                required
+                value={ntSummary}
+                onChange={(e) => setNtSummary(e.target.value)}
+                placeholder="Notice instructions, venue, reporting time, eligibility criteria..."
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={ntLinkLabel}
+                  onChange={(e) => setNtLinkLabel(e.target.value)}
+                  placeholder="Attachment Button Label"
+                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <label className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 text-xs font-semibold cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Upload PDF ({maxDocMb} MB)</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.jpg,.png"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = '';
+                      if (f) handleDocUpload(f, setNtAttachmentUrl);
+                    }}
+                  />
+                </label>
+              </div>
+              <input
+                type="text"
+                value={ntAttachmentUrl}
+                onChange={(e) => setNtAttachmentUrl(e.target.value)}
+                placeholder="Attachment URL / Google Form Link (optional)"
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ntPinned}
+                  onChange={(e) => setNtPinned(e.target.checked)}
+                />
+                Pin Notice as Priority Alert at Top of Placement Portal
+              </label>
+              <button
+                type="submit"
+                className="w-full py-2 rounded-lg text-xs font-bold text-white"
+                style={{ backgroundColor: 'var(--primary-color)' }}
+              >
+                {editingNoticeId ? 'Save Notice Changes' : '+ Publish Student Notice'}
+              </button>
+            </form>
+
+            <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+              <h3 className="text-sm font-bold">Published Student Notices ({(placements.notices || []).length})</h3>
+              <div className="divide-y divide-stone-100 dark:divide-slate-800 text-xs">
+                {(placements.notices || []).map((nt, idx) => (
+                  <div key={nt.id} className="py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-mono text-[11px] text-stone-500">
+                        {nt.noticeDate} · <strong className="text-amber-700 dark:text-amber-400">{nt.category}</strong>
+                        {nt.isPinned ? ' · PINNED' : ''}
+                      </p>
+                      <p className="font-bold text-stone-900 dark:text-white">{nt.title}</p>
+                      <p className="text-stone-500 line-clamp-2">{nt.summary}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => {
+                          const ids = (placements.notices || []).map((n) => n.id);
+                          [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+                          adminFetch('/api/admin/placements/notices/reorder', 'PUT', { orderedIds: ids }).then(
+                            () => notify('ok', 'Reordered placement notices.'),
+                          );
+                        }}
+                        className="p-1 rounded border disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === (placements.notices || []).length - 1}
+                        onClick={() => {
+                          const ids = (placements.notices || []).map((n) => n.id);
+                          [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+                          adminFetch('/api/admin/placements/notices/reorder', 'PUT', { orderedIds: ids }).then(
+                            () => notify('ok', 'Reordered placement notices.'),
+                          );
+                        }}
+                        className="p-1 rounded border disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingNoticeId(nt.id);
+                          setNtTitle(nt.title);
+                          setNtDate(nt.noticeDate);
+                          setNtCategory(nt.category);
+                          setNtSummary(nt.summary);
+                          setNtAttachmentUrl(nt.attachmentUrl || '');
+                          setNtLinkLabel(nt.linkLabel || 'View Circular / PDF');
+                          setNtPinned(Boolean(nt.isPinned));
+                        }}
+                        className="p-1 rounded border"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          adminFetch(`/api/admin/placements/notices/${nt.id}`, 'DELETE').then(() =>
+                            notify('ok', `Deleted notice "${nt.title}".`),
+                          )
+                        }
+                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Upcoming Drives & Recruiters */}
         {tpTab === 'drives_recruiters' && (
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -509,7 +810,7 @@ export function EngineeringPortalsAdmin({
               onSubmit={async (e) => {
                 e.preventDefault();
                 try {
-                  await adminFetch('/api/admin/placements/drives', 'POST', {
+                  const payload = {
                     company: drCompany,
                     roleTitle: drRole,
                     packageLpa: drPackage,
@@ -517,22 +818,46 @@ export function EngineeringPortalsAdmin({
                     driveDate: drDate,
                     applyUrl: drUrl,
                     status: drStatus,
-                  });
+                  };
+                  if (editingDriveId) {
+                    await adminFetch(`/api/admin/placements/drives/${editingDriveId}`, 'PUT', payload);
+                    notify('ok', `Updated campus drive for ${drCompany}.`);
+                    setEditingDriveId(null);
+                  } else {
+                    await adminFetch('/api/admin/placements/drives', 'POST', payload);
+                    notify('ok', `Published campus placement drive for ${drCompany}.`);
+                  }
                   setDrCompany('');
                   setDrRole('');
                   setDrPackage('');
                   setDrUrl('');
-                  notify('ok', `Published campus placement drive for ${drCompany}.`);
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
               }}
               className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
             >
-              <h3 className="text-sm font-bold flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-emerald-600" />
-                Add Upcoming Campus Placement Drive
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  {editingDriveId ? 'Edit Campus Placement Drive' : 'Add Upcoming Campus Placement Drive'}
+                </h3>
+                {editingDriveId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingDriveId(null);
+                      setDrCompany('');
+                      setDrRole('');
+                      setDrPackage('');
+                      setDrUrl('');
+                    }}
+                    className="text-xs underline"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 required
@@ -566,7 +891,7 @@ export function EngineeringPortalsAdmin({
                 />
                 <select
                   value={drStatus}
-                  onChange={(e) => setDrStatus(e.target.value as 'upcoming' | 'open' | 'completed')}
+                  onChange={(e) => setDrStatus(e.target.value as 'upcoming' | 'ongoing' | 'open' | 'completed')}
                   className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 >
                   <option value="open">Registrations Open</option>
@@ -582,10 +907,10 @@ export function EngineeringPortalsAdmin({
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
               <input
-                type="url"
+                type="text"
                 value={drUrl}
                 onChange={(e) => setDrUrl(e.target.value)}
-                placeholder="Registration Form / T&P Link (https://...)"
+                placeholder="Registration Form / T&P Link (https://... or /placements)"
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
               <button
@@ -593,7 +918,7 @@ export function EngineeringPortalsAdmin({
                 className="w-full py-2 rounded-lg text-xs font-bold text-white"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                + Publish Placement Drive
+                {editingDriveId ? 'Save Campus Drive' : '+ Publish Placement Drive'}
               </button>
 
               <div className="pt-4 border-t border-stone-200 dark:border-slate-800 space-y-2">
@@ -644,28 +969,74 @@ export function EngineeringPortalsAdmin({
                       </tr>
                     </thead>
                     <tbody>
-                      {(placements.upcomingDrives || []).map((dr) => (
+                      {(placements.upcomingDrives || []).map((dr, idx) => (
                         <tr key={dr.id}>
-                          <td className="font-mono">{dr.driveDate}</td>
+                          <td className="font-mono tabular-nums">{dr.driveDate}</td>
                           <td>
                             <p className="font-bold">{dr.company}</p>
                             <p className="text-stone-500">{dr.roleTitle}</p>
                           </td>
-                          <td className="font-semibold text-emerald-700">{dr.packageLpa}</td>
+                          <td className="font-semibold text-emerald-700 tabular-nums">{dr.packageLpa}</td>
                           <td>{dr.eligibleBranches}</td>
                           <td className="uppercase font-bold">{dr.status}</td>
                           <td>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                adminFetch(`/api/admin/placements/drives/${dr.id}`, 'DELETE').then(() =>
-                                  notify('ok', `Removed drive for ${dr.company}.`),
-                                )
-                              }
-                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => {
+                                  const ids = (placements.upcomingDrives || []).map((x) => x.id);
+                                  [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+                                  adminFetch('/api/admin/placements/drives/reorder', 'PUT', { orderedIds: ids }).then(
+                                    () => notify('ok', 'Reordered placement drives.'),
+                                  );
+                                }}
+                                className="p-1 rounded border disabled:opacity-30"
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === (placements.upcomingDrives || []).length - 1}
+                                onClick={() => {
+                                  const ids = (placements.upcomingDrives || []).map((x) => x.id);
+                                  [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+                                  adminFetch('/api/admin/placements/drives/reorder', 'PUT', { orderedIds: ids }).then(
+                                    () => notify('ok', 'Reordered placement drives.'),
+                                  );
+                                }}
+                                className="p-1 rounded border disabled:opacity-30"
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingDriveId(dr.id);
+                                  setDrCompany(dr.company);
+                                  setDrRole(dr.roleTitle);
+                                  setDrPackage(dr.packageLpa);
+                                  setDrBranches(dr.eligibleBranches);
+                                  setDrDate(dr.driveDate);
+                                  setDrUrl(dr.applyUrl || '');
+                                  setDrStatus(dr.status);
+                                }}
+                                className="p-1 rounded border"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  adminFetch(`/api/admin/placements/drives/${dr.id}`, 'DELETE').then(() =>
+                                    notify('ok', `Removed drive for ${dr.company}.`),
+                                  )
+                                }
+                                className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -677,8 +1048,8 @@ export function EngineeringPortalsAdmin({
           </div>
         )}
 
-        {/* Placed Student Success Stories */}
-        {tpTab === 'stories' && (
+        {/* Congratulations Desk (Placed Students & Achievement Winners with Photos) */}
+        {tpTab === 'congratulations' && (
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
             <form
               onSubmit={async (e) => {
@@ -692,19 +1063,26 @@ export function EngineeringPortalsAdmin({
                     batchYear: stuBatch,
                     photoUrl: stuPhoto,
                     quote: stuQuote,
+                    entryType: stuEntryType,
+                    headline: stuHeadline,
+                    roleOrAward: stuRoleOrAward,
+                    isFeatured: stuFeatured,
                   };
                   if (editingStoryId) {
                     await adminFetch(`/api/admin/placements/stories/${editingStoryId}`, 'PUT', payload);
-                    notify('ok', `Updated placement story for ${stuName}.`);
+                    notify('ok', `Updated Congratulations Desk entry for ${stuName}.`);
                     setEditingStoryId(null);
                   } else {
                     await adminFetch('/api/admin/placements/stories', 'POST', payload);
-                    notify('ok', `Added placement story for ${stuName}.`);
+                    notify('ok', `Published Congratulations Desk spotlight for ${stuName}.`);
                   }
                   setStuName('');
                   setStuCompany('');
                   setStuLpa('');
                   setStuQuote('');
+                  setStuHeadline('');
+                  setStuRoleOrAward('');
+                  setStuFeatured(false);
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -714,7 +1092,7 @@ export function EngineeringPortalsAdmin({
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold flex items-center gap-1.5">
                   <Award className="w-4 h-4 text-emerald-600" />
-                  {editingStoryId ? 'Edit Placed Student Story' : 'Add Placed Student Story'}
+                  {editingStoryId ? 'Edit Congratulations Entry' : 'Add Congratulations Desk Entry'}
                 </h3>
                 {editingStoryId && (
                   <button
@@ -725,6 +1103,9 @@ export function EngineeringPortalsAdmin({
                       setStuCompany('');
                       setStuLpa('');
                       setStuQuote('');
+                      setStuHeadline('');
+                      setStuRoleOrAward('');
+                      setStuFeatured(false);
                     }}
                     className="text-xs underline"
                   >
@@ -732,6 +1113,21 @@ export function EngineeringPortalsAdmin({
                   </button>
                 )}
               </div>
+              <CustomSelectInput
+                label="Achievement / Placement Category"
+                required
+                value={stuEntryType}
+                onChange={setStuEntryType}
+                options={[...PLACEMENT_CONGRATULATION_TYPE_PRESETS]}
+                customPlaceholder="Enter custom achievement type..."
+              />
+              <input
+                type="text"
+                value={stuHeadline}
+                onChange={(e) => setStuHeadline(e.target.value)}
+                placeholder="Congratulatory Headline (e.g. Congratulations on Placing at Microsoft!)"
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="text"
@@ -754,26 +1150,33 @@ export function EngineeringPortalsAdmin({
                   required
                   value={stuCompany}
                   onChange={(e) => setStuCompany(e.target.value)}
-                  placeholder="Company Placed In *"
+                  placeholder="Company / Organization *"
+                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={stuRoleOrAward}
+                  onChange={(e) => setStuRoleOrAward(e.target.value)}
+                  placeholder="Role / Award Title (e.g. SDE / 1st Prize)"
                   className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
                 <input
                   type="text"
                   value={stuLpa}
                   onChange={(e) => setStuLpa(e.target.value)}
-                  placeholder="Package (e.g. ₹14.5 LPA)"
+                  placeholder="Package / Rank (e.g. ₹14.5 LPA)"
+                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={stuBatch}
+                  onChange={(e) => setStuBatch(e.target.value)}
+                  placeholder="Batch Year (e.g. 2026)"
                   className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
               </div>
-              <input
-                type="text"
-                value={stuBatch}
-                onChange={(e) => setStuBatch(e.target.value)}
-                placeholder="Batch Year (e.g. 2026)"
-                className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-              />
               <ImageUploader
-                label="Student Photo (1:1 Auto-Crop)"
+                label="Student Photograph (1:1 Auto-Crop)"
                 value={stuPhoto}
                 onChange={setStuPhoto}
                 uploadBinary={uploadBinary}
@@ -785,23 +1188,31 @@ export function EngineeringPortalsAdmin({
                 rows={2}
                 value={stuQuote}
                 onChange={(e) => setStuQuote(e.target.value)}
-                placeholder="Student experience quote..."
+                placeholder="Student experience quote or commendation note..."
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={stuFeatured}
+                  onChange={(e) => setStuFeatured(e.target.checked)}
+                />
+                Highlight First on Congratulations Desk
+              </label>
               <button
                 type="submit"
                 className="w-full py-2 rounded-lg text-xs font-bold text-white"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                {editingStoryId ? 'Save Student Story' : '+ Add Placed Student Story'}
+                {editingStoryId ? 'Save Congratulations Card' : '+ Add to Congratulations Desk'}
               </button>
             </form>
 
             <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
-              <h3 className="text-sm font-bold">Student Achiever Stories ({placements.stories.length})</h3>
+              <h3 className="text-sm font-bold">Congratulations Desk Entries ({placements.stories.length})</h3>
               <div className="divide-y divide-stone-100 dark:divide-slate-800 text-xs">
                 {placements.stories.map((st, idx) => (
-                  <div key={st.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div key={st.id} className="py-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <img
                         src={st.photoUrl}
@@ -809,13 +1220,17 @@ export function EngineeringPortalsAdmin({
                         className="w-12 h-12 rounded-lg object-cover border shrink-0"
                       />
                       <div className="min-w-0">
+                        <p className="text-[11px] font-bold uppercase text-amber-700 dark:text-amber-400">
+                          {st.entryType || 'Campus Placement'}
+                          {st.isFeatured ? ' · FEATURED' : ''}
+                        </p>
                         <p className="font-bold text-stone-900 dark:text-white">
-                          {st.studentName} · {st.company} ({st.packageLpa})
+                          {st.studentName} · {st.company} {st.packageLpa ? `(${st.packageLpa})` : ''}
                         </p>
                         <p className="text-stone-500">
-                          {st.branch} · Batch {st.batchYear}
+                          {st.branch} · Batch {st.batchYear} {st.roleOrAward ? `· ${st.roleOrAward}` : ''}
                         </p>
-                        <p className="text-[11px] text-stone-400 truncate">{st.quote}</p>
+                        {st.headline && <p className="text-[11px] text-emerald-700 dark:text-emerald-400 truncate">{st.headline}</p>}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -826,7 +1241,7 @@ export function EngineeringPortalsAdmin({
                           const ids = placements.stories.map((s) => s.id);
                           [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
                           adminFetch('/api/admin/placements/stories/reorder', 'PUT', { orderedIds: ids }).then(
-                            () => notify('ok', 'Reordered stories.'),
+                            () => notify('ok', 'Reordered Congratulations Desk entries.'),
                           );
                         }}
                         className="p-1 rounded border disabled:opacity-30"
@@ -840,7 +1255,7 @@ export function EngineeringPortalsAdmin({
                           const ids = placements.stories.map((s) => s.id);
                           [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
                           adminFetch('/api/admin/placements/stories/reorder', 'PUT', { orderedIds: ids }).then(
-                            () => notify('ok', 'Reordered stories.'),
+                            () => notify('ok', 'Reordered Congratulations Desk entries.'),
                           );
                         }}
                         className="p-1 rounded border disabled:opacity-30"
@@ -858,6 +1273,10 @@ export function EngineeringPortalsAdmin({
                           setStuBatch(st.batchYear);
                           setStuPhoto(st.photoUrl);
                           setStuQuote(st.quote);
+                          setStuEntryType(st.entryType || 'Campus Placement');
+                          setStuHeadline(st.headline || '');
+                          setStuRoleOrAward(st.roleOrAward || '');
+                          setStuFeatured(Boolean(st.isFeatured));
                         }}
                         className="p-1 rounded border"
                       >
@@ -867,7 +1286,7 @@ export function EngineeringPortalsAdmin({
                         type="button"
                         onClick={() =>
                           adminFetch(`/api/admin/placements/stories/${st.id}`, 'DELETE').then(() =>
-                            notify('ok', `Removed story for ${st.studentName}.`),
+                            notify('ok', `Removed entry for ${st.studentName}.`),
                           )
                         }
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
@@ -882,168 +1301,364 @@ export function EngineeringPortalsAdmin({
           </div>
         )}
 
-        {/* Sanctioned Programs, AICTE Intake & FRA Fee Matrix */}
-        {tpTab === 'intake' && (
+        {/* Custom Placement Data Builder */}
+        {tpTab === 'custom_data' && (
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!inProgram.trim()) return;
-                const next: SanctionedIntakeProgram[] = [
-                  ...intakeList,
-                  {
-                    id: Math.max(0, ...intakeList.map((i) => i.id)) + 1,
-                    code: inCode.trim() || '622000000',
-                    programName: inProgram.trim(),
-                    level: inLevel.trim(),
-                    sanctionedIntake: Math.max(1, Number(inSeats) || 60),
-                    accreditationStatus: inStatus.trim(),
-                    annualFee: inFee.trim(),
-                    sortOrder: intakeList.length + 1,
-                  },
-                ];
-                setIntakeList(next);
-                setInCode('');
-                setInProgram('');
-                await adminFetch('/api/admin/settings', 'PUT', { intakePrograms: next });
-                notify('ok', 'Added Sanctioned Engineering Program & saved matrix.');
+                if (!csTitle.trim()) return;
+                const headers = csHeadersText
+                  .split(',')
+                  .map((h) => h.trim())
+                  .filter(Boolean);
+                const payload = {
+                  title: csTitle.trim(),
+                  subtitle: csSubtitle.trim(),
+                  sectionType: csType,
+                  tableHeaders: csType === 'table' ? headers : [],
+                  tableRows:
+                    csType === 'table'
+                      ? csRows.map((r) => headers.map((_, ci) => String(r[ci] ?? '').trim()))
+                      : [],
+                  cards:
+                    csType === 'cards'
+                      ? csCards.filter((c) => c.title.trim().length > 0)
+                      : [],
+                  htmlContent: csType === 'html' || csType === 'brochure' ? csHtml : '',
+                  ctaLabel: csCtaLabel.trim(),
+                  ctaUrl: csCtaUrl.trim(),
+                  isPublished: csPublished,
+                };
+                try {
+                  if (editingCustomId) {
+                    await adminFetch(`/api/admin/placements/custom-sections/${editingCustomId}`, 'PUT', payload);
+                    notify('ok', `Updated custom placement section "${csTitle}".`);
+                    setEditingCustomId(null);
+                  } else {
+                    await adminFetch('/api/admin/placements/custom-sections', 'POST', payload);
+                    notify('ok', `Added custom placement section "${csTitle}".`);
+                  }
+                  setCsTitle('');
+                  setCsSubtitle('');
+                  setCsCtaUrl('');
+                } catch (err) {
+                  notify('err', (err as Error).message);
+                }
               }}
-              className="xl:col-span-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+              className="xl:col-span-6 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
             >
-              <h3 className="text-sm font-bold flex items-center gap-1.5">
-                <GraduationCap className="w-4 h-4 text-amber-600" />
-                Add AICTE Program / Sanctioned Intake
-              </h3>
-              <input
-                type="text"
-                required
-                value={inProgram}
-                onChange={(e) => setInProgram(e.target.value)}
-                placeholder="Program Name (e.g. B.Tech AI & Data Science) *"
-                className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-              />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-amber-600" />
+                  {editingCustomId ? 'Edit Custom Placement Section' : 'Add Custom Placement Data Block'}
+                </h3>
+                {editingCustomId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCustomId(null);
+                      setCsTitle('');
+                      setCsSubtitle('');
+                    }}
+                    className="text-xs underline"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="text"
-                  value={inCode}
-                  onChange={(e) => setInCode(e.target.value)}
-                  placeholder="DTE Choice Code"
+                  required
+                  value={csTitle}
+                  onChange={(e) => setCsTitle(e.target.value)}
+                  placeholder="Section Heading (e.g. Internship Partner Matrix) *"
                   className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                 />
-                <input
-                  type="number"
-                  min={1}
-                  value={inSeats}
-                  onChange={(e) => setInSeats(e.target.value)}
-                  placeholder="Intake (e.g. 60)"
-                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                />
-                <input
-                  type="text"
-                  value={inLevel}
-                  onChange={(e) => setInLevel(e.target.value)}
-                  placeholder="Level (UG / PG)"
-                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                />
-                <input
-                  type="text"
-                  value={inFee}
-                  onChange={(e) => setInFee(e.target.value)}
-                  placeholder="FRA Annual Fee"
-                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                />
+                <select
+                  value={csType}
+                  onChange={(e) => setCsType(e.target.value as 'table' | 'cards' | 'brochure' | 'html')}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold"
+                >
+                  <option value="table">Formatted Data Table</option>
+                  <option value="cards">Feature / Infrastructure Cards Grid</option>
+                  <option value="brochure">Brochure / Document Download Strip</option>
+                  <option value="html">Visual HTML Editor Block</option>
+                </select>
               </div>
               <input
                 type="text"
-                value={inStatus}
-                onChange={(e) => setInStatus(e.target.value)}
-                placeholder="Accreditation / Approval Status"
+                value={csSubtitle}
+                onChange={(e) => setCsSubtitle(e.target.value)}
+                placeholder="Subtitle or explanatory note (optional)"
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
+
+              {csType === 'table' && (
+                <div className="p-3 rounded-lg bg-stone-50 dark:bg-slate-800/40 border border-stone-200 dark:border-slate-800 space-y-2 text-xs">
+                  <label className="block font-semibold">Column Headers (comma-separated):</label>
+                  <input
+                    type="text"
+                    value={csHeadersText}
+                    onChange={(e) => setCsHeadersText(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">Table Rows ({csRows.length})</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cols = Math.max(1, csHeadersText.split(',').filter((x) => x.trim()).length);
+                          setCsRows([...csRows, Array(cols).fill('')]);
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-white dark:bg-slate-900 font-semibold"
+                      >
+                        <Plus className="w-3 h-3" /> Add Row
+                      </button>
+                    </div>
+                    {csRows.map((row, rIdx) => {
+                      const headers = csHeadersText.split(',').map((h) => h.trim()).filter(Boolean);
+                      return (
+                        <div key={rIdx} className="flex items-center gap-1.5">
+                          <div className="grid flex-1 gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, headers.length)}, minmax(0, 1fr))` }}>
+                            {headers.map((hdr, cIdx) => (
+                              <input
+                                key={cIdx}
+                                type="text"
+                                value={row[cIdx] ?? ''}
+                                placeholder={hdr}
+                                onChange={(e) => {
+                                  const next = csRows.map((r, ri) => {
+                                    if (ri !== rIdx) return r;
+                                    const copy = [...r];
+                                    copy[cIdx] = e.target.value;
+                                    return copy;
+                                  });
+                                  setCsRows(next);
+                                }}
+                                className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                              />
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCsRows(csRows.filter((_, ri) => ri !== rIdx))}
+                            className="p-1 text-rose-600"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {csType === 'cards' && (
+                <div className="p-3 rounded-lg bg-stone-50 dark:bg-slate-800/40 border border-stone-200 dark:border-slate-800 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">Highlight Cards ({csCards.length})</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCsCards([
+                          ...csCards,
+                          { title: '', subtitle: '', badge: '', description: '', linkUrl: '', linkLabel: '' },
+                        ])
+                      }
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-white dark:bg-slate-900 font-semibold"
+                    >
+                      <Plus className="w-3 h-3" /> Add Card
+                    </button>
+                  </div>
+                  {csCards.map((c, idx) => (
+                    <div key={idx} className="p-2.5 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-1.5">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <input
+                          type="text"
+                          value={c.badge || ''}
+                          onChange={(e) => setCsCards(csCards.map((x, i) => (i === idx ? { ...x, badge: e.target.value } : x)))}
+                          placeholder="Badge / Tag"
+                          className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 bg-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={c.title}
+                          onChange={(e) => setCsCards(csCards.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)))}
+                          placeholder="Card Title *"
+                          className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 bg-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={c.subtitle || ''}
+                          onChange={(e) => setCsCards(csCards.map((x, i) => (i === idx ? { ...x, subtitle: e.target.value } : x)))}
+                          placeholder="Subtitle"
+                          className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700 bg-transparent"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={c.description || ''}
+                          onChange={(e) => setCsCards(csCards.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x)))}
+                          placeholder="Short description..."
+                          className="flex-1 px-2 py-1 rounded border border-stone-300 dark:border-slate-700 bg-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCsCards(csCards.filter((_, i) => i !== idx))}
+                          className="p-1 text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(csType === 'html' || csType === 'brochure') && (
+                <RichTextEditor
+                  label={csType === 'brochure' ? 'Document Description / Instructions' : 'Custom Placement Content (Visual HTML Editor)'}
+                  value={csHtml}
+                  onChange={setCsHtml}
+                  uploadBinary={uploadBinary}
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCrop}
+                  minHeight={180}
+                />
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <input
+                  type="text"
+                  value={csCtaLabel}
+                  onChange={(e) => setCsCtaLabel(e.target.value)}
+                  placeholder="Optional Button Label (e.g. Download Brochure)"
+                  className="px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <div className="flex items-center gap-1.5">
+                  <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border bg-stone-50 dark:bg-slate-800 cursor-pointer shrink-0 font-semibold">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>PDF</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.docx"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (f) handleDocUpload(f, setCsCtaUrl);
+                      }}
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    value={csCtaUrl}
+                    onChange={(e) => setCsCtaUrl(e.target.value)}
+                    placeholder="Optional CTA / File URL"
+                    className="flex-1 px-2.5 py-1.5 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={csPublished}
+                  onChange={(e) => setCsPublished(e.target.checked)}
+                />
+                Publish Section Live on Placement Portal
+              </label>
+
               <button
                 type="submit"
                 className="w-full py-2 rounded-lg text-xs font-bold text-white"
                 style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                + Add Sanctioned Program
+                {editingCustomId ? 'Save Custom Data Section' : '+ Add Custom Placement Data Section'}
               </button>
             </form>
 
-            <div className="xl:col-span-8 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
-              <h3 className="text-sm font-bold">AICTE Sanctioned Programs &amp; FRA Fee Matrix ({intakeList.length})</h3>
-              <div className="overflow-x-auto">
-                <table className="cms-table cms-table-navy w-full text-xs">
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>Program</th>
-                      <th>Level</th>
-                      <th>Intake</th>
-                      <th>Fee</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {intakeList.map((prog, idx) => (
-                      <tr key={prog.id}>
-                        <td className="font-mono">{prog.code}</td>
-                        <td>
-                          <p className="font-bold">{prog.programName}</p>
-                          <p className="text-[11px] text-stone-500">{prog.accreditationStatus}</p>
-                        </td>
-                        <td>{prog.level}</td>
-                        <td className="font-bold tabular-nums">{prog.sanctionedIntake}</td>
-                        <td>{prog.annualFee}</td>
-                        <td>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={async () => {
-                                const arr = [...intakeList];
-                                [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
-                                arr.forEach((p, i) => (p.sortOrder = i + 1));
-                                setIntakeList(arr);
-                                await adminFetch('/api/admin/settings', 'PUT', { intakePrograms: arr });
-                                notify('ok', 'Reordered sanctioned programs.');
-                              }}
-                              className="p-1 rounded border disabled:opacity-30"
-                            >
-                              <ArrowUp className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === intakeList.length - 1}
-                              onClick={async () => {
-                                const arr = [...intakeList];
-                                [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
-                                arr.forEach((p, i) => (p.sortOrder = i + 1));
-                                setIntakeList(arr);
-                                await adminFetch('/api/admin/settings', 'PUT', { intakePrograms: arr });
-                                notify('ok', 'Reordered sanctioned programs.');
-                              }}
-                              className="p-1 rounded border disabled:opacity-30"
-                            >
-                              <ArrowDown className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const next = intakeList.filter((x) => x.id !== prog.id);
-                                setIntakeList(next);
-                                await adminFetch('/api/admin/settings', 'PUT', { intakePrograms: next });
-                                notify('ok', 'Removed program from intake matrix.');
-                              }}
-                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="xl:col-span-6 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+              <h3 className="text-sm font-bold">
+                Custom Placement Sections ({(placements.customSections || []).length})
+              </h3>
+              <div className="divide-y divide-stone-100 dark:divide-slate-800 text-xs">
+                {(placements.customSections || []).map((sec, idx) => (
+                  <div key={sec.id} className="py-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase text-amber-700 dark:text-amber-400">
+                        {sec.sectionType} · {sec.isPublished !== false ? 'Published' : 'Hidden'}
+                      </p>
+                      <p className="font-bold text-stone-900 dark:text-white truncate">{sec.title}</p>
+                      {sec.subtitle && <p className="text-stone-500 truncate">{sec.subtitle}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => {
+                          const ids = (placements.customSections || []).map((s) => s.id);
+                          [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+                          adminFetch('/api/admin/placements/custom-sections/reorder', 'PUT', { orderedIds: ids }).then(
+                            () => notify('ok', 'Reordered custom placement sections.'),
+                          );
+                        }}
+                        className="p-1 rounded border disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === (placements.customSections || []).length - 1}
+                        onClick={() => {
+                          const ids = (placements.customSections || []).map((s) => s.id);
+                          [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+                          adminFetch('/api/admin/placements/custom-sections/reorder', 'PUT', { orderedIds: ids }).then(
+                            () => notify('ok', 'Reordered custom placement sections.'),
+                          );
+                        }}
+                        className="p-1 rounded border disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCustomId(sec.id);
+                          setCsTitle(sec.title);
+                          setCsSubtitle(sec.subtitle || '');
+                          setCsType(sec.sectionType);
+                          setCsHeadersText((sec.tableHeaders || []).join(', ') || 'Column 1, Column 2');
+                          setCsRows(sec.tableRows && sec.tableRows.length > 0 ? sec.tableRows : [['', '']]);
+                          setCsCards(sec.cards && sec.cards.length > 0 ? sec.cards : [{ title: '', subtitle: '', badge: '', description: '' }]);
+                          setCsHtml(sec.htmlContent || '');
+                          setCsCtaLabel(sec.ctaLabel || '');
+                          setCsCtaUrl(sec.ctaUrl || '');
+                          setCsPublished(sec.isPublished !== false);
+                        }}
+                        className="p-1 rounded border"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          adminFetch(`/api/admin/placements/custom-sections/${sec.id}`, 'DELETE').then(() =>
+                            notify('ok', `Deleted section "${sec.title}".`),
+                          )
+                        }
+                        className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

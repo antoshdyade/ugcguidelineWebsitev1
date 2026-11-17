@@ -753,6 +753,46 @@ export interface PlacementStory {
   batchYear: string;
   photoUrl: string;
   quote: string;
+  entryType?: string;
+  headline?: string;
+  roleOrAward?: string;
+  isFeatured?: boolean;
+  sortOrder: number;
+}
+
+export interface PlacementNotice {
+  id: number;
+  title: string;
+  noticeDate: string;
+  category: string;
+  summary: string;
+  attachmentUrl?: string;
+  linkLabel?: string;
+  isPinned?: boolean;
+  sortOrder: number;
+}
+
+export interface PlacementCustomCard {
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  description?: string;
+  linkUrl?: string;
+  linkLabel?: string;
+}
+
+export interface PlacementCustomSection {
+  id: number;
+  title: string;
+  subtitle?: string;
+  sectionType: 'table' | 'cards' | 'brochure' | 'html';
+  htmlContent?: string;
+  tableHeaders?: string[];
+  tableRows?: string[][];
+  cards?: PlacementCustomCard[];
+  ctaLabel?: string;
+  ctaUrl?: string;
+  isPublished: boolean;
   sortOrder: number;
 }
 
@@ -764,7 +804,7 @@ export interface PlacementDrive {
   driveDate: string;
   eligibleBranches: string;
   applyUrl?: string;
-  status: 'upcoming' | 'ongoing' | 'completed';
+  status: 'upcoming' | 'ongoing' | 'open' | 'completed';
   sortOrder: number;
 }
 
@@ -784,9 +824,13 @@ export interface PlacementsData {
   coordinatorName: string;
   coordinatorEmail: string;
   coordinatorPhone: string;
+  brochureUrl?: string;
+  brochureLabel?: string;
   stats: PlacementYearStat[];
   stories: PlacementStory[];
   upcomingDrives?: PlacementDrive[];
+  notices?: PlacementNotice[];
+  customSections?: PlacementCustomSection[];
 }
 
 export type GrievanceStatus = 'submitted' | 'in_review' | 'resolved' | 'closed';

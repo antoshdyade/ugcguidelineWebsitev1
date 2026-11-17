@@ -678,6 +678,8 @@ CREATE TABLE IF NOT EXISTS placement_stats (
 
 CREATE TABLE IF NOT EXISTS placement_stories (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  entry_type VARCHAR(80) NOT NULL DEFAULT 'Campus Placement',
+  headline VARCHAR(240) NULL,
   student_name VARCHAR(160) NOT NULL,
   batch_year VARCHAR(30) NOT NULL,
   branch VARCHAR(120) NOT NULL,
@@ -686,6 +688,32 @@ CREATE TABLE IF NOT EXISTS placement_stories (
   package_lpa VARCHAR(40) NOT NULL,
   photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
   quote_text TEXT NULL,
+  is_featured TINYINT(1) DEFAULT 0,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS placement_notices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(260) NOT NULL,
+  notice_date VARCHAR(30) NOT NULL,
+  category VARCHAR(100) NOT NULL DEFAULT 'Campus Drive Circular',
+  summary TEXT NULL,
+  attachment_url VARCHAR(500) NULL,
+  link_label VARCHAR(120) NULL,
+  is_pinned TINYINT(1) DEFAULT 0,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS placement_custom_sections (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(240) NOT NULL,
+  subtitle VARCHAR(320) NULL,
+  section_type ENUM('table','cards','brochure','html') DEFAULT 'table',
+  html_content MEDIUMTEXT NULL,
+  payload_json MEDIUMTEXT NULL,
+  cta_label VARCHAR(140) NULL,
+  cta_url VARCHAR(500) NULL,
+  is_published TINYINT(1) DEFAULT 1,
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 

@@ -86,8 +86,8 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <section class="alumni-hero" style="margin-bottom:1.25rem;">
-  <span style="display:inline-block;padding:0.2rem 0.65rem;border-radius:999px;background:rgba(255,255,255,0.14);font-size:0.72rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;"><?= e((string)$gCfg['heroBadge']) ?></span>
-  <h1 style="margin:0.45rem 0 0.35rem;font-family:'Playfair Display',serif;font-size:clamp(1.45rem,2.6vw,2.05rem);color:#fff;">
+  <span style="display:block;font-size:0.72rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#FCD34D;"><?= e((string)$gCfg['heroBadge']) ?></span>
+  <h1 style="margin:0.4rem 0 0.35rem;font-family:'Playfair Display',serif;font-size:clamp(1.45rem,2.6vw,2.05rem);color:#fff;">
     <?= e((string)$gCfg['heroTitle']) ?>
   </h1>
   <p style="margin:0;color:#E2E8F0;max-width:820px;font-size:0.93rem;"><?= e((string)$gCfg['heroSubtitle']) ?></p>
@@ -95,10 +95,10 @@ require_once __DIR__ . '/includes/header.php';
 
 <!-- Live Anonymized SGRC Resolution Metrics Strip -->
 <section class="grid-4" style="margin-bottom:1.35rem;">
-  <div class="card"><div style="font-size:0.75rem;color:var(--text-muted);font-weight:700;">Total Grievances Logged</div><div style="font-size:1.75rem;font-weight:700;color:var(--primary-color);"><?= (int)$summaryCounts['total'] ?></div></div>
-  <div class="card"><div style="font-size:0.75rem;color:var(--text-muted);font-weight:700;">Resolved Cases</div><div style="font-size:1.75rem;font-weight:700;color:#047857;"><?= (int)$summaryCounts['resolved'] ?></div></div>
-  <div class="card"><div style="font-size:0.75rem;color:var(--text-muted);font-weight:700;">Active / Under SGRC Review</div><div style="font-size:1.75rem;font-weight:700;color:var(--secondary-color);"><?= (int)$summaryCounts['in_progress'] ?></div></div>
-  <div class="card" style="border-left:4px solid #DC2626;"><div style="font-size:0.75rem;color:#991B1B;font-weight:700;">24x7 Anti-Ragging Squad</div><div style="font-size:1.05rem;font-weight:700;color:#B91C1C;"><?= e((string)$gCfg['antiRaggingSquadPhone']) ?></div><small style="color:var(--text-muted);">UGC Helpline: <?= e((string)($settings['anti_ragging_helpline'] ?? '1800-180-5522')) ?></small></div>
+  <div class="card"><div style="font-size:0.75rem;color:var(--text-muted);font-weight:700;">Total Grievances Logged</div><div style="font-size:1.75rem;font-weight:700;color:var(--primary-color);font-variant-numeric:tabular-nums;"><?= (int)$summaryCounts['total'] ?></div></div>
+  <div class="card"><div style="font-size:0.75rem;color:var(--text-muted);font-weight:700;">Resolved Cases</div><div style="font-size:1.75rem;font-weight:700;color:#047857;font-variant-numeric:tabular-nums;"><?= (int)$summaryCounts['resolved'] ?></div></div>
+  <div class="card"><div style="font-size:0.75rem;color:var(--text-muted);font-weight:700;">Active / Under SGRC Review</div><div style="font-size:1.75rem;font-weight:700;color:var(--secondary-color);font-variant-numeric:tabular-nums;"><?= (int)$summaryCounts['in_progress'] ?></div></div>
+  <div class="card" style="border-color:#FECACA;background:#FEF2F2;"><div style="font-size:0.75rem;color:#991B1B;font-weight:700;">24x7 Anti-Ragging Squad</div><div style="font-size:1.05rem;font-weight:700;color:#B91C1C;font-variant-numeric:tabular-nums;"><?= e((string)$gCfg['antiRaggingSquadPhone']) ?></div><small style="color:var(--text-muted);font-variant-numeric:tabular-nums;">UGC Helpline: <?= e((string)($settings['anti_ragging_helpline'] ?? '1800-180-5522')) ?></small></div>
 </section>
 
 <?php if ($msg): ?><div class="alert-ok"><?= e($msg) ?></div><?php endif; ?>
@@ -197,11 +197,11 @@ require_once __DIR__ . '/includes/header.php';
     </div>
 
     <!-- University Appointed Ombudsperson Portrait Card -->
-    <div class="card" style="display:flex;gap:1rem;align-items:center;border-left:4px solid var(--primary-color);">
-      <img src="<?= e(mediaUrl((string)$gCfg['ombudspersonPhoto'], 'assets/images/principal.jpg')) ?>" alt="<?= e((string)$gCfg['ombudspersonName']) ?>" style="width:74px;height:74px;border-radius:12px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">
+    <div class="card" style="display:flex;gap:1rem;align-items:center;">
+      <img src="<?= e(mediaUrl((string)$gCfg['ombudspersonPhoto'], 'assets/images/principal.jpg')) ?>" alt="<?= e((string)$gCfg['ombudspersonName']) ?>" style="width:74px;height:74px;border-radius:10px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">
       <div>
-        <span class="alumni-pill" style="font-size:0.68rem;">UGC Mandated Ombudsperson</span>
-        <h3 style="margin:0.25rem 0 0.1rem;font-size:1rem;color:var(--primary-color);"><?= e((string)$gCfg['ombudspersonName']) ?></h3>
+        <span style="display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--secondary-color);">UGC Mandated Ombudsperson</span>
+        <h3 style="margin:0.2rem 0 0.1rem;font-size:1rem;color:var(--primary-color);"><?= e((string)$gCfg['ombudspersonName']) ?></h3>
         <div style="font-size:0.8rem;font-weight:600;color:var(--secondary-color);"><?= e((string)$gCfg['ombudspersonTitle']) ?></div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.2rem;">
           Email: <?= e((string)$gCfg['ombudspersonEmail']) ?> · Phone: <?= e((string)$gCfg['ombudspersonPhone']) ?>
@@ -235,8 +235,8 @@ require_once __DIR__ . '/includes/header.php';
         <article style="display:flex;gap:0.85rem;align-items:flex-start;border:1px solid var(--border-color);border-radius:12px;padding:0.9rem;background:var(--surface-bg);">
           <img src="<?= e(mediaUrl((string)($cm['photoUrl'] ?? ''), 'assets/images/principal.jpg')) ?>" alt="<?= e((string)($cm['name'] ?? '')) ?>" style="width:66px;height:66px;border-radius:10px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">
           <div>
-            <span class="alumni-pill" style="font-size:0.68rem;"><?= e((string)($cm['role'] ?? 'Member')) ?></span>
-            <h3 style="margin:0.25rem 0 0.1rem;font-size:0.98rem;color:var(--primary-color);"><?= e((string)($cm['name'] ?? '')) ?></h3>
+            <span style="display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--secondary-color);"><?= e((string)($cm['role'] ?? 'Member')) ?></span>
+            <h3 style="margin:0.2rem 0 0.1rem;font-size:0.98rem;color:var(--primary-color);"><?= e((string)($cm['name'] ?? '')) ?></h3>
             <div style="font-size:0.79rem;font-weight:600;color:var(--secondary-color);"><?= e((string)($cm['designation'] ?? '')) ?></div>
             <div style="font-size:0.77rem;color:var(--text-muted);"><?= e((string)($cm['department'] ?? '')) ?></div>
             <div style="font-size:0.76rem;color:var(--text-muted);margin-top:0.2rem;">

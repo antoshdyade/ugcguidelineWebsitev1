@@ -52,6 +52,8 @@ try {
     $hasHomeComponents = in_array('custom_home_components', $tables, true)
         && in_array('conferences', $tables, true)
         && in_array('placement_stats', $tables, true)
+        && in_array('placement_notices', $tables, true)
+        && in_array('placement_custom_sections', $tables, true)
         && in_array('grievances', $tables, true)
         && in_array('alumni_achievers', $tables, true)
         && in_array('alumni_pledges', $tables, true);

@@ -9,11 +9,31 @@ import type {
   GrievanceTicket,
   HeaderPortalMenuItem,
   PlacementsData,
+  PlacementNotice,
+  PlacementStory,
   PlacementYearStat,
   SanctionedIntakeProgram,
 } from '../types/cms';
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
+
+export const PLACEMENT_NOTICE_CATEGORY_PRESETS = [
+  'Campus Drive Notice',
+  'Interview Shortlist',
+  'Pre-Placement Talk',
+  'Training Schedule',
+  'Internship Circular',
+  'Student Circular',
+] as const;
+
+export const PLACEMENT_CONGRATULATION_TYPE_PRESETS = [
+  'Campus Placement',
+  'Dream / Super-Dream Offer',
+  'National Hackathon / Award',
+  'GATE / GRE / CAT Ranker',
+  'Core Industry Offer',
+  'Paid Internship Conversion',
+] as const;
 
 export const CONFERENCE_SUBMISSION_PLATFORM_PRESETS = [
   'Microsoft CMT',
@@ -443,6 +463,59 @@ export function computePlacementMetrics(stats: PlacementYearStat[]) {
   return { eligible, placed, highest, avg: avg.toFixed(2), overallRate, rowsWithPct };
 }
 
+export function filterPlacementNotices(
+  notices: PlacementNotice[] | undefined,
+  category = 'All',
+  query = '',
+): PlacementNotice[] {
+  const list = [...(notices || [])];
+  const catNorm = category.trim().toLowerCase();
+  const qNorm = query.trim().toLowerCase();
+  return list
+    .filter((n) => {
+      if (catNorm && catNorm !== 'all' && (n.category || '').trim().toLowerCase() !== catNorm) {
+        return false;
+      }
+      if (qNorm) {
+        const hay = `${n.title} ${n.category} ${n.summary} ${n.noticeDate}`.toLowerCase();
+        if (!hay.includes(qNorm)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const pinDiff = Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned));
+      if (pinDiff !== 0) return pinDiff;
+      return (a.sortOrder ?? 999) - (b.sortOrder ?? 999);
+    });
+}
+
+export function filterCongratulationsStories(
+  stories: PlacementStory[] | undefined,
+  entryType = 'All',
+  query = '',
+): PlacementStory[] {
+  const list = [...(stories || [])];
+  const typeNorm = entryType.trim().toLowerCase();
+  const qNorm = query.trim().toLowerCase();
+  return list
+    .filter((s) => {
+      const itemType = (s.entryType || 'Campus Placement').trim().toLowerCase();
+      if (typeNorm && typeNorm !== 'all' && itemType !== typeNorm) {
+        return false;
+      }
+      if (qNorm) {
+        const hay = `${s.studentName} ${s.company} ${s.branch} ${s.packageLpa} ${s.roleOrAward || ''} ${s.headline || ''}`.toLowerCase();
+        if (!hay.includes(qNorm)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const featDiff = Number(Boolean(b.isFeatured)) - Number(Boolean(a.isFeatured));
+      if (featDiff !== 0) return featDiff;
+      return (a.sortOrder ?? 999) - (b.sortOrder ?? 999);
+    });
+}
+
 /**
  * Non-destructive forward-compatible database schema upgrader.
  * Guarantees ZERO data loss on code updates, design changes, feature additions,
@@ -550,11 +623,37 @@ export function migrateDatabaseInPlace(
       ? existing.settings.intakePrograms
       : structuredClone(seed.settings.intakePrograms || DEFAULT_INTAKE_PROGRAMS);
 
+  const rawStories = Array.isArray(placements.stories)
+    ? placements.stories
+    : ((upgraded = true), structuredClone(seed.placements?.stories || []));
+  const normalizedStories = rawStories.map((st) => {
+    if (st.entryType && st.headline !== undefined && st.roleOrAward !== undefined) {
+      return st;
+    }
+    upgraded = true;
+    return {
+      ...st,
+      entryType: st.entryType || 'Campus Placement',
+      headline: st.headline ?? `${st.company} — ${st.packageLpa}`,
+      roleOrAward: st.roleOrAward || 'Selected Scholar',
+      isFeatured: st.isFeatured ?? true,
+    };
+  });
+
   const mergedPlacements: PlacementsData = {
     ...placements,
+    stories: normalizedStories,
+    brochureUrl: placements.brochureUrl ?? seed.placements?.brochureUrl ?? '',
+    brochureLabel: placements.brochureLabel ?? seed.placements?.brochureLabel ?? 'Download Placement Brochure & Profile',
     upcomingDrives: Array.isArray(placements.upcomingDrives)
       ? placements.upcomingDrives
-      : structuredClone(seed.placements?.upcomingDrives || []),
+      : ((upgraded = true), structuredClone(seed.placements?.upcomingDrives || [])),
+    notices: Array.isArray(placements.notices)
+      ? placements.notices
+      : ((upgraded = true), structuredClone(seed.placements?.notices || [])),
+    customSections: Array.isArray(placements.customSections)
+      ? placements.customSections
+      : ((upgraded = true), structuredClone(seed.placements?.customSections || [])),
   };
 
   const mergedSettings = {

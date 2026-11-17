@@ -3918,11 +3918,13 @@ async function startServer() {
   app.put('/api/admin/placements/settings', requireAdmin('placements'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const pl = ensurePlacementsState();
-    const { summaryNote, coordinatorName, coordinatorEmail, coordinatorPhone } = req.body;
+    const { summaryNote, coordinatorName, coordinatorEmail, coordinatorPhone, brochureUrl, brochureLabel } = req.body;
     if (summaryNote !== undefined) pl.summaryNote = String(summaryNote);
     if (coordinatorName !== undefined) pl.coordinatorName = String(coordinatorName);
     if (coordinatorEmail !== undefined) pl.coordinatorEmail = String(coordinatorEmail);
     if (coordinatorPhone !== undefined) pl.coordinatorPhone = String(coordinatorPhone);
+    if (brochureUrl !== undefined) pl.brochureUrl = String(brochureUrl).trim();
+    if (brochureLabel !== undefined) pl.brochureLabel = String(brochureLabel).trim();
     addAudit(actor, 'UPDATE_PLACEMENT_INFO', 'Placements', pl.coordinatorName);
     saveDatabase();
     res.json(pl);
@@ -3987,7 +3989,7 @@ async function startServer() {
     const pl = ensurePlacementsState();
     const b = req.body as Partial<PlacementStory>;
     if (!b.studentName || !b.company) {
-      res.status(400).json({ error: 'Student name and company are required.' });
+      res.status(400).json({ error: 'Student name and company / organization are required.' });
       return;
     }
     const nextId = Math.max(0, ...pl.stories.map((s) => s.id)) + 1;
@@ -4000,6 +4002,10 @@ async function startServer() {
       batchYear: String(b.batchYear || '2026').trim(),
       photoUrl: String(b.photoUrl || '/src/assets/images/campus_convocation_1794512597749.jpg').trim(),
       quote: String(b.quote || '').trim(),
+      entryType: String(b.entryType || 'Campus Placement').trim(),
+      headline: String(b.headline || '').trim(),
+      roleOrAward: String(b.roleOrAward || '').trim(),
+      isFeatured: Boolean(b.isFeatured),
       sortOrder: Number(b.sortOrder ?? pl.stories.length + 1),
     };
     pl.stories.push(story);
@@ -4140,6 +4146,8 @@ async function startServer() {
       return;
     }
     const nextId = Math.max(0, ...pl.upcomingDrives.map((d) => d.id)) + 1;
+    const driveStatus: 'upcoming' | 'ongoing' | 'open' | 'completed' =
+      b.status === 'ongoing' || b.status === 'open' || b.status === 'completed' ? b.status : 'upcoming';
     const drive = {
       id: nextId,
       company: String(b.company).trim(),
@@ -4148,13 +4156,45 @@ async function startServer() {
       driveDate: String(b.driveDate || new Date().toISOString().slice(0, 10)).trim(),
       eligibleBranches: String(b.eligibleBranches || 'All B.Tech Branches').trim(),
       applyUrl: b.applyUrl ? String(b.applyUrl).trim() : '',
-      status: (b.status === 'ongoing' || b.status === 'completed' ? b.status : 'upcoming') as 'upcoming' | 'ongoing' | 'completed',
+      status: driveStatus,
       sortOrder: pl.upcomingDrives.length + 1,
     };
     pl.upcomingDrives.push(drive);
     addAudit(actor, 'CREATE_PLACEMENT_DRIVE', 'Placements', drive.company);
     saveDatabase();
     res.status(201).json(drive);
+  });
+
+  app.put('/api/admin/placements/drives/reorder', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.upcomingDrives = pl.upcomingDrives ?? [];
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (Array.isArray(orderedIds)) {
+      orderedIds.forEach((id, idx) => {
+        const d = pl.upcomingDrives!.find((x) => x.id === Number(id));
+        if (d) d.sortOrder = idx + 1;
+      });
+      pl.upcomingDrives.sort((a, b) => a.sortOrder - b.sortOrder);
+      addAudit(actor, 'REORDER_PLACEMENT_DRIVES', 'Placements', 'Updated drives order');
+      saveDatabase();
+    }
+    res.json(pl.upcomingDrives);
+  });
+
+  app.put('/api/admin/placements/drives/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.upcomingDrives = pl.upcomingDrives ?? [];
+    const drive = pl.upcomingDrives.find((d) => d.id === Number(req.params.id));
+    if (!drive) {
+      res.status(404).json({ error: 'Placement drive not found.' });
+      return;
+    }
+    Object.assign(drive, req.body);
+    addAudit(actor, 'UPDATE_PLACEMENT_DRIVE', 'Placements', drive.company);
+    saveDatabase();
+    res.json(drive);
   });
 
   app.delete('/api/admin/placements/drives/:id', requireAdmin('placements'), (req, res) => {
@@ -4168,6 +4208,161 @@ async function startServer() {
     }
     const [removed] = pl.upcomingDrives.splice(idx, 1);
     addAudit(actor, 'DELETE_PLACEMENT_DRIVE', 'Placements', removed.company);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // Placement Student Notices & Circulars CRUD
+  app.post('/api/admin/placements/notices', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.notices = pl.notices ?? [];
+    const b = req.body;
+    if (!b.title || !String(b.title).trim()) {
+      res.status(400).json({ error: 'Notice title is required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...pl.notices.map((n) => n.id)) + 1;
+    const notice = {
+      id: nextId,
+      title: String(b.title).trim(),
+      noticeDate: String(b.noticeDate || new Date().toISOString().slice(0, 10)).trim(),
+      category: String(b.category || 'Student Circular').trim(),
+      summary: String(b.summary || '').trim(),
+      attachmentUrl: b.attachmentUrl ? String(b.attachmentUrl).trim() : '',
+      linkLabel: b.linkLabel ? String(b.linkLabel).trim() : '',
+      isPinned: Boolean(b.isPinned),
+      sortOrder: Number(b.sortOrder ?? pl.notices.length + 1),
+    };
+    pl.notices.push(notice);
+    addAudit(actor, 'CREATE_PLACEMENT_NOTICE', 'Placements', notice.title);
+    saveDatabase();
+    res.status(201).json(notice);
+  });
+
+  app.put('/api/admin/placements/notices/reorder', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.notices = pl.notices ?? [];
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (Array.isArray(orderedIds)) {
+      orderedIds.forEach((id, idx) => {
+        const n = pl.notices!.find((x) => x.id === Number(id));
+        if (n) n.sortOrder = idx + 1;
+      });
+      pl.notices.sort((a, b) => a.sortOrder - b.sortOrder);
+      addAudit(actor, 'REORDER_PLACEMENT_NOTICES', 'Placements', 'Updated placement notices order');
+      saveDatabase();
+    }
+    res.json(pl.notices);
+  });
+
+  app.put('/api/admin/placements/notices/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.notices = pl.notices ?? [];
+    const notice = pl.notices.find((n) => n.id === Number(req.params.id));
+    if (!notice) {
+      res.status(404).json({ error: 'Placement notice not found.' });
+      return;
+    }
+    Object.assign(notice, req.body);
+    addAudit(actor, 'UPDATE_PLACEMENT_NOTICE', 'Placements', notice.title);
+    saveDatabase();
+    res.json(notice);
+  });
+
+  app.delete('/api/admin/placements/notices/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.notices = pl.notices ?? [];
+    const idx = pl.notices.findIndex((n) => n.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Placement notice not found.' });
+      return;
+    }
+    const [removed] = pl.notices.splice(idx, 1);
+    addAudit(actor, 'DELETE_PLACEMENT_NOTICE', 'Placements', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // Placement Custom Data Sections CRUD (Tables, Cards, Brochures, Rich HTML)
+  app.post('/api/admin/placements/custom-sections', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.customSections = pl.customSections ?? [];
+    const b = req.body;
+    if (!b.title || !String(b.title).trim()) {
+      res.status(400).json({ error: 'Custom section title is required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...pl.customSections.map((s) => s.id)) + 1;
+    const section = {
+      id: nextId,
+      title: String(b.title).trim(),
+      subtitle: b.subtitle ? String(b.subtitle).trim() : '',
+      sectionType: (['table', 'cards', 'brochure', 'html'].includes(b.sectionType) ? b.sectionType : 'table') as 'table' | 'cards' | 'brochure' | 'html',
+      htmlContent: b.htmlContent ? String(b.htmlContent) : '',
+      tableHeaders: Array.isArray(b.tableHeaders) ? b.tableHeaders.map((h: unknown) => String(h)) : [],
+      tableRows: Array.isArray(b.tableRows)
+        ? b.tableRows.map((r: unknown) => (Array.isArray(r) ? r.map((c) => String(c)) : []))
+        : [],
+      cards: Array.isArray(b.cards) ? b.cards : [],
+      ctaLabel: b.ctaLabel ? String(b.ctaLabel).trim() : '',
+      ctaUrl: b.ctaUrl ? String(b.ctaUrl).trim() : '',
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder ?? pl.customSections.length + 1),
+    };
+    pl.customSections.push(section);
+    addAudit(actor, 'CREATE_PLACEMENT_CUSTOM_SECTION', 'Placements', section.title);
+    saveDatabase();
+    res.status(201).json(section);
+  });
+
+  app.put('/api/admin/placements/custom-sections/reorder', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.customSections = pl.customSections ?? [];
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (Array.isArray(orderedIds)) {
+      orderedIds.forEach((id, idx) => {
+        const sec = pl.customSections!.find((x) => x.id === Number(id));
+        if (sec) sec.sortOrder = idx + 1;
+      });
+      pl.customSections.sort((a, b) => a.sortOrder - b.sortOrder);
+      addAudit(actor, 'REORDER_PLACEMENT_SECTIONS', 'Placements', 'Updated custom sections order');
+      saveDatabase();
+    }
+    res.json(pl.customSections);
+  });
+
+  app.put('/api/admin/placements/custom-sections/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.customSections = pl.customSections ?? [];
+    const sec = pl.customSections.find((s) => s.id === Number(req.params.id));
+    if (!sec) {
+      res.status(404).json({ error: 'Custom placement section not found.' });
+      return;
+    }
+    Object.assign(sec, req.body);
+    addAudit(actor, 'UPDATE_PLACEMENT_CUSTOM_SECTION', 'Placements', sec.title);
+    saveDatabase();
+    res.json(sec);
+  });
+
+  app.delete('/api/admin/placements/custom-sections/:id', requireAdmin('placements'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const pl = ensurePlacementsState();
+    pl.customSections = pl.customSections ?? [];
+    const idx = pl.customSections.findIndex((s) => s.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Custom placement section not found.' });
+      return;
+    }
+    const [removed] = pl.customSections.splice(idx, 1);
+    addAudit(actor, 'DELETE_PLACEMENT_CUSTOM_SECTION', 'Placements', removed.title);
     saveDatabase();
     res.json({ ok: true });
   });

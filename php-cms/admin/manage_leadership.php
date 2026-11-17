@@ -88,7 +88,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <?php endforeach; ?>
     </div>
     <textarea name="bio" rows="2" placeholder="Profile bio / message..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"><?= e($editing['bio'] ?? '') ?></textarea>
-    <label style="display:block;font-size:0.85rem;margin-bottom:0.75rem;">Upload Officer Photo (JPG/PNG/WEBP): <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"></label>
+    <label style="display:block;font-size:0.85rem;margin-bottom:0.75rem;">Upload Officer Photo (1:1 Auto-Crop, JPG/PNG/WEBP): <input type="file" name="photo" data-aspect="1:1" accept="image/jpeg,image/png,image/webp"></label>
     <button type="submit" class="btn-primary"><?= $editing ? 'Update Officer' : 'Add Officer' ?></button>
     <?php if ($editing): ?><a href="manage_leadership.php" class="btn-secondary">Cancel</a><?php endif; ?>
   </form>

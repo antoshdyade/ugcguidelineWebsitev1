@@ -470,3 +470,31 @@ test('computePlacementMetrics computes percentage and aggregate KPIs accurately'
   assert.equal(m.rowsWithPct[0].placementRatePct, 92);
 });
 
+import {
+  filterCongratulationsStories,
+  filterPlacementNotices,
+} from './collegeFeaturesLogic';
+
+test('filterPlacementNotices prioritizes pinned circulars and filters by category/search', () => {
+  const notices = [
+    { id: 1, title: 'TCS Digital Drive Schedule', noticeDate: '2026-12-01', category: 'Campus Drive Notice', summary: 'Pool drive', isPinned: false, sortOrder: 1 },
+    { id: 2, title: 'Resume Verification Mandatory', noticeDate: '2026-11-28', category: 'Student Circular', summary: 'Bring marksheets', isPinned: true, sortOrder: 2 },
+  ];
+  const all = filterPlacementNotices(notices, 'All', '');
+  assert.equal(all[0].id, 2);
+  assert.equal(filterPlacementNotices(notices, 'Campus Drive Notice', '').length, 1);
+  assert.equal(filterPlacementNotices(notices, 'All', 'marksheets').length, 1);
+});
+
+test('filterCongratulationsStories prioritizes featured winners and filters by entry type/search', () => {
+  const stories = [
+    { id: 1, studentName: 'Aarav', branch: 'CSE', company: 'Microsoft', packageLpa: '22 LPA', batchYear: '2026', photoUrl: '/a.jpg', quote: '', entryType: 'Campus Placement', isFeatured: false, sortOrder: 1 },
+    { id: 2, studentName: 'Sneha', branch: 'E&TC', company: 'SIH Grand Finale', packageLpa: '1st Prize', batchYear: '2026', photoUrl: '/b.jpg', quote: '', entryType: 'National Hackathon / Award', isFeatured: true, sortOrder: 2 },
+  ];
+  const all = filterCongratulationsStories(stories, 'All', '');
+  assert.equal(all[0].id, 2);
+  assert.equal(filterCongratulationsStories(stories, 'National Hackathon / Award', '').length, 1);
+  assert.equal(filterCongratulationsStories(stories, 'All', 'microsoft').length, 1);
+});
+
+

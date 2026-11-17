@@ -111,7 +111,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
   <?php if (canAccessResource($user, 'placements')): ?>
     <a href="<?= e(baseUrl('admin/manage_portals.php?tab=placements')) ?>" class="admin-stat-card">
       <h3 style="margin:0 0 0.3rem;">Placements Desk (T&amp;P)</h3>
-      <p style="font-size:0.82rem;color:#57534E;margin:0;">Branch-wise placement statistics, upcoming campus drives, sanctioned intake &amp; achiever stories (<?= $placementCount ?> records).</p>
+      <p style="font-size:0.82rem;color:#57534E;margin:0;">Student notices, Congratulations Desk photos, branch statistics, drives &amp; custom T&amp;P data (<?= $placementCount ?> records).</p>
     </a>
   <?php endif; ?>
   <?php if (canAccessResource($user, 'grievances')): ?>

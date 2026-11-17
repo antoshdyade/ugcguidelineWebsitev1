@@ -38,6 +38,8 @@ function backupTablesList(): array
         'conference_registrations',
         'placement_stats',
         'placement_stories',
+        'placement_notices',
+        'placement_custom_sections',
         'grievances',
         'cms_kv_store',
     ];

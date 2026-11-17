@@ -396,32 +396,98 @@ function saveGrievancePortalConfig(PDO $pdo, array $cfg): void
         ->execute([json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
 }
 
-function defaultSanctionedIntakePrograms(): array
+function placementNoticeCategoryPresets(): array
 {
     return [
-        ['id' => 'in1', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Computer Science & Engineering', 'code' => '622024510', 'intake' => 180, 'nbaStatus' => 'NBA Accredited (Up to 2027)', 'annualFee' => 'Rs. 1,14,000'],
-        ['id' => 'in2', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Electronics & Telecommunication Engg.', 'code' => '622037210', 'intake' => 120, 'nbaStatus' => 'NBA Accredited', 'annualFee' => 'Rs. 1,14,000'],
-        ['id' => 'in3', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Mechanical Engineering', 'code' => '622061210', 'intake' => 120, 'nbaStatus' => 'NBA Accredited', 'annualFee' => 'Rs. 1,14,000'],
-        ['id' => 'in4', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Civil Engineering', 'code' => '622019110', 'intake' => 120, 'nbaStatus' => 'AICTE Approved', 'annualFee' => 'Rs. 1,14,000'],
-        ['id' => 'in5', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Electrical Engineering', 'code' => '622029310', 'intake' => 60, 'nbaStatus' => 'AICTE Approved', 'annualFee' => 'Rs. 1,14,000'],
-        ['id' => 'in6', 'degreeLevel' => 'UG (B.Tech)', 'programName' => 'Electronics & Computer Engineering', 'code' => '622084410', 'intake' => 60, 'nbaStatus' => 'AICTE Approved', 'annualFee' => 'Rs. 1,14,000'],
-        ['id' => 'in7', 'degreeLevel' => 'PG (M.Tech / MBA)', 'programName' => 'M.Tech Structural, Design, CSE & E&TC + MBA', 'code' => '622010110', 'intake' => 96, 'nbaStatus' => 'University Approved', 'annualFee' => 'Rs. 88,000'],
+        'Campus Drive Circular',
+        'Pre-Placement Talk',
+        'Training & CRT Schedule',
+        'Internship Notice',
+        'Shortlist & Result',
+        'General Information',
     ];
 }
 
-function getSanctionedIntakePrograms(PDO $pdo): array
+function placementCongratulationTypePresets(): array
 {
-    try {
-        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'sanctioned_intake_programs' LIMIT 1")->fetchColumn();
-        if ($raw) {
-            $dec = json_decode((string)$raw, true);
-            if (is_array($dec) && count($dec) > 0) {
-                return $dec;
-            }
-        }
-    } catch (Throwable $ignored) {
-    }
-    return defaultSanctionedIntakePrograms();
+    return [
+        'Campus Placement',
+        'Dream / Super-Dream Offer',
+        'National Hackathon / Award',
+        'GATE / GRE / CAT Ranker',
+        'Core Industry Offer',
+        'Paid Internship Conversion',
+    ];
+}
+
+function defaultPlacementNotices(): array
+{
+    return [
+        [
+            'title' => 'TCS Digital & Prime Campus Drive 2026 — Registration & Eligibility Guidelines',
+            'notice_date' => '2026-11-18',
+            'category' => 'Campus Drive Circular',
+            'summary' => 'Final-year B.Tech (CSE, E&TC, ECS, Electrical) students with 6.5+ CGPA and zero active backlogs must register on the T&P Portal before 25 Nov 2026.',
+            'attachment_url' => '',
+            'link_label' => 'View Eligibility Circular',
+            'is_pinned' => 1,
+        ],
+        [
+            'title' => '7-Day Coding, Aptitude & Technical Interview Readiness Bootcamp (Batch 2026-27)',
+            'notice_date' => '2026-11-14',
+            'category' => 'Training & CRT Schedule',
+            'summary' => 'Mandatory DSA, SQL, System Design, and Group Discussion mock panels conducted daily 2:00 PM – 5:00 PM at the T&P Innovation Centre.',
+            'attachment_url' => '',
+            'link_label' => '',
+            'is_pinned' => 1,
+        ],
+        [
+            'title' => 'Bharat Forge & Atlas Copco Core Engineering Pre-Placement Talk & Written Test',
+            'notice_date' => '2026-11-10',
+            'category' => 'Pre-Placement Talk',
+            'summary' => 'Pre-placement briefing for Mechanical & Electrical eligible candidates will be held in Seminar Hall B followed by an online technical screening.',
+            'attachment_url' => '',
+            'link_label' => '',
+            'is_pinned' => 0,
+        ],
+    ];
+}
+
+function defaultPlacementCustomSections(): array
+{
+    return [
+        [
+            'title' => 'Semester-Wise Career Readiness & Industry Training Matrix',
+            'subtitle' => 'Structured four-year employability curriculum across aptitude, competitive coding, and core domain labs.',
+            'section_type' => 'table',
+            'html_content' => '',
+            'payload_json' => json_encode([
+                'headers' => ['Academic Stage', 'Core Training Module', 'Delivery Partner / Lab', 'Assessment Outcome'],
+                'rows' => [
+                    ['SY (Sem III & IV)', 'Quantitative Aptitude, Logic & C/Python Foundation', 'Internal CRT Wing', 'AMCAT / HackerRank Baseline'],
+                    ['TY (Sem V & VI)', 'Full-Stack, DSA, Core CAD/FEA & Embedded Prototyping', 'Tata CIII / Industry Mentors', '2 Minor Live Industry Projects'],
+                    ['B.Tech (Sem VII)', 'Company-Specific Coding Sprints & HR Panel Mock Drives', 'T&P Cell & Alumni Panel', 'Tier-1 & Core Drive Readiness'],
+                ],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'cta_label' => '',
+            'cta_url' => '',
+            'is_published' => 1,
+        ],
+        [
+            'title' => 'T&P Infrastructure & Campus Recruitment Facilities',
+            'subtitle' => 'Dedicated facilities supporting simultaneous corporate recruitment drives and proctored assessments.',
+            'section_type' => 'cards',
+            'html_content' => '',
+            'payload_json' => json_encode([
+                ['title' => 'Central Assessment Lab', 'metric' => '420 Thin-Client Nodes', 'description' => '1 Gbps leased line, UPS backup, and proctored online coding test environment.'],
+                ['title' => 'Auditorium & GD Suites', 'metric' => '350-Seat Hall + 6 Rooms', 'description' => 'Acoustic auditorium for Pre-Placement Talks plus 6 air-conditioned interview cabins.'],
+                ['title' => 'Industry Sponsored Labs', 'metric' => 'Tata CIII & Texas Instruments', 'description' => 'Real-time exposure to robotics, EV diagnostics, and cloud deployment toolchains.'],
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'cta_label' => '',
+            'cta_url' => '',
+            'is_published' => 1,
+        ],
+    ];
 }
 
 function defaultPlacementDrives(): array
@@ -1033,7 +1099,6 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
         foreach ([
             'portal_menu_items'         => defaultPortalMenuItems(),
             'grievance_portal_config'   => defaultGrievancePortalConfig(),
-            'sanctioned_intake_programs' => defaultSanctionedIntakePrograms(),
             'placement_upcoming_drives' => defaultPlacementDrives(),
         ] as $kvKey => $kvDefault) {
             $chk = $pdo->prepare("SELECT key_name FROM cms_kv_store WHERE key_name = ? LIMIT 1");
@@ -1098,6 +1163,8 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS placement_stories (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                entry_type VARCHAR(80) NOT NULL DEFAULT 'Campus Placement',
+                headline VARCHAR(240) NULL,
                 student_name VARCHAR(160) NOT NULL,
                 batch_year VARCHAR(30) NOT NULL,
                 branch VARCHAR(120) NOT NULL,
@@ -1106,6 +1173,47 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 package_lpa VARCHAR(40) NOT NULL,
                 photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
                 quote_text TEXT NULL,
+                is_featured TINYINT(1) DEFAULT 0,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+
+        foreach ([
+            "ALTER TABLE placement_stories ADD COLUMN entry_type VARCHAR(80) NOT NULL DEFAULT 'Campus Placement' AFTER id",
+            "ALTER TABLE placement_stories ADD COLUMN headline VARCHAR(240) NULL AFTER entry_type",
+            "ALTER TABLE placement_stories ADD COLUMN is_featured TINYINT(1) DEFAULT 0 AFTER quote_text",
+        ] as $plAlter) {
+            try {
+                $pdo->exec($plAlter);
+            } catch (Throwable $ignoredCol) {
+            }
+        }
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS placement_notices (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(260) NOT NULL,
+                notice_date VARCHAR(30) NOT NULL,
+                category VARCHAR(100) NOT NULL DEFAULT 'Campus Drive Circular',
+                summary TEXT NULL,
+                attachment_url VARCHAR(500) NULL,
+                link_label VARCHAR(120) NULL,
+                is_pinned TINYINT(1) DEFAULT 0,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS placement_custom_sections (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(240) NOT NULL,
+                subtitle VARCHAR(320) NULL,
+                section_type ENUM('table','cards','brochure','html') DEFAULT 'table',
+                html_content MEDIUMTEXT NULL,
+                payload_json MEDIUMTEXT NULL,
+                cta_label VARCHAR(140) NULL,
+                cta_url VARCHAR(500) NULL,
+                is_published TINYINT(1) DEFAULT 1,
                 sort_order INT DEFAULT 1
             ) ENGINE=InnoDB"
         );
@@ -1243,17 +1351,63 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             $insPl->execute(['2025-26', 'Electronics & Telecom', 112, 98, 12.00, 5.10, 'Qualcomm, KPIT, Wipro, Tech Mahindra', 2]);
             $insPl->execute(['2025-26', 'Mechanical Engineering', 108, 94, 10.50, 4.90, 'Bharat Forge, Atlas Copco, Mahindra & Mahindra', 3]);
 
-            $insSt = $pdo->prepare('INSERT INTO placement_stories (student_name, batch_year, branch, company, role_title, package_lpa, photo_url, quote_text, sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
-            $insSt->execute(['Atharva Deshpande', '2026', 'CSE', 'Deloitte India', 'Analyst — Cloud & Data Engg.', '14.5 LPA', 'assets/images/principal.jpg', 'Coding bootcamps and alumni mock interviews prepared me thoroughly.', 1]);
-            $insSt->execute(['Pranjal Kulkarni', '2026', 'MECH', 'Atlas Copco', 'Graduate Engineer Trainee', '8.2 LPA', 'assets/images/principal.jpg', 'Hands-on CNC and Robotics lab exposure set our batch apart during technical rounds.', 2]);
+            $insSt = $pdo->prepare('INSERT INTO placement_stories (entry_type, headline, student_name, batch_year, branch, company, role_title, package_lpa, photo_url, quote_text, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+            $insSt->execute(['Dream / Super-Dream Offer', 'Super-Dream Cloud Offer at Deloitte India', 'Atharva Deshpande', '2026', 'CSE', 'Deloitte India', 'Analyst — Cloud & Data Engg.', '14.5 LPA', 'assets/images/principal.jpg', 'Coding bootcamps and alumni mock interviews prepared me thoroughly.', 1, 1]);
+            $insSt->execute(['Core Industry Offer', 'Core Design & Automation Selection', 'Pranjal Kulkarni', '2026', 'MECH', 'Atlas Copco', 'Graduate Engineer Trainee', '8.2 LPA', 'assets/images/principal.jpg', 'Hands-on CNC and Robotics lab exposure set our batch apart during technical rounds.', 1, 2]);
+            $insSt->execute(['National Hackathon / Award', 'National Winner — Smart India Hackathon 2026', 'Team Astra (CSE & E&TC)', '2026', 'CSE / E&TC', 'Ministry of Education, GoI', 'First Prize — Smart Agri-Grid Track', 'INR 1,00,000 Award', 'assets/images/principal.jpg', 'Campus R&D prototyping mentorship helped our team edge out 38 finalist squads nationwide.', 1, 3]);
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('placements_summary', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
                 ->execute([json_encode([
                     'summaryNote'      => 'With a 91.1% placement track record and 250+ visiting recruiters, our Training & Placement Cell delivers structured aptitude, coding, Communication Improvement Programs (CIP), and industry internship mentorship.',
                     'coordinatorName'  => 'Dr. S. B. Kulkarni',
                     'coordinatorEmail' => 'tnp@coe.sveri.ac.in',
                     'coordinatorPhone' => '+91-02186-216063',
+                    'brochureUrl'      => '',
+                    'brochureLabel'    => 'Download T&P Brochure (PDF)',
                 ], JSON_UNESCAPED_UNICODE)]);
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('placements_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
+
+        // Seed Placement Notices, Congratulations metadata backfill & Custom Sections once (non-destructive)
+        $plEnhChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'placements_enhanced_seeded_v1' LIMIT 1");
+        $plEnhChk->execute();
+        if (!$plEnhChk->fetchColumn()) {
+            try {
+                if ((int)$pdo->query('SELECT COUNT(*) FROM placement_notices')->fetchColumn() === 0) {
+                    $insNot = $pdo->prepare('INSERT INTO placement_notices (title, notice_date, category, summary, attachment_url, link_label, is_pinned, sort_order) VALUES (?,?,?,?,?,?,?,?)');
+                    foreach (defaultPlacementNotices() as $nIdx => $nr) {
+                        $insNot->execute([
+                            $nr['title'],
+                            $nr['notice_date'],
+                            $nr['category'],
+                            $nr['summary'],
+                            $nr['attachment_url'],
+                            $nr['link_label'],
+                            $nr['is_pinned'],
+                            $nIdx + 1,
+                        ]);
+                    }
+                }
+                if ((int)$pdo->query('SELECT COUNT(*) FROM placement_custom_sections')->fetchColumn() === 0) {
+                    $insCs = $pdo->prepare('INSERT INTO placement_custom_sections (title, subtitle, section_type, html_content, payload_json, cta_label, cta_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
+                    foreach (defaultPlacementCustomSections() as $cIdx => $cr) {
+                        $insCs->execute([
+                            $cr['title'],
+                            $cr['subtitle'],
+                            $cr['section_type'],
+                            $cr['html_content'],
+                            $cr['payload_json'],
+                            $cr['cta_label'],
+                            $cr['cta_url'],
+                            $cr['is_published'],
+                            $cIdx + 1,
+                        ]);
+                    }
+                }
+                $pdo->prepare("UPDATE placement_stories SET headline = CONCAT(company, ' — ', role_title) WHERE headline IS NULL OR headline = ''")->execute();
+            } catch (Throwable $ignoredPlEnh) {
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('placements_enhanced_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
                 ->execute();
         }
     } catch (Throwable $ignoredSchema) {
@@ -1283,6 +1437,8 @@ function swapSortOrder(PDO $pdo, string $table, int $id, string $dir, ?string $s
         'conferences',
         'placement_stats',
         'placement_stories',
+        'placement_notices',
+        'placement_custom_sections',
     ];
     $allowedScopes = [null, 'category_id', 'department_id'];
     $allowedTies   = ['id ASC', 'id DESC', 'event_date DESC, id DESC', 'uploaded_at DESC, id DESC'];

@@ -2,15 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Award,
-  Briefcase,
+  Bell,
   Building2,
   Calendar,
   CheckCircle2,
+  Download,
   ExternalLink,
   FileText,
-  GraduationCap,
+  Layers,
   Mail,
   Phone,
+  Pin,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -18,11 +20,12 @@ import {
   Upload,
   Users,
 } from 'lucide-react';
-import type { PlacementsData, SiteSettings } from '../types/cms';
+import type { PlacementCustomSection, PlacementsData, SiteSettings } from '../types/cms';
 import {
   computePlacementMetrics,
   DEFAULT_GRIEVANCE_PORTAL_CONFIG,
-  DEFAULT_INTAKE_PROGRAMS,
+  filterCongratulationsStories,
+  filterPlacementNotices,
   GRIEVANCE_CATEGORY_PRESETS,
   GRIEVANCE_ROLE_PRESETS,
 } from '../lib/collegeFeaturesLogic';
@@ -44,6 +47,14 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
   );
   const [selectedYear, setSelectedYear] = useState<string>(years[0] || 'All');
 
+  // Notices & Information Desk Filter
+  const [noticeCat, setNoticeCat] = useState<string>('All');
+  const [noticeQuery, setNoticeQuery] = useState<string>('');
+
+  // Congratulations Desk Filter
+  const [congratsType, setCongratsType] = useState<string>('All');
+  const [congratsQuery, setCongratsQuery] = useState<string>('');
+
   const visibleStats = useMemo(() => {
     const ordered = sortByOrder(placements.stats);
     return selectedYear === 'All' ? ordered : ordered.filter((s) => s.academicYear === selectedYear);
@@ -54,73 +65,434 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
     () => sortByOrder(placements.upcomingDrives || []),
     [placements.upcomingDrives],
   );
-  const intakePrograms = useMemo(
-    () => sortByOrder(settings.intakePrograms && settings.intakePrograms.length > 0 ? settings.intakePrograms : DEFAULT_INTAKE_PROGRAMS),
-    [settings.intakePrograms],
+
+  const allNotices = useMemo(() => placements.notices || [], [placements.notices]);
+  const noticeCategories = useMemo(
+    () => ['All', ...Array.from(new Set(allNotices.map((n) => n.category).filter(Boolean)))],
+    [allNotices],
+  );
+  const visibleNotices = useMemo(
+    () => filterPlacementNotices(allNotices, noticeCat, noticeQuery),
+    [allNotices, noticeCat, noticeQuery],
   );
 
-  return (
-    <div className="max-w-[1380px] mx-auto px-4 py-8 space-y-6">
-      <div
-        className="rounded-2xl p-6 sm:p-8 text-white"
-        style={{ background: 'linear-gradient(135deg, var(--primary-color) 0%, #0F766E 100%)' }}
-      >
-        <p className="text-xs font-bold uppercase tracking-widest text-amber-300 mb-1">
-          Career Development &amp; Industry Relations
-        </p>
-        <h1 className="font-display text-2xl sm:text-4xl font-bold mb-2">
-          Training &amp; Placement (T&amp;P) Hub
-        </h1>
-        <p className="text-sm text-white/90 max-w-3xl leading-relaxed">{placements.summaryNote}</p>
-      </div>
+  const allStories = useMemo(() => placements.stories || [], [placements.stories]);
+  const congratsTypes = useMemo(
+    () => [
+      'All',
+      ...Array.from(new Set(allStories.map((s) => s.entryType || 'Campus Placement').filter(Boolean))),
+    ],
+    [allStories],
+  );
+  const visibleStories = useMemo(
+    () => filterCongratulationsStories(allStories, congratsType, congratsQuery),
+    [allStories, congratsType, congratsQuery],
+  );
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  const customSections = useMemo(
+    () =>
+      sortByOrder((placements.customSections || []).filter((sec) => sec.isPublished !== false)) as PlacementCustomSection[],
+    [placements.customSections],
+  );
+
+  const recruiters = settings.recruiters || [];
+
+  return (
+    <div className="max-w-[1380px] mx-auto px-4 py-8 space-y-8">
+      {/* Editorial Hero Banner */}
+      <header
+        className="rounded-2xl p-6 sm:p-9 text-white border border-white/10"
+        style={{ background: 'linear-gradient(135deg, var(--primary-color) 0%, #163A64 100%)' }}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-8 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
+              Career Development · Corporate Relations · Campus Hiring
+            </p>
+            <h1 className="font-display text-2xl sm:text-4xl font-bold tracking-tight">
+              Training &amp; Placement (T&amp;P) Portal
+            </h1>
+            <p className="text-sm sm:text-base text-slate-200 max-w-3xl leading-relaxed">
+              {placements.summaryNote}
+            </p>
+            <div className="pt-1 flex flex-wrap items-center gap-3">
+              {placements.brochureUrl && (
+                <a
+                  href={placements.brochureUrl}
+                  target={placements.brochureUrl.startsWith('http') ? '_blank' : undefined}
+                  rel={placements.brochureUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{placements.brochureLabel || 'Download Placement Brochure'}</span>
+                </a>
+              )}
+              <a
+                href="#tp-notices"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-white/25 hover:bg-white/10 text-white text-xs font-semibold transition-colors"
+              >
+                <Bell className="w-3.5 h-3.5 text-amber-300" />
+                <span>Student Notices ({allNotices.length})</span>
+              </a>
+              <a
+                href="#congratulations-desk"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-white/25 hover:bg-white/10 text-white text-xs font-semibold transition-colors"
+              >
+                <Award className="w-3.5 h-3.5 text-amber-300" />
+                <span>Congratulations Desk ({allStories.length})</span>
+              </a>
+            </div>
+          </div>
+
+          {/* T&P Office Contact Strip */}
+          <aside className="lg:col-span-4 rounded-xl bg-white/10 border border-white/15 p-5 space-y-2 text-xs">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+              Training &amp; Placement Office
+            </p>
+            <p className="text-base font-bold text-white">{placements.coordinatorName}</p>
+            <p className="text-slate-200">Training &amp; Placement Officer (TPO)</p>
+            <div className="pt-2 border-t border-white/15 space-y-1.5 text-slate-100">
+              <p className="flex items-center gap-2">
+                <Mail className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="truncate">{placements.coordinatorEmail}</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="tabular-nums">{placements.coordinatorPhone}</span>
+              </p>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      {/* Architectural KPI Strip (Tabular Numerals) */}
+      <section aria-label="Placement Key Metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-          <p className="text-xs font-semibold text-stone-500">Placement Rate ({selectedYear})</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            Placement Conversion ({selectedYear})
+          </p>
           <p className="font-display text-3xl font-bold text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">
             {metrics.overallRate}%
           </p>
-          <p className="text-[11px] text-stone-500 mt-0.5">
-            {metrics.placed} / {metrics.eligible} students placed
+          <p className="text-xs text-stone-500 mt-1 tabular-nums">
+            {metrics.placed} placed of {metrics.eligible} eligible
           </p>
         </div>
         <div className="p-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-          <p className="text-xs font-semibold text-stone-500">Highest Package Offered</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            Highest Package Offered
+          </p>
           <p className="font-display text-3xl font-bold text-amber-700 dark:text-amber-400 mt-1 tabular-nums">
             ₹{metrics.highest} LPA
           </p>
-          <p className="text-[11px] text-stone-500 mt-0.5">Core &amp; Product Tech Drives</p>
+          <p className="text-xs text-stone-500 mt-1">Product &amp; Core Tech Offers</p>
         </div>
         <div className="p-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-          <p className="text-xs font-semibold text-stone-500">Average Package</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            Mean Annual Package
+          </p>
           <p className="font-display text-3xl font-bold text-stone-900 dark:text-white mt-1 tabular-nums">
             ₹{metrics.avg} LPA
           </p>
-          <p className="text-[11px] text-stone-500 mt-0.5">Across Autonomous Branches</p>
+          <p className="text-xs text-stone-500 mt-1">Across Engineering Programs</p>
         </div>
         <div className="p-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-          <p className="text-xs font-semibold text-stone-500">T&amp;P Cell Desk</p>
-          <p className="text-sm font-bold text-stone-900 dark:text-white mt-1">{placements.coordinatorName}</p>
-          <p className="text-[11px] text-stone-500 mt-0.5 truncate">{placements.coordinatorEmail}</p>
-          <p className="text-[11px] text-stone-500">{placements.coordinatorPhone}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            Active Hiring Partners
+          </p>
+          <p className="font-display text-3xl font-bold text-stone-900 dark:text-white mt-1 tabular-nums">
+            {recruiters.length > 0 ? `${recruiters.length}+` : '250+'}
+          </p>
+          <p className="text-xs text-stone-500 mt-1">MNC &amp; Core Industry Drives</p>
         </div>
-      </div>
+      </section>
 
-      {/* Year Filter & Formatted Branch Table */}
-      <section className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-amber-600" />
-            Branch-Wise Placement Statistics
-          </h2>
+      {/* Student Notices & T&P Information Board */}
+      <section
+        id="tp-notices"
+        className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-stone-200 dark:border-slate-800 pb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-400">
+              Official Circulars &amp; Drive Alerts
+            </p>
+            <h2 className="font-display text-xl sm:text-2xl font-bold text-stone-900 dark:text-white flex items-center gap-2 mt-0.5">
+              <Bell className="w-5 h-5 text-amber-600" />
+              Student Notices &amp; T&amp;P Information Desk
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="search"
+                value={noticeQuery}
+                onChange={(e) => setNoticeQuery(e.target.value)}
+                placeholder="Search notices & schedules..."
+                className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {noticeCategories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setNoticeCat(cat)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    noticeCat === cat
+                      ? 'text-white border-transparent'
+                      : 'bg-stone-50 dark:bg-slate-800 border-stone-200 dark:border-slate-700 text-stone-700 dark:text-slate-300'
+                  }`}
+                  style={noticeCat === cat ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {visibleNotices.length === 0 ? (
+          <p className="text-sm text-stone-500 py-4">No placement notices match your current filter.</p>
+        ) : (
+          <div className="divide-y divide-stone-200 dark:divide-slate-800">
+            {visibleNotices.map((notice) => (
+              <article
+                key={notice.id}
+                className="py-4 first:pt-0 last:pb-0 flex flex-col md:flex-row md:items-start justify-between gap-4"
+              >
+                <div className="space-y-1.5 max-w-4xl">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500 dark:text-slate-400">
+                    <span className="font-mono font-semibold text-stone-800 dark:text-slate-200 tabular-nums">
+                      {notice.noticeDate}
+                    </span>
+                    <span>·</span>
+                    <span className="font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-400">
+                      {notice.category}
+                    </span>
+                    {notice.isPinned && (
+                      <>
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1 font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wide">
+                          <Pin className="w-3 h-3" /> Priority Notice
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <h3 className="text-base font-bold text-stone-900 dark:text-white leading-snug">
+                    {notice.title}
+                  </h3>
+                  {notice.summary && (
+                    <p className="text-xs sm:text-sm text-stone-600 dark:text-slate-300 leading-relaxed">
+                      {notice.summary}
+                    </p>
+                  )}
+                </div>
+                {notice.attachmentUrl && (
+                  <div className="shrink-0">
+                    <a
+                      href={notice.attachmentUrl}
+                      target={notice.attachmentUrl.startsWith('http') ? '_blank' : undefined}
+                      rel={notice.attachmentUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold border border-stone-300 dark:border-slate-700 hover:bg-stone-100 dark:hover:bg-slate-800 text-stone-900 dark:text-white"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-amber-600" />
+                      <span>{notice.linkLabel || 'Open Circular'}</span>
+                    </a>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Congratulations Desk (Placed Students & Achievement Winners with Photos) */}
+      <section
+        id="congratulations-desk"
+        className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-stone-200 dark:border-slate-800 pb-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-400">
+              Roll of Honour · Placements &amp; Student Achievements
+            </p>
+            <h2 className="font-display text-xl sm:text-2xl font-bold text-stone-900 dark:text-white flex items-center gap-2 mt-0.5">
+              <Award className="w-5 h-5 text-emerald-600" />
+              Congratulations Desk
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="search"
+                value={congratsQuery}
+                onChange={(e) => setCongratsQuery(e.target.value)}
+                placeholder="Search student or company..."
+                className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {congratsTypes.map((tp) => (
+                <button
+                  key={tp}
+                  type="button"
+                  onClick={() => setCongratsType(tp)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    congratsType === tp
+                      ? 'text-white border-transparent'
+                      : 'bg-stone-50 dark:bg-slate-800 border-stone-200 dark:border-slate-700 text-stone-700 dark:text-slate-300'
+                  }`}
+                  style={congratsType === tp ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                >
+                  {tp}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {visibleStories.length === 0 ? (
+          <p className="text-sm text-stone-500 py-4">No student congratulatory entries match this filter.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {visibleStories.map((st) => (
+              <article
+                key={st.id}
+                className="rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 p-5 flex flex-col justify-between gap-4"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3.5">
+                    <img
+                      src={st.photoUrl}
+                      alt={st.studentName}
+                      className="w-20 h-20 rounded-xl object-cover border border-stone-200 dark:border-slate-700 shrink-0"
+                    />
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                        {st.entryType || 'Campus Placement'}
+                      </p>
+                      <h3 className="font-display text-lg font-bold text-stone-900 dark:text-white leading-snug">
+                        {st.studentName}
+                      </h3>
+                      <p className="text-xs text-stone-600 dark:text-slate-300">
+                        {st.branch} · Batch {st.batchYear}
+                      </p>
+                    </div>
+                  </div>
+
+                  {st.headline && (
+                    <p className="text-xs font-bold text-stone-800 dark:text-slate-100">
+                      {st.headline}
+                    </p>
+                  )}
+
+                  <div className="pt-2.5 border-t border-stone-200 dark:border-slate-700 flex items-center justify-between gap-2 text-xs">
+                    <div className="min-w-0">
+                      <p className="font-bold text-stone-900 dark:text-white truncate">{st.company}</p>
+                      {st.roleOrAward && (
+                        <p className="text-[11px] text-stone-500 dark:text-slate-400 truncate">
+                          {st.roleOrAward}
+                        </p>
+                      )}
+                    </div>
+                    {st.packageLpa && (
+                      <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400 tabular-nums shrink-0">
+                        {st.packageLpa}
+                      </span>
+                    )}
+                  </div>
+
+                  {st.quote && (
+                    <blockquote className="text-xs text-stone-600 dark:text-slate-300 leading-relaxed italic">
+                      &ldquo;{st.quote}&rdquo;
+                    </blockquote>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Upcoming & Active Campus Recruitment Drives */}
+      {upcomingDrives.length > 0 && (
+        <section className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
+          <div className="border-b border-stone-200 dark:border-slate-800 pb-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-400">
+              Recruitment Calendar
+            </p>
+            <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2 mt-0.5">
+              <Calendar className="w-5 h-5 text-emerald-600" />
+              Upcoming &amp; Active Campus Placement Drives
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {upcomingDrives.map((drive) => (
+              <article
+                key={drive.id}
+                className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 flex flex-col justify-between space-y-3 text-xs"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                      {drive.status === 'open' || drive.status === 'ongoing'
+                        ? 'Registrations Open'
+                        : drive.status === 'completed'
+                          ? 'Drive Completed'
+                          : 'Scheduled Drive'}
+                    </span>
+                    <span className="font-mono font-semibold text-stone-500 tabular-nums">
+                      {drive.driveDate}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-stone-900 dark:text-white">{drive.company}</h3>
+                  <p className="font-semibold text-amber-700 dark:text-amber-400">
+                    {drive.roleTitle} · <span className="tabular-nums">{drive.packageLpa}</span>
+                  </p>
+                  <p className="text-stone-600 dark:text-slate-300">
+                    <strong>Eligible:</strong> {drive.eligibleBranches}
+                  </p>
+                </div>
+                {drive.applyUrl && (
+                  <a
+                    href={drive.applyUrl}
+                    target={drive.applyUrl.startsWith('http') ? '_blank' : undefined}
+                    rel={drive.applyUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-white font-semibold"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    <span>Drive Portal / Registration</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Year Filter & Formatted Branch-Wise Placement Statistics */}
+      <section className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500">
+              Verified Department Record
+            </p>
+            <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2 mt-0.5">
+              <TrendingUp className="w-5 h-5 text-amber-600" />
+              Branch-Wise Placement Statistics
+            </h2>
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {['All', ...years].map((yr) => (
               <button
                 key={yr}
                 type="button"
                 onClick={() => setSelectedYear(yr)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold border ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
                   selectedYear === yr
                     ? 'text-white border-transparent'
                     : 'bg-stone-50 dark:bg-slate-800 border-stone-200 dark:border-slate-700'
@@ -150,13 +522,13 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
             <tbody>
               {metrics.rowsWithPct.map((row) => (
                 <tr key={row.id}>
-                  <td className="font-mono font-semibold whitespace-nowrap">{row.academicYear}</td>
+                  <td className="font-mono font-semibold whitespace-nowrap tabular-nums">{row.academicYear}</td>
                   <td className="font-semibold">{row.branch}</td>
                   <td className="tabular-nums">{row.eligibleStudents}</td>
                   <td className="tabular-nums font-bold text-emerald-700 dark:text-emerald-400">
                     {row.placedStudents}
                   </td>
-                  <td className="min-w-[125px]">
+                  <td className="min-w-[130px]">
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 rounded-full bg-stone-200 dark:bg-slate-700 overflow-hidden">
                         <div
@@ -177,138 +549,152 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
         </div>
       </section>
 
-      {/* Upcoming Campus Recruitment Drives */}
-      {upcomingDrives.length > 0 && (
-        <section className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
-          <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-emerald-600" />
-            Upcoming Campus Placement Drives
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {upcomingDrives.map((drive) => (
-              <article
-                key={drive.id}
-                className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 flex flex-col justify-between space-y-3 text-xs"
+      {/* Admin-Managed Custom Placement Data Sections (Tables, Cards, Brochures, Rich HTML) */}
+      {customSections.map((sec) => (
+        <section
+          key={sec.id}
+          className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 dark:border-slate-800 pb-3">
+            <div>
+              <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2">
+                <Layers className="w-5 h-5 text-amber-600" />
+                {sec.title}
+              </h2>
+              {sec.subtitle && (
+                <p className="text-xs text-stone-500 dark:text-slate-400 mt-0.5">{sec.subtitle}</p>
+              )}
+            </div>
+            {sec.ctaUrl && sec.sectionType !== 'brochure' && (
+              <a
+                href={sec.ctaUrl}
+                target={sec.ctaUrl.startsWith('http') ? '_blank' : undefined}
+                rel={sec.ctaUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
+                style={{ backgroundColor: 'var(--primary-color)' }}
               >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold uppercase text-[10px]">
-                      {drive.status}
-                    </span>
-                    <span className="font-mono font-semibold text-stone-500">{drive.driveDate}</span>
-                  </div>
-                  <h3 className="text-sm font-bold text-stone-900 dark:text-white">{drive.company}</h3>
-                  <p className="font-semibold text-amber-700 dark:text-amber-400">
-                    {drive.roleTitle} · {drive.packageLpa}
-                  </p>
-                  <p className="text-stone-600 dark:text-slate-300">
-                    <strong>Eligible:</strong> {drive.eligibleBranches}
-                  </p>
-                </div>
-                {drive.applyUrl && (
-                  <a
-                    href={drive.applyUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-white font-semibold"
-                    style={{ backgroundColor: 'var(--primary-color)' }}
-                  >
-                    <span>T&amp;P Drive Registration</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
-              </article>
-            ))}
+                <span>{sec.ctaLabel || 'Open Resource'}</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
-        </section>
-      )}
 
-      {/* Top Recruiters + Student Success Stories */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <section className="lg:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3">
-          <h3 className="font-display text-lg font-bold flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-amber-600" /> Esteemed Campus Recruiters
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {(settings.recruiters || []).map((rec, idx) => (
-              <span
-                key={idx}
-                className="px-3 py-1.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 text-xs font-semibold"
-              >
-                {rec}
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <section className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
-          <h3 className="font-display text-lg font-bold flex items-center gap-2">
-            <Award className="w-5 h-5 text-emerald-600" /> Placed Student Achiever Stories
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {sortByOrder(placements.stories).map((st) => (
-              <div
-                key={st.id}
-                className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 flex items-start gap-3"
-              >
-                <img
-                  src={st.photoUrl}
-                  alt={st.studentName}
-                  className="w-16 h-16 rounded-lg object-cover border border-stone-200 dark:border-slate-700 shrink-0"
-                />
-                <div className="min-w-0 space-y-1 text-xs">
-                  <h4 className="font-bold text-stone-900 dark:text-white">{st.studentName}</h4>
-                  <p className="text-[11px] text-stone-500">{st.branch}</p>
-                  <p className="font-semibold text-emerald-700 dark:text-emerald-400">
-                    <Briefcase className="w-3 h-3 inline mr-1" />
-                    {st.company} · {st.packageLpa}
-                  </p>
-                  <p className="text-stone-600 dark:text-slate-300 leading-relaxed">&ldquo;{st.quote}&rdquo;</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {/* AICTE Sanctioned Intake & FRA Fee Reference Table */}
-      {intakePrograms.length > 0 && (
-        <section className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-3">
-          <h3 className="font-display text-lg font-bold flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-amber-600" />
-            AICTE Sanctioned Programs &amp; Intake Reference
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="cms-table cms-table-navy w-full text-xs">
-              <thead>
-                <tr>
-                  <th>Choice Code</th>
-                  <th>Engineering / PG Program</th>
-                  <th>Level</th>
-                  <th>Sanctioned Intake</th>
-                  <th>Accreditation / Recognition</th>
-                  <th>FRA Approved Fee</th>
-                </tr>
-              </thead>
-              <tbody>
-                {intakePrograms.map((prog) => (
-                  <tr key={prog.id}>
-                    <td className="font-mono font-semibold">{prog.code}</td>
-                    <td className="font-semibold">{prog.programName}</td>
-                    <td>{prog.level}</td>
-                    <td className="tabular-nums font-bold">{prog.sanctionedIntake}</td>
-                    <td>{prog.accreditationStatus}</td>
-                    <td className="tabular-nums font-semibold">{prog.annualFee || '—'}</td>
+          {sec.sectionType === 'table' && (sec.tableHeaders?.length || 0) > 0 && (
+            <div className="overflow-x-auto">
+              <table className="cms-table cms-table-navy w-full text-xs">
+                <thead>
+                  <tr>
+                    {(sec.tableHeaders || []).map((hdr, hIdx) => (
+                      <th key={hIdx}>{hdr}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {(sec.tableRows || []).map((row, rIdx) => (
+                    <tr key={rIdx}>
+                      {row.map((cell, cIdx) => (
+                        <td key={cIdx} className={cIdx === 0 ? 'font-semibold' : 'tabular-nums'}>
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {sec.sectionType === 'cards' && (sec.cards?.length || 0) > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {(sec.cards || []).map((card, cIdx) => (
+                <article
+                  key={cIdx}
+                  className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 flex flex-col justify-between gap-2 text-xs"
+                >
+                  <div className="space-y-1">
+                    {card.badge && (
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                        {card.badge}
+                      </p>
+                    )}
+                    <h3 className="text-sm font-bold text-stone-900 dark:text-white">{card.title}</h3>
+                    {card.subtitle && (
+                      <p className="font-semibold text-stone-600 dark:text-slate-300">{card.subtitle}</p>
+                    )}
+                    {card.description && (
+                      <p className="text-stone-600 dark:text-slate-300 leading-relaxed pt-1">
+                        {card.description}
+                      </p>
+                    )}
+                  </div>
+                  {card.linkUrl && (
+                    <a
+                      href={card.linkUrl}
+                      target={card.linkUrl.startsWith('http') ? '_blank' : undefined}
+                      rel={card.linkUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                      className="inline-flex items-center gap-1 font-bold text-amber-700 dark:text-amber-400 hover:underline pt-1"
+                    >
+                      <span>{card.linkLabel || 'View Details'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+
+          {sec.sectionType === 'brochure' && (
+            <div className="p-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                {sec.htmlContent && <CmsHtmlContent html={sec.htmlContent} className="text-xs sm:text-sm" />}
+              </div>
+              {sec.ctaUrl && (
+                <a
+                  href={sec.ctaUrl}
+                  target={sec.ctaUrl.startsWith('http') ? '_blank' : undefined}
+                  rel={sec.ctaUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white shrink-0"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{sec.ctaLabel || 'Download Document'}</span>
+                </a>
+              )}
+            </div>
+          )}
+
+          {sec.sectionType === 'html' && sec.htmlContent && (
+            <CmsHtmlContent html={sec.htmlContent} />
+          )}
         </section>
-      )}
+      ))}
+
+      {/* Esteemed Campus Recruiters Directory */}
+      <section className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
+        <div className="border-b border-stone-200 dark:border-slate-800 pb-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-stone-500">
+            Corporate &amp; Industrial Tie-Ups
+          </p>
+          <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white flex items-center gap-2 mt-0.5">
+            <Building2 className="w-5 h-5 text-amber-600" />
+            Esteemed Campus Recruiters
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+          {recruiters.map((rec, idx) => (
+            <div
+              key={idx}
+              className="px-3 py-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 text-xs font-semibold text-stone-800 dark:text-slate-100 text-center"
+            >
+              {rec}
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
+
 
 export function GrievancePortal({ settings }: { settings: SiteSettings }) {
   const gp = useMemo(
