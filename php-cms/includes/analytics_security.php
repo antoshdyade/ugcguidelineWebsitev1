@@ -142,11 +142,14 @@ function kvGetJson(PDO $pdo, string $key, array $fallback): array
 
 function kvPutJson(PDO $pdo, string $key, array $payload): void
 {
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    $stmt = $pdo->prepare(
-        'INSERT INTO cms_kv_store (key_name, val_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)'
-    );
-    $stmt->execute([$key, $json ?: '{}']);
+    try {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $stmt = $pdo->prepare(
+            'INSERT INTO cms_kv_store (key_name, val_json) VALUES (?, ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)'
+        );
+        $stmt->execute([$key, $json ?: '{}']);
+    } catch (Throwable $ignored) {
+    }
 }
 
 function getSeoSettings(PDO $pdo): array
@@ -608,39 +611,45 @@ function isPhpLoginRateLimited(PDO $pdo, string $ip, string $scope = 'admin'): ?
 
 function recordPhpLoginFailure(PDO $pdo, string $ip, string $scope, string $email): void
 {
-    $normIp = normalizePhpClientIp($ip);
-    $cfg = getSecurityConfig($pdo);
-    $key = 'login_fail_' . $scope . '_' . hash('sha256', $normIp);
-    $rec = kvGetJson($pdo, $key, ['count' => 0, 'firstAt' => time(), 'lockedUntil' => 0]);
-    $now = time();
-    if ($now - (int)($rec['firstAt'] ?? $now) > 900) {
-        $rec = ['count' => 0, 'firstAt' => $now, 'lockedUntil' => 0];
-    }
-    $rec['count'] = (int)($rec['count'] ?? 0) + 1;
-    $lockedOut = false;
-    if ($rec['count'] >= (int)$cfg['maxFailedLogins']) {
-        $rec['lockedUntil'] = $now + ((int)$cfg['lockoutMinutes'] * 60);
-        $lockedOut = true;
-    }
-    kvPutJson($pdo, $key, $rec);
+    try {
+        $normIp = normalizePhpClientIp($ip);
+        $cfg = getSecurityConfig($pdo);
+        $key = 'login_fail_' . $scope . '_' . hash('sha256', $normIp);
+        $rec = kvGetJson($pdo, $key, ['count' => 0, 'firstAt' => time(), 'lockedUntil' => 0]);
+        $now = time();
+        if ($now - (int)($rec['firstAt'] ?? $now) > 900) {
+            $rec = ['count' => 0, 'firstAt' => $now, 'lockedUntil' => 0];
+        }
+        $rec['count'] = (int)($rec['count'] ?? 0) + 1;
+        $lockedOut = false;
+        if ($rec['count'] >= (int)$cfg['maxFailedLogins']) {
+            $rec['lockedUntil'] = $now + ((int)$cfg['lockoutMinutes'] * 60);
+            $lockedOut = true;
+        }
+        kvPutJson($pdo, $key, $rec);
 
-    logPhpVisitorEvent($pdo, [
-        'ip'              => $normIp,
-        'method'          => 'POST',
-        'path'            => $scope === 'admin' ? 'admin/login.php' : 'alumni.php?tab=login',
-        'status_code'     => $lockedOut ? 429 : 401,
-        'event_type'      => $lockedOut ? 'rate_limit' : 'failed_login',
-        'severity'        => $lockedOut ? 'critical' : 'warning',
-        'threat_category' => $lockedOut ? 'Brute-Force Lockout (' . $scope . ')' : 'Invalid ' . ucfirst($scope) . ' Credentials',
-        'actor_email'     => $email,
-        'note'            => 'Attempt #' . $rec['count'] . ($lockedOut ? ' — locked for ' . $cfg['lockoutMinutes'] . ' min' : ''),
-    ]);
+        logPhpVisitorEvent($pdo, [
+            'ip'              => $normIp,
+            'method'          => 'POST',
+            'path'            => $scope === 'admin' ? 'admin/login.php' : 'alumni.php?tab=login',
+            'status_code'     => $lockedOut ? 429 : 401,
+            'event_type'      => $lockedOut ? 'rate_limit' : 'failed_login',
+            'severity'        => $lockedOut ? 'critical' : 'warning',
+            'threat_category' => $lockedOut ? 'Brute-Force Lockout (' . $scope . ')' : 'Invalid ' . ucfirst($scope) . ' Credentials',
+            'actor_email'     => $email,
+            'note'            => 'Attempt #' . $rec['count'] . ($lockedOut ? ' — locked for ' . $cfg['lockoutMinutes'] . ' min' : ''),
+        ]);
+    } catch (Throwable $ignored) {
+    }
 }
 
 function clearPhpLoginFailures(PDO $pdo, string $ip, string $scope): void
 {
-    $key = 'login_fail_' . $scope . '_' . hash('sha256', normalizePhpClientIp($ip));
-    kvPutJson($pdo, $key, ['count' => 0, 'firstAt' => time(), 'lockedUntil' => 0]);
+    try {
+        $key = 'login_fail_' . $scope . '_' . hash('sha256', normalizePhpClientIp($ip));
+        kvPutJson($pdo, $key, ['count' => 0, 'firstAt' => time(), 'lockedUntil' => 0]);
+    } catch (Throwable $ignored) {
+    }
 }
 
 function runPhpSecurityFirewall(PDO $pdo): void

@@ -603,5 +603,43 @@ export function searchCmsContent(
     }
   }
 
+  for (const rp of db.researchPortfolio?.projects || []) {
+    if (!rp.isPublished) continue;
+    if (
+      rp.title.toLowerCase().includes(q) ||
+      rp.fundingAgency.toLowerCase().includes(q) ||
+      rp.principalInvestigator.toLowerCase().includes(q) ||
+      rp.departmentCode.toLowerCase().includes(q)
+    ) {
+      results.push({
+        id: `research-proj-${rp.id}`,
+        type: 'research',
+        title: rp.title,
+        subtitle: `${rp.fundingAgency} · PI: ${rp.principalInvestigator} (${rp.departmentCode})`,
+        url: '/page/research-development-cell',
+        meta: `Funded Research · ${rp.grantAmountLakhs} · ${rp.status}`,
+      });
+    }
+  }
+
+  for (const pat of db.researchPortfolio?.patents || []) {
+    if (!pat.isPublished) continue;
+    if (
+      pat.title.toLowerCase().includes(q) ||
+      pat.itemType.toLowerCase().includes(q) ||
+      pat.inventorsOrLead.toLowerCase().includes(q) ||
+      pat.referenceNumber.toLowerCase().includes(q)
+    ) {
+      results.push({
+        id: `research-pat-${pat.id}`,
+        type: 'research',
+        title: pat.title,
+        subtitle: `${pat.itemType} · ${pat.inventorsOrLead}`,
+        url: '/page/research-development-cell',
+        meta: `${pat.referenceNumber} · ${pat.status}`,
+      });
+    }
+  }
+
   return results.slice(0, 24);
 }

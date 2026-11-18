@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/auth.php';
 
 $user = requireRoleAccess('departments');
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 $isFullDeptAdmin = in_array($user['role'], ['super_admin', 'content_editor'], true);
 $msg = '';
 $err = '';

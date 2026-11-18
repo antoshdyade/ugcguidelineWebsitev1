@@ -19,6 +19,7 @@ import {
 import { THEME_PALETTES } from '../lib/cmsLogic';
 import { partitionHeaderMenus } from '../lib/collegeFeaturesLogic';
 import { useThemeAccessibility, type SupportedLang } from '../context/ThemeAccessibilityContext';
+import { SocialIconLinks } from './SocialMediaWidgets';
 import type { CmsCategory, CmsPage, Department, SearchResultItem, SiteSettings } from '../types/cms';
 
 interface PublicHeaderProps {
@@ -326,6 +327,9 @@ export function PublicHeader({
                 <option value="ta" className="text-slate-900">தமிழ்</option>
               </select>
             </label>
+
+            {/* Social Media Links */}
+            <SocialIconLinks settings={settings} variant="header" />
 
             {/* Admin Portal Button */}
             <button

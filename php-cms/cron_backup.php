@@ -11,6 +11,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/backup_helper.php';
 
 $pdo = getDB();

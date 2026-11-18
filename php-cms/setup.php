@@ -7,7 +7,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/config/db.php';
 
-$phpOk = version_compare(PHP_VERSION, '8.0.0', '>=');
+$phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
 $pdoOk = extension_loaded('pdo_mysql');
 $finfoOk = extension_loaded('fileinfo');
 $uploadsDir = __DIR__ . '/uploads';
@@ -41,11 +41,28 @@ $hasHomeComponents = false;
 $actionMsg = '';
 
 try {
-    $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET);
-    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
+    $hostsToTry = [DB_HOST];
+    if (strtolower((string)DB_HOST) === 'localhost') {
+        $hostsToTry[] = '127.0.0.1';
+    }
+    $pdo = null;
+    $lastSetupEx = null;
+    foreach ($hostsToTry as $tryHost) {
+        try {
+            $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', $tryHost, DB_NAME, DB_CHARSET);
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+            $lastSetupEx = null;
+            break;
+        } catch (PDOException $ex) {
+            $lastSetupEx = $ex;
+        }
+    }
+    if (!$pdo instanceof PDO) {
+        throw $lastSetupEx ?: new RuntimeException('Unable to connect to MySQL');
+    }
     $dbConnected = true;
     $tables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
     $tablesCount = count($tables);
@@ -167,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
       <thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead>
       <tbody>
         <tr><td>Detected <code>BASE_URL</code></td><td>INFO</td><td><code><?= e(getBaseUrl() ?: '/ (domain root)') ?></code> · CSS: <code><?= e(assetUrl('assets/css/style.css')) ?></code></td></tr>
-        <tr><td>PHP Version (&ge; 8.0)</td><td><?= $phpOk ? 'PASS' : 'FAIL' ?></td><td>Running PHP <?= e(PHP_VERSION) ?></td></tr>
+        <tr><td>PHP Version (&ge; 7.4; 8.x recommended)</td><td><?= $phpOk ? 'PASS' : 'FAIL' ?></td><td>Running PHP <?= e(PHP_VERSION) ?></td></tr>
         <tr><td>MySQL PDO (pdo_mysql)</td><td><?= $pdoOk ? 'PASS' : 'FAIL' ?></td><td><?= $pdoOk ? 'Loaded' : 'Install php8.x-mysql and restart Apache/PHP-FPM' ?></td></tr>
         <tr><td>Fileinfo MIME Check</td><td><?= $finfoOk ? 'PASS' : 'FAIL' ?></td><td><?= $finfoOk ? 'Loaded' : 'Enable php-fileinfo extension' ?></td></tr>
         <tr><td>CSS Stylesheet (<code>assets/css/style.css</code>)</td><td><?= $cssOk ? 'PASS' : 'FAIL' ?></td><td><?= $cssOk ? 'Exists &amp; world-readable (0644)' : 'Missing or chmod blocked! Run: chmod 644 assets/css/style.css' ?></td></tr>

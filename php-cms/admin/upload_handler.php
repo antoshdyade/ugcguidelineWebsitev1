@@ -26,6 +26,7 @@ if (empty($_FILES['file'])) {
 }
 
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 $res = handleCmsUpload($pdo, $_FILES['file'], __DIR__ . '/../uploads', 'auto');
 if (!$res['ok']) {
     http_response_code(400);

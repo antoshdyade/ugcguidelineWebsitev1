@@ -1,6 +1,7 @@
 import React from 'react';
 import { BarChart3, Globe2, Mail, MapPin, Phone, ShieldAlert } from 'lucide-react';
 import type { HitCounterStats, SeoSettings, SiteSettings } from '../types/cms';
+import { SocialIconLinks } from './SocialMediaWidgets';
 
 interface PublicFooterProps {
   settings: SiteSettings;
@@ -40,6 +41,7 @@ export function PublicFooter({ settings, hitCounter, seo, onNavigate }: PublicFo
               <span>Anti-Ragging Helpline: {settings.antiRaggingHelpline}</span>
             </li>
           </ul>
+          <SocialIconLinks settings={settings} variant="footer" />
         </div>
 
         {settings.footerColumns.map((col, colIdx) => (

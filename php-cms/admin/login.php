@@ -46,8 +46,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($user['is_active'])) {
                 $error = 'This staff account is currently deactivated. Please ask a Super Administrator to re-enable it.';
             } elseif (password_verify($pass, (string)$user['password_hash'])) {
-                clearPhpLoginFailures($pdo, normalizePhpClientIp(), 'admin');
-                session_regenerate_id(true);
+                try {
+                    clearPhpLoginFailures($pdo, normalizePhpClientIp(), 'admin');
+                } catch (Throwable $ignored) {
+                }
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    @session_regenerate_id(true);
+                }
                 $allowedCats = !empty($user['allowed_categories_json']) ? json_decode((string)$user['allowed_categories_json'], true) : null;
                 $allowedPages = !empty($user['allowed_page_ids_json']) ? json_decode((string)$user['allowed_page_ids_json'], true) : null;
                 $allowedModules = !empty($user['allowed_modules_json']) ? json_decode((string)$user['allowed_modules_json'], true) : null;
@@ -63,26 +68,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'allowed_modules'        => is_array($allowedModules) ? $allowedModules : null,
                     'allowed_department_ids' => is_array($allowedDepts) ? array_map('intval', $allowedDepts) : null,
                 ];
-                $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
-                logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', $user['email']);
-                logPhpVisitorEvent($pdo, [
-                    'method'      => 'POST',
-                    'path'        => 'admin/login.php',
-                    'status_code' => 200,
-                    'event_type'  => 'admin_login',
-                    'severity'    => 'info',
-                    'actor_email' => $user['email'],
-                    'note'        => 'Admin RBAC Login Success (' . $user['role'] . ')',
-                ]);
-                session_write_close();
+                try {
+                    $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
+                } catch (Throwable $ignored) {
+                }
+                try {
+                    logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', (string)$user['email']);
+                    logPhpVisitorEvent($pdo, [
+                        'method'      => 'POST',
+                        'path'        => 'admin/login.php',
+                        'status_code' => 200,
+                        'event_type'  => 'admin_login',
+                        'severity'    => 'info',
+                        'actor_email' => (string)$user['email'],
+                        'note'        => 'Admin RBAC Login Success (' . (string)$user['role'] . ')',
+                    ]);
+                } catch (Throwable $ignored) {
+                }
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    @session_write_close();
+                }
                 header('Location: dashboard.php');
                 exit;
             } else {
-                recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'admin', $email);
+                try {
+                    recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'admin', $email);
+                } catch (Throwable $ignored) {
+                }
                 $error = 'Invalid institutional email or password. Use setup.php if deploying for the first time.';
             }
         } elseif (!$error) {
-            recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'admin', $email);
+            try {
+                recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'admin', $email);
+            } catch (Throwable $ignored) {
+            }
             $error = 'No staff account found for this email address. Verify spelling or ask a Super Administrator.';
         }
     }

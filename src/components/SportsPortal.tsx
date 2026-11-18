@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { SiteSettings, SportsData } from '../types/cms';
 import { sortByOrder } from '../lib/cmsLogic';
+import { SocialShareBar } from './SocialMediaWidgets';
 
 interface SportsPortalProps {
   sports: SportsData;
@@ -573,6 +574,13 @@ export function SportsPortal({ sports, settings, initialTab, onNavigate }: Sport
           </div>
         </section>
       )}
+
+      <SocialShareBar
+        title={`${settings.shortCode} Sports, Gymkhana & Achievements Portal`}
+        summary={sports.config.heroSubtitle}
+        settings={settings}
+        location="portal"
+      />
     </div>
   );
 }

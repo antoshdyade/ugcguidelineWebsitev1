@@ -45,14 +45,20 @@ import {
   validateUploadMeta,
 } from '../lib/cmsLogic';
 import {
+  buildSocialShareUrls,
   DEFAULT_PORTAL_MENU_ITEMS,
+  DEFAULT_SOCIAL_MEDIA_LINKS,
+  DEFAULT_SOCIAL_SHARING_CONFIG,
   DEPT_SUBPAGE_TYPE_PRESETS,
   DESIGN_PRESETS,
   DOCUMENT_CATEGORY_PRESETS,
   EVENT_CATEGORY_PRESETS,
+  normalizeSocialSharingConfig,
   partitionHeaderMenus,
+  SOCIAL_PLATFORM_PRESETS,
   TELEPHONE_SECTION_PRESETS,
 } from '../lib/collegeFeaturesLogic';
+import { SocialPlatformSvg } from './SocialMediaWidgets';
 import {
   getUploadSizeLimitBytes,
   getUploadSizeLimitMb,
@@ -102,9 +108,11 @@ import type {
   LeadershipProfile,
   MenuPlacementLocation,
   PlacementsData,
+  ResearchPortfolioData,
   SecurityConfig,
   SeoSettings,
   SiteSettings,
+  SocialMediaLink,
   SportsData,
   TelephoneEntry,
   TickerItem,
@@ -131,6 +139,7 @@ interface AdminStatePayload {
   grievances?: GrievanceTicket[];
   sports?: SportsData;
   facilities?: FacilitiesData;
+  researchPortfolio?: ResearchPortfolioData;
   settings: SiteSettings;
   seo?: SeoSettings;
   hitCounter?: HitCounterStats;
@@ -344,7 +353,19 @@ export function AdminDashboard({
   const [pagePdfMode, setPagePdfMode] = useState<'upload' | 'external'>('upload');
   const [pagePublished, setPagePublished] = useState(true);
   const [homepageMode, setHomepageMode] = useState<'sliders' | 'sections' | 'components'>('sliders');
-  const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics' | 'design'>('identity');
+  const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics' | 'design' | 'social'>('identity');
+
+  // Social Media Icon Addition & Direct Broadcast Composer state
+  const [newSocialPlatform, setNewSocialPlatform] = useState<string>('instagram');
+  const [newSocialLabel, setNewSocialLabel] = useState('Instagram');
+  const [newSocialUrl, setNewSocialUrl] = useState('');
+  const [newSocialHandle, setNewSocialHandle] = useState('');
+  const [broadcastSourceKey, setBroadcastSourceKey] = useState<string>('custom');
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastSummary, setBroadcastSummary] = useState('');
+  const [broadcastUrl, setBroadcastUrl] = useState('https://coe.sveri.ac.in/');
+  const [broadcastTags, setBroadcastTags] = useState('SVCOER,SVERI,Engineering,NEP2020');
+  const [broadcastCopied, setBroadcastCopied] = useState(false);
 
   // Homepage Custom HTML Components state
   const [editingHomeCompId, setEditingHomeCompId] = useState<number | null>(null);
@@ -2342,6 +2363,24 @@ export function AdminDashboard({
                           className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-30"
                         >
                           <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await adminFetch(`/api/admin/pages/${pg.id}`, 'PUT', { isPublished: !pg.isPublished });
+                              notify('ok', pg.isPublished ? `Hidden micro-page "${pg.title}" from public menus.` : `Published micro-page "${pg.title}".`);
+                            } catch (err) {
+                              notify('err', (err as Error).message);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded border text-xs font-semibold ${
+                            pg.isPublished
+                              ? 'border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-300 hover:bg-amber-50'
+                              : 'border-emerald-300 text-emerald-800 dark:border-emerald-800 dark:text-emerald-300 hover:bg-emerald-50'
+                          }`}
+                        >
+                          {pg.isPublished ? 'Hide' : 'Show'}
                         </button>
                         <button
                           type="button"
@@ -5593,6 +5632,7 @@ export function AdminDashboard({
                       ['sections', 'Homepage Sections'],
                       ['design', 'Design & Theme'],
                       ['metrics', 'Recognitions & Recruiters'],
+                      ['social', 'Social Media & Sharing'],
                     ] as const
                   ).map(([id, label]) => (
                     <button
@@ -6066,6 +6106,436 @@ export function AdminDashboard({
                   </div>
                 </div>
               )}
+
+              {settingsSection === 'social' && (() => {
+                const socialList: SocialMediaLink[] = settingsDraft.socialMediaLinks || DEFAULT_SOCIAL_MEDIA_LINKS;
+                const shareCfg = normalizeSocialSharingConfig(settingsDraft.socialSharing);
+                const updateSocialList = (next: SocialMediaLink[]) => {
+                  setSettingsDraft({
+                    ...settingsDraft,
+                    socialMediaLinks: next,
+                  });
+                };
+                const origin = typeof window !== 'undefined' ? window.location.origin : 'https://coe.sveri.ac.in';
+                const broadcastLinks = buildSocialShareUrls({
+                  url: broadcastUrl || `${origin}/`,
+                  title: broadcastTitle || `${settingsDraft.shortCode} Institutional Announcement`,
+                  summary: broadcastSummary,
+                  hashtags: broadcastTags,
+                  via: shareCfg.twitterHandle,
+                });
+
+                return (
+                  <div className="space-y-6">
+                    {/* A. Social Media Links & Icons Manager */}
+                    <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                            Official Social Media Profiles &amp; Header/Footer Icons ({socialList.length})
+                          </h3>
+                          <p className="text-xs text-stone-500">
+                            Add, edit, reorder, show/hide, or delete any social media channel. Remember to click Save All Website Settings below.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                        <select
+                          aria-label="Select social platform"
+                          value={newSocialPlatform}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNewSocialPlatform(val);
+                            const preset = SOCIAL_PLATFORM_PRESETS.find((p) => p.value === val);
+                            if (preset && val !== 'custom') setNewSocialLabel(preset.label);
+                          }}
+                          className="px-2.5 py-2 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        >
+                          {SOCIAL_PLATFORM_PRESETS.map((p) => (
+                            <option key={p.value} value={p.value}>{p.label}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={newSocialLabel}
+                          onChange={(e) => setNewSocialLabel(e.target.value)}
+                          placeholder="Display Label *"
+                          className="px-2.5 py-2 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <input
+                          type="url"
+                          value={newSocialUrl}
+                          onChange={(e) => setNewSocialUrl(e.target.value)}
+                          placeholder="Profile URL (https://...) *"
+                          className="px-2.5 py-2 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={newSocialHandle}
+                            onChange={(e) => setNewSocialHandle(e.target.value)}
+                            placeholder="@handle (optional)"
+                            className="flex-1 min-w-0 px-2.5 py-2 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newSocialLabel.trim() || !newSocialUrl.trim()) {
+                                notify('err', 'Enter both platform label and https:// profile URL.');
+                                return;
+                              }
+                              const next: SocialMediaLink[] = [
+                                ...socialList,
+                                {
+                                  id: Math.max(0, ...socialList.map((s) => s.id)) + 1,
+                                  platform: newSocialPlatform,
+                                  label: newSocialLabel.trim(),
+                                  url: newSocialUrl.trim(),
+                                  handle: newSocialHandle.trim(),
+                                  isActive: true,
+                                  sortOrder: socialList.length + 1,
+                                },
+                              ];
+                              updateSocialList(next);
+                              setNewSocialUrl('');
+                              setNewSocialHandle('');
+                              notify('ok', `Added ${newSocialLabel.trim()}. Click Save All Website Settings to persist.`);
+                            }}
+                            className="px-3 py-2 rounded bg-stone-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold shrink-0"
+                          >
+                            + Add
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        {socialList.map((item, idx) => (
+                          <div
+                            key={item.id}
+                            className="p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-wrap items-center gap-2 text-xs"
+                          >
+                            <span className="p-2 rounded bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-200">
+                              <SocialPlatformSvg platform={item.platform} className="w-4 h-4" />
+                            </span>
+                            <input
+                              type="text"
+                              value={item.label}
+                              onChange={(e) => {
+                                const next = [...socialList];
+                                next[idx] = { ...item, label: e.target.value };
+                                updateSocialList(next);
+                              }}
+                              className="w-28 px-2 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold"
+                            />
+                            <input
+                              type="url"
+                              value={item.url}
+                              onChange={(e) => {
+                                const next = [...socialList];
+                                next[idx] = { ...item, url: e.target.value };
+                                updateSocialList(next);
+                              }}
+                              className="flex-1 min-w-[180px] px-2 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                            />
+                            <label className="inline-flex items-center gap-1 cursor-pointer px-2">
+                              <input
+                                type="checkbox"
+                                checked={item.isActive}
+                                onChange={(e) => {
+                                  const next = [...socialList];
+                                  next[idx] = { ...item, isActive: e.target.checked };
+                                  updateSocialList(next);
+                                }}
+                              />
+                              <span>Visible</span>
+                            </label>
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                const next = [...socialList];
+                                [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                updateSocialList(next.map((n, i) => ({ ...n, sortOrder: i + 1 })));
+                              }}
+                              className="p-1.5 rounded border disabled:opacity-30"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === socialList.length - 1}
+                              onClick={() => {
+                                const next = [...socialList];
+                                [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                                updateSocialList(next.map((n, i) => ({ ...n, sortOrder: i + 1 })));
+                              }}
+                              className="p-1.5 rounded border disabled:opacity-30"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateSocialList(socialList.filter((s) => s.id !== item.id))}
+                              className="p-1.5 rounded text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* B. Social Sharing Controls */}
+                    <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 space-y-3 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                          Public Post Sharing Controls &amp; Placement Toggles
+                        </h3>
+                        <label className="inline-flex items-center gap-2 font-bold cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={shareCfg.enabled}
+                            onChange={(e) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                socialSharing: { ...shareCfg, enabled: e.target.checked },
+                              })
+                            }
+                          />
+                          <span>Enable Social Share Bar Across Website</span>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {(
+                          [
+                            ['showIconsInHeader', 'Show Social Icons in Header'],
+                            ['showIconsInFooter', 'Show Social Icons in Footer'],
+                            ['showOnPages', 'Share Bar on UGC Micro-Pages'],
+                            ['showOnResearch', 'Share Bar on Research Pages'],
+                            ['showOnConferences', 'Share Bar on Conferences'],
+                            ['showOnPortals', 'Share Bar on Sports/Placements/Facilities'],
+                          ] as const
+                        ).map(([k, lbl]) => (
+                          <label key={k} className="flex items-center gap-2 p-2 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={shareCfg[k]}
+                              onChange={(e) =>
+                                setSettingsDraft({
+                                  ...settingsDraft,
+                                  socialSharing: { ...shareCfg, [k]: e.target.checked },
+                                })
+                              }
+                            />
+                            <span>{lbl}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <p className="font-semibold pt-1">Active Share Networks:</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {(
+                          [
+                            ['whatsapp', 'WhatsApp'],
+                            ['linkedin', 'LinkedIn'],
+                            ['twitter', 'X (Twitter)'],
+                            ['facebook', 'Facebook'],
+                            ['telegram', 'Telegram'],
+                            ['email', 'Email Link'],
+                            ['copyLink', 'Copy URL Button'],
+                            ['nativeShare', 'Device Web Share'],
+                          ] as const
+                        ).map(([pk, plbl]) => (
+                          <label key={pk} className="flex items-center gap-2 p-2 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={shareCfg.platforms[pk]}
+                              onChange={(e) =>
+                                setSettingsDraft({
+                                  ...settingsDraft,
+                                  socialSharing: {
+                                    ...shareCfg,
+                                    platforms: { ...shareCfg.platforms, [pk]: e.target.checked },
+                                  },
+                                })
+                              }
+                            />
+                            <span>{plbl}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                        <div>
+                          <label className="block font-semibold mb-1">Share Bar Prompt Text</label>
+                          <input
+                            type="text"
+                            value={shareCfg.shareHeading}
+                            onChange={(e) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                socialSharing: { ...shareCfg, shareHeading: e.target.value },
+                              })
+                            }
+                            className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Default Hashtags (comma-separated)</label>
+                          <input
+                            type="text"
+                            value={shareCfg.defaultHashtags}
+                            onChange={(e) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                socialSharing: { ...shareCfg, defaultHashtags: e.target.value },
+                              })
+                            }
+                            className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Official X (@handle)</label>
+                          <input
+                            type="text"
+                            value={shareCfg.twitterHandle || ''}
+                            onChange={(e) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                socialSharing: { ...shareCfg, twitterHandle: e.target.value },
+                              })
+                            }
+                            placeholder="svcoer_edu"
+                            className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* C. Direct Social Post & Broadcast Composer */}
+                    <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/40 dark:bg-slate-800/40 space-y-3 text-xs">
+                      <div>
+                        <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                          Direct Social Media Post &amp; Broadcast Composer
+                        </h3>
+                        <p className="text-stone-600 dark:text-slate-300">
+                          Pick any published micro-page, conference, notice, or custom message and publish/broadcast straight to LinkedIn, X, Facebook, WhatsApp, Telegram, or copy formatted text.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="md:col-span-2">
+                          <label className="block font-semibold mb-1">Select Website Page / Event to Broadcast</label>
+                          <select
+                            value={broadcastSourceKey}
+                            onChange={(e) => {
+                              const k = e.target.value;
+                              setBroadcastSourceKey(k);
+                              if (k.startsWith('page:')) {
+                                const slug = k.slice(5);
+                                const pg = state.pages.find((p) => p.slug === slug);
+                                if (pg) {
+                                  setBroadcastTitle(pg.title);
+                                  setBroadcastSummary(pg.subtitle || `${settingsDraft.shortCode} Official Notice`);
+                                  setBroadcastUrl(`${origin}/page/${pg.slug}`);
+                                }
+                              } else if (k.startsWith('conf:')) {
+                                const slug = k.slice(5);
+                                const cf = (state.conferences || []).find((c) => c.slug === slug);
+                                if (cf) {
+                                  setBroadcastTitle(`${cf.shortName}: ${cf.title}`);
+                                  setBroadcastSummary(`${cf.scope} (${cf.startDate}) · ${cf.venue}`);
+                                  setBroadcastUrl(`${origin}/conference/${cf.slug}`);
+                                }
+                              }
+                            }}
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          >
+                            <option value="custom">Custom Institutional Post / Announcement</option>
+                            {state.pages.filter((p) => p.isPublished).map((p) => (
+                              <option key={p.id} value={`page:${p.slug}`}>Page: {p.title}</option>
+                            ))}
+                            {(state.conferences || []).filter((c) => c.isPublished).map((c) => (
+                              <option key={c.id} value={`conf:${c.slug}`}>Conference: {c.shortName} — {c.title}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <input
+                          type="text"
+                          value={broadcastTitle}
+                          onChange={(e) => setBroadcastTitle(e.target.value)}
+                          placeholder="Post Headline *"
+                          className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                        <input
+                          type="url"
+                          value={broadcastUrl}
+                          onChange={(e) => setBroadcastUrl(e.target.value)}
+                          placeholder="Target Link URL *"
+                          className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                        <textarea
+                          rows={2}
+                          value={broadcastSummary}
+                          onChange={(e) => setBroadcastSummary(e.target.value)}
+                          placeholder="Post caption / announcement details..."
+                          className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                        <input
+                          type="text"
+                          value={broadcastTags}
+                          onChange={(e) => setBroadcastTags(e.target.value)}
+                          placeholder="Hashtags (comma-separated)"
+                          className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+
+                      <div className="p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                          Social Card &amp; Caption Preview
+                        </p>
+                        <pre className="whitespace-pre-wrap font-sans text-xs text-stone-800 dark:text-slate-200">
+                          {broadcastLinks.formattedPost}
+                        </pre>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <a href={broadcastLinks.linkedin} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-sky-700 text-white font-bold">
+                          Publish to LinkedIn &rarr;
+                        </a>
+                        <a href={broadcastLinks.twitter} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-slate-900 text-white font-bold">
+                          Post on X &rarr;
+                        </a>
+                        <a href={broadcastLinks.facebook} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-blue-700 text-white font-bold">
+                          Post to Facebook &rarr;
+                        </a>
+                        <a href={broadcastLinks.whatsapp} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-emerald-700 text-white font-bold">
+                          WhatsApp Broadcast &rarr;
+                        </a>
+                        <a href={broadcastLinks.telegram} target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-cyan-700 text-white font-bold">
+                          Post on Telegram &rarr;
+                        </a>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(broadcastLinks.formattedPost);
+                              setBroadcastCopied(true);
+                              window.setTimeout(() => setBroadcastCopied(false), 2000);
+                            } catch {
+                              notify('err', 'Clipboard access denied.');
+                            }
+                          }}
+                          className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                        >
+                          {broadcastCopied ? 'Copied Post Text!' : 'Copy Post for Instagram / YouTube'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <button
                 type="submit"
@@ -6568,6 +7038,7 @@ export function AdminDashboard({
             registrations={state.conferenceRegistrations || []}
             departments={state.departments}
             settings={state.settings}
+            researchPortfolio={state.researchPortfolio}
             adminFetch={adminFetch}
             uploadBinary={uploadBinaryFile}
             notify={notify}

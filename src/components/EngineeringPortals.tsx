@@ -34,6 +34,7 @@ import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop'
 import { CaptchaWidget } from './CaptchaWidget';
 import { CmsHtmlContent } from './CmsHtmlContent';
 import { CustomSelectInput } from './CustomSelectInput';
+import { SocialShareBar } from './SocialMediaWidgets';
 
 interface PlacementsPortalProps {
   placements: PlacementsData;
@@ -691,6 +692,13 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
           ))}
         </div>
       </section>
+
+      <SocialShareBar
+        title={`${settings.shortCode} Training & Placement Portal — ${metrics.placementRate}% Track`}
+        summary={placements.summaryNote}
+        settings={settings}
+        location="portal"
+      />
     </div>
   );
 }

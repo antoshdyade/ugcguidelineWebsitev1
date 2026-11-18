@@ -13,6 +13,7 @@ import {
 import type { FacilitiesData, SiteSettings } from '../types/cms';
 import { sortByOrder } from '../lib/cmsLogic';
 import { CmsHtmlContent } from './CmsHtmlContent';
+import { SocialShareBar } from './SocialMediaWidgets';
 
 interface FacilitiesPortalProps {
   facilities: FacilitiesData;
@@ -261,6 +262,13 @@ export function FacilitiesPortal({ facilities, settings, initialCategory, onNavi
           ))}
         </div>
       )}
+
+      <SocialShareBar
+        title={`${settings.shortCode} Campus Infrastructure & Facilities`}
+        summary={cfg.heroSubtitle}
+        settings={settings}
+        location="portal"
+      />
 
       <footer className="text-center text-xs text-stone-500 dark:text-slate-400 pt-2">
         Infrastructure maintained under AICTE Approval Process Handbook &amp; UGC Public Self-Disclosure norms ({settings.institutionName}).

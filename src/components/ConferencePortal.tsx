@@ -29,6 +29,7 @@ import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop'
 import { CaptchaWidget } from './CaptchaWidget';
 import { CmsHtmlContent } from './CmsHtmlContent';
 import { CustomSelectInput } from './CustomSelectInput';
+import { SocialShareBar } from './SocialMediaWidgets';
 
 interface ConferencePortalProps {
   slug?: string;
@@ -456,6 +457,13 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
             No published conferences match the selected filter yet.
           </div>
         )}
+
+        <SocialShareBar
+          title={`${settings?.shortCode || 'SVCOER'} Research Conferences, Workshops & Symposia`}
+          summary="Browse upcoming international & national conferences, workshops, FDPs, and poster presentations."
+          settings={settings}
+          location="conference"
+        />
       </div>
     );
   }
@@ -1430,6 +1438,13 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
           </form>
         </section>
       )}
+
+      <SocialShareBar
+        title={`${selectedConf.shortName}: ${selectedConf.title}`}
+        summary={`${selectedConf.scope} · ${selectedConf.startDate} · ${selectedConf.venue}`}
+        settings={settings}
+        location="conference"
+      />
     </div>
   );
 }

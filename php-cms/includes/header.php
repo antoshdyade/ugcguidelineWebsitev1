@@ -19,7 +19,7 @@ $pagesByCat = [];
 foreach ($navPagesStmt->fetchAll() as $pg) {
     $pagesByCat[$pg['category_id']][] = $pg;
 }
-$dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '06220');
+$dteDisplay = preg_replace('/^EN-/i', '', (string)($settings['dte_code'] ?? '06220'));
 $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
 $resolvedSeo = resolvePhpRouteSeo(
     $seoSettings,

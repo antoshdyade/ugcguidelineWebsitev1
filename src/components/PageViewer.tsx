@@ -1,9 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Download, ExternalLink, Globe2, Mail, MapPin, Phone, Volume2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Award, Briefcase, Calendar, ChevronLeft, ChevronRight, Download, ExternalLink, FlaskConical, Globe2, Mail, MapPin, Phone, Search, Volume2 } from 'lucide-react';
 import { formatCommitteeGroupLabel, sortByOrder } from '../lib/cmsLogic';
+import { filterResearchPatents, filterResearchProjects } from '../lib/collegeFeaturesLogic';
 import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
 import { CmsHtmlContent } from './CmsHtmlContent';
-import type { CampusEvent, CmsCategory, CmsPage, Conference, ConferenceSlide, LeadershipProfile } from '../types/cms';
+import { SocialShareBar } from './SocialMediaWidgets';
+import type {
+  CampusEvent,
+  CmsCategory,
+  CmsPage,
+  Conference,
+  ConferenceSlide,
+  LeadershipProfile,
+  ResearchPortfolioData,
+  SiteSettings,
+} from '../types/cms';
 
 interface PageViewerProps {
   slug?: string;
@@ -14,6 +25,8 @@ interface PageViewerProps {
   events: CampusEvent[];
   conferences?: Conference[];
   researchSliderSlides?: ConferenceSlide[];
+  researchPortfolio?: ResearchPortfolioData;
+  settings?: SiteSettings;
   onNavigate: (path: string) => void;
 }
 
@@ -26,10 +39,17 @@ export function PageViewer({
   events,
   conferences = [],
   researchSliderSlides = [],
+  researchPortfolio,
+  settings,
   onNavigate,
 }: PageViewerProps) {
   const { toggleSpeech, isSpeaking } = useThemeAccessibility();
   const [researchSlideIdx, setResearchSlideIdx] = useState(0);
+  const [projectStatusFilter, setProjectStatusFilter] = useState('All');
+  const [projectAgencyFilter, setProjectAgencyFilter] = useState('All');
+  const [projectSearch, setProjectSearch] = useState('');
+  const [patentTypeFilter, setPatentTypeFilter] = useState('All');
+  const [patentSearch, setPatentSearch] = useState('');
 
   useEffect(() => {
     if (researchSliderSlides.length <= 1) return;
@@ -38,6 +58,31 @@ export function PageViewer({
     }, 5500);
     return () => window.clearInterval(timer);
   }, [researchSliderSlides.length]);
+
+  const publishedProjects = useMemo(
+    () => (researchPortfolio?.projects || []).filter((p) => p.isPublished !== false),
+    [researchPortfolio],
+  );
+  const publishedPatents = useMemo(
+    () => (researchPortfolio?.patents || []).filter((p) => p.isPublished !== false),
+    [researchPortfolio],
+  );
+  const projectAgencies = useMemo(
+    () => ['All', ...Array.from(new Set(publishedProjects.map((p) => p.fundingAgency).filter(Boolean)))],
+    [publishedProjects],
+  );
+  const patentTypes = useMemo(
+    () => ['All', ...Array.from(new Set(publishedPatents.map((p) => p.itemType).filter(Boolean)))],
+    [publishedPatents],
+  );
+  const visibleProjects = useMemo(
+    () => filterResearchProjects(publishedProjects, projectStatusFilter, projectAgencyFilter, projectSearch),
+    [publishedProjects, projectStatusFilter, projectAgencyFilter, projectSearch],
+  );
+  const visiblePatents = useMemo(
+    () => filterResearchPatents(publishedPatents, patentTypeFilter, patentSearch),
+    [publishedPatents, patentTypeFilter, patentSearch],
+  );
 
   const resolvedCategory = categorySlug ? categories.find((c) => c.slug === categorySlug) : undefined;
   const categoryPages = resolvedCategory
@@ -310,6 +355,274 @@ export function PageViewer({
                   ))}
                 </div>
               )}
+
+              {/* Funded Research Projects, Patents/IPR, Start-ups & R&D Cell Summary */}
+              {researchPortfolio && (
+                <div className="pt-4 border-t border-stone-200 dark:border-slate-800 space-y-6">
+                  {/* R&D Cell Dean Contact & KPI Strip */}
+                  <div className="rounded-xl p-5 bg-stone-50 dark:bg-slate-800/60 border border-stone-200 dark:border-slate-700 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                    <div className="lg:col-span-7 space-y-1">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                        {researchPortfolio.config.heroBadge}
+                      </p>
+                      <h2 className="font-display text-lg font-bold text-stone-900 dark:text-white">
+                        {researchPortfolio.config.heroTitle}
+                      </h2>
+                      <p className="text-xs text-stone-600 dark:text-slate-300 leading-relaxed">
+                        {researchPortfolio.config.heroSubtitle}
+                      </p>
+                      <div className="flex flex-wrap gap-4 pt-1.5 text-xs text-stone-700 dark:text-slate-200">
+                        <span>
+                          <strong>{researchPortfolio.config.deanName}</strong> · {researchPortfolio.config.deanTitle}
+                        </span>
+                        {researchPortfolio.config.deanEmail && (
+                          <span className="inline-flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5 text-amber-600" /> {researchPortfolio.config.deanEmail}
+                          </span>
+                        )}
+                        {researchPortfolio.config.deanPhone && (
+                          <span className="inline-flex items-center gap-1 tabular-nums">
+                            <Phone className="w-3.5 h-3.5 text-amber-600" /> {researchPortfolio.config.deanPhone}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="lg:col-span-5 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-center">
+                      <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700">
+                        <p className="text-sm font-bold text-stone-900 dark:text-white tabular-nums">
+                          {researchPortfolio.config.totalGrantsHighlight}
+                        </p>
+                        <p className="text-[11px] text-stone-500">Funded R&amp;D</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700">
+                        <p className="text-sm font-bold text-stone-900 dark:text-white tabular-nums">
+                          {publishedProjects.length} Projects
+                        </p>
+                        <p className="text-[11px] text-stone-500">Extramural Grants</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 col-span-2 sm:col-span-1">
+                        <p className="text-sm font-bold text-stone-900 dark:text-white tabular-nums">
+                          {publishedPatents.length} IPR / Start-ups
+                        </p>
+                        <p className="text-[11px] text-stone-500">Patents &amp; Spinouts</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Funded Research Projects & Grants */}
+                  {publishedProjects.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-display text-lg font-bold text-stone-900 dark:text-white flex items-center gap-2">
+                            <FlaskConical className="w-5 h-5 text-amber-600" />
+                            Sponsored Research Projects &amp; Grants ({visibleProjects.length})
+                          </h3>
+                          <p className="text-xs text-stone-500 dark:text-slate-400">
+                            Government &amp; industry funded grants (DST-SERB, AICTE-MODROBS, DRDO, RGSTC, MSME) managed via Admin Dashboard.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2.5" />
+                            <input
+                              type="text"
+                              value={projectSearch}
+                              onChange={(e) => setProjectSearch(e.target.value)}
+                              placeholder="Search PI, project, dept..."
+                              className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                            />
+                          </div>
+                          <select
+                            aria-label="Filter projects by funding agency"
+                            value={projectAgencyFilter}
+                            onChange={(e) => setProjectAgencyFilter(e.target.value)}
+                            className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                          >
+                            {projectAgencies.map((ag) => (
+                              <option key={ag} value={ag}>
+                                {ag === 'All' ? 'All Agencies' : ag}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label="Filter projects by status"
+                            value={projectStatusFilter}
+                            onChange={(e) => setProjectStatusFilter(e.target.value)}
+                            className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                          >
+                            <option value="All">All Statuses</option>
+                            <option value="Ongoing">Ongoing</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Sanctioned">Sanctioned</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-xl border border-stone-200 dark:border-slate-800">
+                        <table className="cms-table cms-table-navy w-full text-xs">
+                          <thead>
+                            <tr>
+                              <th>Project Title &amp; Sanction Ref</th>
+                              <th>Funding Agency</th>
+                              <th>Principal Investigator</th>
+                              <th>Dept</th>
+                              <th>Grant</th>
+                              <th>Year / Duration</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleProjects.map((proj) => (
+                              <tr key={proj.id}>
+                                <td className="min-w-[230px]">
+                                  <p className="font-semibold text-stone-900 dark:text-white">{proj.title}</p>
+                                  {proj.projectCode && (
+                                    <p className="text-[11px] font-mono text-stone-500 mt-0.5">{proj.projectCode}</p>
+                                  )}
+                                  {proj.summary && (
+                                    <p className="text-[11px] text-stone-600 dark:text-slate-300 mt-1">{proj.summary}</p>
+                                  )}
+                                </td>
+                                <td>{proj.fundingAgency}</td>
+                                <td>
+                                  <span className="font-medium">{proj.principalInvestigator}</span>
+                                  {proj.coInvestigator && (
+                                    <span className="block text-[11px] text-stone-500">Co-PI: {proj.coInvestigator}</span>
+                                  )}
+                                </td>
+                                <td className="font-mono font-semibold">{proj.departmentCode}</td>
+                                <td className="font-bold tabular-nums whitespace-nowrap">{proj.grantAmountLakhs}</td>
+                                <td className="tabular-nums">
+                                  <span>{proj.sanctionYear}</span>
+                                  {proj.duration && (
+                                    <span className="block text-[11px] text-stone-500">{proj.duration}</span>
+                                  )}
+                                </td>
+                                <td>
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                                      proj.status === 'Ongoing'
+                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                        : proj.status === 'Sanctioned'
+                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                          : 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300'
+                                    }`}
+                                  >
+                                    {proj.status}
+                                  </span>
+                                  {proj.documentUrl && (
+                                    <a
+                                      href={proj.documentUrl}
+                                      onClick={(e) => {
+                                        if (proj.documentUrl!.startsWith('/')) {
+                                          e.preventDefault();
+                                          onNavigate(proj.documentUrl!);
+                                        }
+                                      }}
+                                      target={proj.documentUrl.startsWith('http') ? '_blank' : undefined}
+                                      rel="noopener noreferrer"
+                                      className="block mt-1 text-[11px] font-semibold text-amber-700 hover:underline"
+                                    >
+                                      Sanction Order &rarr;
+                                    </a>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {visibleProjects.length === 0 && (
+                              <tr>
+                                <td colSpan={7} className="text-center py-6 text-stone-500">
+                                  No research projects match your current filter.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Patents, IPR, Start-ups & Industry Consultancy */}
+                  {publishedPatents.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-display text-lg font-bold text-stone-900 dark:text-white flex items-center gap-2">
+                            <Award className="w-5 h-5 text-amber-600" />
+                            Patents, IPR, Incubated Start-ups &amp; Consultancy ({visiblePatents.length})
+                          </h3>
+                          <p className="text-xs text-stone-500 dark:text-slate-400">
+                            Granted &amp; published patents, AICTE IDEA Lab / IIC incubated start-ups, and industry testing assignments.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={patentSearch}
+                            onChange={(e) => setPatentSearch(e.target.value)}
+                            placeholder="Search patent, inventor, ID..."
+                            className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                          />
+                          <select
+                            aria-label="Filter IPR by category"
+                            value={patentTypeFilter}
+                            onChange={(e) => setPatentTypeFilter(e.target.value)}
+                            className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                          >
+                            {patentTypes.map((pt) => (
+                              <option key={pt} value={pt}>
+                                {pt === 'All' ? 'All IPR & Start-ups' : pt}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {visiblePatents.map((item) => (
+                          <article
+                            key={item.id}
+                            className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 space-y-2 text-xs"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                                <Briefcase className="w-3.5 h-3.5" />
+                                {item.itemType}
+                              </span>
+                              <span className="font-mono text-[11px] font-semibold text-stone-500">
+                                {item.referenceNumber} · {item.departmentCode}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-stone-900 dark:text-white">{item.title}</h4>
+                            <p className="text-stone-700 dark:text-slate-200">
+                              <strong>Inventors / Lead:</strong> {item.inventorsOrLead}
+                            </p>
+                            {item.summary && (
+                              <p className="text-stone-600 dark:text-slate-300 leading-relaxed">{item.summary}</p>
+                            )}
+                            <div className="pt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500 dark:text-slate-400 border-t border-stone-200/70 dark:border-slate-700">
+                              <span>
+                                {item.status} {item.filingOrGrantDate ? `· ${item.filingOrGrantDate}` : ''}
+                              </span>
+                              {item.externalUrl && (
+                                <a
+                                  href={item.externalUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-bold text-amber-700 hover:underline inline-flex items-center gap-1"
+                                >
+                                  Verify Record <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -456,6 +769,13 @@ export function PageViewer({
               ))}
             </div>
           )}
+
+          <SocialShareBar
+            title={page.title}
+            summary={page.subtitle}
+            settings={settings}
+            location={page.categorySlug === 'research' ? 'research' : 'page'}
+          />
         </article>
       </div>
     </div>

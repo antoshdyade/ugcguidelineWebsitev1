@@ -3,6 +3,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
+$settings = getSiteSettings($pdo);
 
 $sliders    = $pdo->query('SELECT * FROM sliders WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
 $ticker     = $pdo->query('SELECT * FROM ticker_items WHERE is_active = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();

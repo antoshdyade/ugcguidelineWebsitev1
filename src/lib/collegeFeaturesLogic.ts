@@ -14,9 +14,15 @@ import type {
   PlacementNotice,
   PlacementStory,
   PlacementYearStat,
+  ResearchPatentItem,
+  ResearchPortfolioData,
+  ResearchProjectItem,
   SanctionedIntakeProgram,
   SecurityConfig,
   SeoSettings,
+  SiteSettings,
+  SocialMediaLink,
+  SocialSharingConfig,
   SportsData,
   FacilitiesData,
   VisitorLogEntry,
@@ -28,7 +34,69 @@ import {
   createSeedVisitorLogs,
 } from './securityAndSeoLogic';
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
+
+export const SOCIAL_PLATFORM_PRESETS: { value: string; label: string }[] = [
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'twitter', label: 'X (Twitter)' },
+  { value: 'whatsapp', label: 'WhatsApp Channel' },
+  { value: 'telegram', label: 'Telegram' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'custom', label: 'Custom Platform' },
+];
+
+export const DEFAULT_SOCIAL_MEDIA_LINKS: SocialMediaLink[] = [
+  { id: 1, platform: 'facebook', label: 'Facebook', url: 'https://facebook.com', handle: '@svcoer', isActive: true, sortOrder: 1 },
+  { id: 2, platform: 'linkedin', label: 'LinkedIn', url: 'https://linkedin.com', handle: 'svcoer-pandharpur', isActive: true, sortOrder: 2 },
+  { id: 3, platform: 'instagram', label: 'Instagram', url: 'https://instagram.com', handle: '@svcoer_official', isActive: true, sortOrder: 3 },
+  { id: 4, platform: 'youtube', label: 'YouTube', url: 'https://youtube.com', handle: '@svcoer_edu', isActive: true, sortOrder: 4 },
+  { id: 5, platform: 'twitter', label: 'X (Twitter)', url: 'https://x.com', handle: '@svcoer_edu', isActive: true, sortOrder: 5 },
+];
+
+export const DEFAULT_SOCIAL_SHARING_CONFIG: SocialSharingConfig = {
+  enabled: true,
+  showIconsInHeader: true,
+  showIconsInFooter: true,
+  showOnPages: true,
+  showOnResearch: true,
+  showOnConferences: true,
+  showOnPortals: true,
+  shareHeading: 'Share this update',
+  defaultHashtags: 'SVCOER,SVERI,Engineering,NEP2020,Pandharpur',
+  twitterHandle: 'svcoer_edu',
+  platforms: {
+    whatsapp: true,
+    linkedin: true,
+    twitter: true,
+    facebook: true,
+    telegram: true,
+    email: true,
+    copyLink: true,
+    nativeShare: true,
+  },
+};
+
+export const RESEARCH_AGENCY_PRESETS = [
+  'DST-SERB (Govt. of India)',
+  'AICTE-MODROBS / RPS',
+  'MSME Design Clinic',
+  'DRDO / ISRO Extramural',
+  'RGSTC Maharashtra',
+  'AICTE IDEA Lab Grant',
+  'Industry Sponsored R&D',
+] as const;
+
+export const RESEARCH_PATENT_TYPE_PRESETS = [
+  'Patent Granted',
+  'Patent Published',
+  'Patent Filed',
+  'Copyright / Design',
+  'Incubated Start-up',
+  'Industry Consultancy',
+] as const;
 
 export const PLACEMENT_NOTICE_CATEGORY_PRESETS = [
   'Campus Drive Notice',
@@ -767,6 +835,11 @@ export function migrateDatabaseInPlace(
     portalMenuItems: mergedPortalMenuItems,
     grievancePortal: mergedGrievancePortal,
     intakePrograms: mergedIntakePrograms,
+    socialMediaLinks:
+      Array.isArray(existing.settings?.socialMediaLinks)
+        ? existing.settings.socialMediaLinks
+        : structuredClone(seed.settings.socialMediaLinks || DEFAULT_SOCIAL_MEDIA_LINKS),
+    socialSharing: normalizeSocialSharingConfig(existing.settings?.socialSharing || seed.settings.socialSharing),
     homeSections: {
       showTicker: true,
       showSlider: true,
@@ -784,6 +857,9 @@ export function migrateDatabaseInPlace(
     customHomeComponents:
       existing.settings?.customHomeComponents ?? seed.settings.customHomeComponents ?? [],
   };
+  if (!existing.settings?.socialMediaLinks || !existing.settings?.socialSharing) {
+    upgraded = true;
+  }
 
   const mergedSeo: SeoSettings = {
     ...DEFAULT_SEO_SETTINGS,
@@ -841,6 +917,17 @@ export function migrateDatabaseInPlace(
         }
       : ((upgraded = true), structuredClone(seed.facilities!));
 
+  const mergedResearchPortfolio: ResearchPortfolioData =
+    existing.researchPortfolio && Array.isArray(existing.researchPortfolio.projects)
+      ? {
+          config: existing.researchPortfolio.config || structuredClone(seed.researchPortfolio!.config),
+          projects: existing.researchPortfolio.projects,
+          patents: Array.isArray(existing.researchPortfolio.patents)
+            ? existing.researchPortfolio.patents
+            : structuredClone(seed.researchPortfolio!.patents),
+        }
+      : ((upgraded = true), structuredClone(seed.researchPortfolio!));
+
   const mergedDb: CmsDatabase = {
     ...seed,
     ...existing,
@@ -852,6 +939,7 @@ export function migrateDatabaseInPlace(
     placements: mergedPlacements,
     sports: mergedSports,
     facilities: mergedFacilities,
+    researchPortfolio: mergedResearchPortfolio,
     grievances,
     alumni: existingAlumni
       ? {
@@ -869,4 +957,129 @@ export function migrateDatabaseInPlace(
   };
 
   return { db: mergedDb, upgraded };
+}
+
+export function normalizeSocialSharingConfig(cfg?: Partial<SocialSharingConfig>): SocialSharingConfig {
+  return {
+    ...DEFAULT_SOCIAL_SHARING_CONFIG,
+    ...(cfg || {}),
+    platforms: {
+      ...DEFAULT_SOCIAL_SHARING_CONFIG.platforms,
+      ...(cfg?.platforms || {}),
+    },
+  };
+}
+
+export function getActiveSocialLinks(settings?: Partial<SiteSettings>): SocialMediaLink[] {
+  if (Array.isArray(settings?.socialMediaLinks)) {
+    return [...settings.socialMediaLinks]
+      .filter((item) => item.isActive !== false && Boolean(String(item.url || '').trim()))
+      .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+  }
+  const legacy = settings?.socialLinks;
+  if (!legacy) return DEFAULT_SOCIAL_MEDIA_LINKS.filter((item) => item.isActive);
+  const mapped: SocialMediaLink[] = [
+    { id: 1, platform: 'facebook', label: 'Facebook', url: legacy.facebook || '', isActive: Boolean(legacy.facebook), sortOrder: 1 },
+    { id: 2, platform: 'linkedin', label: 'LinkedIn', url: legacy.linkedin || '', isActive: Boolean(legacy.linkedin), sortOrder: 2 },
+    { id: 3, platform: 'youtube', label: 'YouTube', url: legacy.youtube || '', isActive: Boolean(legacy.youtube), sortOrder: 3 },
+    { id: 4, platform: 'twitter', label: 'X (Twitter)', url: legacy.twitter || '', isActive: Boolean(legacy.twitter), sortOrder: 4 },
+  ];
+  return mapped.filter((item) => item.isActive);
+}
+
+export function syncLegacySocialLinks(links: SocialMediaLink[]): SiteSettings['socialLinks'] {
+  const findUrl = (platform: string) =>
+    links.find((l) => l.platform === platform && l.isActive !== false && l.url.trim())?.url.trim() || '';
+  return {
+    facebook: findUrl('facebook'),
+    linkedin: findUrl('linkedin'),
+    youtube: findUrl('youtube'),
+    twitter: findUrl('twitter'),
+  };
+}
+
+export function buildSocialShareUrls(params: {
+  url: string;
+  title: string;
+  summary?: string;
+  hashtags?: string;
+  via?: string;
+}) {
+  const cleanUrl = (params.url || '').trim();
+  const cleanTitle = (params.title || '').trim();
+  const cleanSummary = (params.summary || '').trim();
+  const tagList = (params.hashtags || '')
+    .split(',')
+    .map((t) => t.trim().replace(/^#+/, '').replace(/\s+/g, ''))
+    .filter(Boolean);
+  const hashLine = tagList.map((t) => `#${t}`).join(' ');
+  const combinedText = [cleanTitle, cleanSummary].filter(Boolean).join(' — ');
+  const encodedUrl = encodeURIComponent(cleanUrl);
+  const encodedTitle = encodeURIComponent(cleanTitle);
+  const encodedWhatsapp = encodeURIComponent([combinedText, cleanUrl, hashLine].filter(Boolean).join('\n\n'));
+  const encodedTweet = encodeURIComponent(cleanTitle + (cleanSummary ? `: ${cleanSummary.slice(0, 120)}` : ''));
+  const xParams = new URLSearchParams({ text: cleanTitle + (cleanSummary ? ` — ${cleanSummary.slice(0, 120)}` : ''), url: cleanUrl });
+  if (tagList.length > 0) xParams.set('hashtags', tagList.slice(0, 5).join(','));
+  if (params.via && params.via.trim()) xParams.set('via', params.via.trim().replace(/^@/, ''));
+
+  const mailSubject = encodeURIComponent(cleanTitle);
+  const mailBody = encodeURIComponent([cleanTitle, cleanSummary, cleanUrl].filter(Boolean).join('\n\n'));
+
+  return {
+    whatsapp: `https://wa.me/?text=${encodedWhatsapp}`,
+    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
+    twitter: `https://twitter.com/intent/tweet?${xParams.toString()}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+    telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedTweet}`,
+    email: `mailto:?subject=${mailSubject}&body=${mailBody}`,
+    formattedPost: [cleanTitle, cleanSummary, cleanUrl, hashLine].filter(Boolean).join('\n\n'),
+    encodedTitle,
+  };
+}
+
+export function filterResearchProjects(
+  projects: ResearchProjectItem[],
+  statusFilter: string,
+  agencyFilter: string,
+  query: string,
+): ResearchProjectItem[] {
+  const q = query.trim().toLowerCase();
+  return [...projects]
+    .filter((p) => {
+      if (statusFilter && statusFilter !== 'All' && p.status !== statusFilter) return false;
+      if (agencyFilter && agencyFilter !== 'All' && p.fundingAgency !== agencyFilter) return false;
+      if (!q) return true;
+      return (
+        p.title.toLowerCase().includes(q) ||
+        p.fundingAgency.toLowerCase().includes(q) ||
+        p.principalInvestigator.toLowerCase().includes(q) ||
+        (p.coInvestigator || '').toLowerCase().includes(q) ||
+        p.departmentCode.toLowerCase().includes(q) ||
+        (p.projectCode || '').toLowerCase().includes(q) ||
+        (p.summary || '').toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+}
+
+export function filterResearchPatents(
+  patents: ResearchPatentItem[],
+  typeFilter: string,
+  query: string,
+): ResearchPatentItem[] {
+  const q = query.trim().toLowerCase();
+  return [...patents]
+    .filter((item) => {
+      if (typeFilter && typeFilter !== 'All' && item.itemType !== typeFilter) return false;
+      if (!q) return true;
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.itemType.toLowerCase().includes(q) ||
+        item.inventorsOrLead.toLowerCase().includes(q) ||
+        item.departmentCode.toLowerCase().includes(q) ||
+        item.referenceNumber.toLowerCase().includes(q) ||
+        (item.partnerOrAgency || '').toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
 }

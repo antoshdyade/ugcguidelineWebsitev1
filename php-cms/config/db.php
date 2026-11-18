@@ -28,6 +28,84 @@ if (!defined('BASE_URL')) {
     define('BASE_URL', getenv('BASE_URL') ?: '');
 }
 
+// PHP 7.4 Compatibility Polyfills (prevents fatal Error on Ubuntu 20.04 / Webmin PHP 7.4)
+if (!function_exists('str_contains')) {
+    function str_contains($haystack, $needle): bool {
+        return $needle === '' || strpos((string)$haystack, (string)$needle) !== false;
+    }
+}
+if (!function_exists('str_starts_with')) {
+    function str_starts_with($haystack, $needle): bool {
+        $h = (string)$haystack;
+        $n = (string)$needle;
+        return $n === '' || strncmp($h, $n, strlen($n)) === 0;
+    }
+}
+if (!function_exists('str_ends_with')) {
+    function str_ends_with($haystack, $needle): bool {
+        $h = (string)$haystack;
+        $n = (string)$needle;
+        if ($n === '') {
+            return true;
+        }
+        $len = strlen($n);
+        return strlen($h) >= $len && substr($h, -$len) === $n;
+    }
+}
+
+// ext-mbstring Fallback Polyfills (prevents fatal Error on minimal Ubuntu PHP installs without php-mbstring)
+if (!function_exists('mb_strlen')) {
+    function mb_strlen($str, $encoding = null): int {
+        $s = (string)$str;
+        if (function_exists('iconv_strlen')) {
+            $len = @iconv_strlen($s, $encoding ?: 'UTF-8');
+            if ($len !== false) {
+                return (int)$len;
+            }
+        }
+        return strlen($s);
+    }
+}
+if (!function_exists('mb_substr')) {
+    function mb_substr($str, $start, $length = null, $encoding = null): string {
+        $s = (string)$str;
+        if (function_exists('iconv_substr')) {
+            $res = $length === null
+                ? @iconv_substr($s, (int)$start, strlen($s), $encoding ?: 'UTF-8')
+                : @iconv_substr($s, (int)$start, (int)$length, $encoding ?: 'UTF-8');
+            if ($res !== false) {
+                return $res;
+            }
+        }
+        return $length === null ? substr($s, (int)$start) : substr($s, (int)$start, (int)$length);
+    }
+}
+if (!function_exists('mb_strtolower')) {
+    function mb_strtolower($str, $encoding = null): string {
+        return strtolower((string)$str);
+    }
+}
+if (!function_exists('mb_strpos')) {
+    function mb_strpos($haystack, $needle, $offset = 0, $encoding = null) {
+        return strpos((string)$haystack, (string)$needle, (int)$offset);
+    }
+}
+if (!function_exists('mb_strimwidth')) {
+    function mb_strimwidth($str, $start, $width, $trimmarker = '', $encoding = null): string {
+        $s = (string)$str;
+        $st = (int)$start;
+        $w = (int)$width;
+        $slice = mb_substr($s, $st);
+        if (mb_strlen($slice) <= $w) {
+            return $slice;
+        }
+        $tm = (string)$trimmarker;
+        $tmLen = mb_strlen($tm);
+        $cutLen = max(0, $w - $tmLen);
+        return mb_substr($slice, 0, $cutLen) . $tm;
+    }
+}
+
 /**
  * Returns the base web path or configured BASE_URL (without trailing slash).
  * Automatically handles domain roots, Ubuntu Webmin VirtualHosts, and Windows XAMPP subfolders.
@@ -81,9 +159,9 @@ function getBaseUrl(): string
     return $cached;
 }
 
-function baseUrl(string $path = ''): string
+function baseUrl($path = ''): string
 {
-    $trimmed = ltrim($path);
+    $trimmed = ltrim((string)$path);
     if ($trimmed === '') {
         $base = getBaseUrl();
         return $base === '' ? '/' : $base . '/';
@@ -96,16 +174,16 @@ function baseUrl(string $path = ''): string
     return ($prefix === '' ? '' : $prefix) . '/' . $clean;
 }
 
-function assetUrl(string $path): string
+function assetUrl($path): string
 {
-    $clean = ltrim($path, '/');
+    $clean = ltrim((string)$path, '/');
     $fullFile = __DIR__ . '/../' . $clean;
     $ver = file_exists($fullFile) ? (string)filemtime($fullFile) : '3';
     $sep = strpos($clean, '?') !== false ? '&' : '?';
     return baseUrl($clean . $sep . 'v=' . $ver);
 }
 
-function mediaUrl(?string $path, string $fallback = 'assets/images/hero_campus.jpg'): string
+function mediaUrl($path, string $fallback = 'assets/images/hero_campus.jpg'): string
 {
     $p = trim((string)$path);
     if ($p === '') {
@@ -118,15 +196,30 @@ function getDB(): PDO
 {
     static $pdo = null;
     if ($pdo === null) {
-        $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET);
         $options = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ];
-        try {
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-        } catch (PDOException $ex) {
+        $hostsToTry = [DB_HOST];
+        if (strtolower((string)DB_HOST) === 'localhost') {
+            $hostsToTry[] = '127.0.0.1';
+        }
+        $lastEx = null;
+        foreach ($hostsToTry as $tryHost) {
+            try {
+                $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', $tryHost, DB_NAME, DB_CHARSET);
+                $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+                $lastEx = null;
+                break;
+            } catch (PDOException $ex) {
+                $lastEx = $ex;
+                if (stripos($ex->getMessage(), '2002') === false && stripos($ex->getMessage(), 'No such file') === false) {
+                    break;
+                }
+            }
+        }
+        if ($pdo === null && $lastEx !== null) {
             http_response_code(503);
             $setupPath = (strpos($_SERVER['SCRIPT_NAME'] ?? '', '/admin/') !== false) ? '../setup.php' : 'setup.php';
             echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Database Configuration Required</title>'
@@ -136,7 +229,7 @@ function getDB(): PDO
                 . '<div class="box"><h1 style="margin-top:0;color:#0f294a;">Database Connection Not Configured</h1>'
                 . '<p>Could not connect to MySQL database <code>' . htmlspecialchars(DB_NAME, ENT_QUOTES, 'UTF-8') . '</code> on <code>' . htmlspecialchars(DB_HOST, ENT_QUOTES, 'UTF-8') . '</code>.</p>'
                 . '<p><strong>Webmin / Linux Fix:</strong> Create <code>config/config.local.php</code> with your MySQL credentials or run <a href="' . htmlspecialchars($setupPath, ENT_QUOTES, 'UTF-8') . '">setup.php</a> for pre-flight diagnostics.</p>'
-                . '<p style="font-size:0.85rem;color:#78716c;">Detail: ' . htmlspecialchars($ex->getMessage(), ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p style="font-size:0.85rem;color:#78716c;">Detail: ' . htmlspecialchars($lastEx->getMessage(), ENT_QUOTES, 'UTF-8') . '</p>'
                 . '</div></body></html>';
             exit;
         }
@@ -144,19 +237,20 @@ function getDB(): PDO
     return $pdo;
 }
 
-function e(?string $value): string
+function e($value = ''): string
 {
-    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return htmlspecialchars((string)($value ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-function formatBytes(int $bytes): string
+function formatBytes($bytes): string
 {
-    if ($bytes <= 0) {
+    $b = (int)$bytes;
+    if ($b <= 0) {
         return '0 B';
     }
     $units = ['B', 'KB', 'MB', 'GB'];
-    $idx = (int)min(floor(log($bytes, 1024)), count($units) - 1);
-    $val = $bytes / (1024 ** $idx);
+    $idx = (int)min(floor(log($b, 1024)), count($units) - 1);
+    $val = $b / (1024 ** $idx);
     return ($val >= 10 || $idx === 0 ? number_format($val, 0) : number_format($val, 1)) . ' ' . $units[$idx];
 }
 

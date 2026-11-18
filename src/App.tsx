@@ -28,6 +28,7 @@ import type {
   HitCounterStats,
   LeadershipProfile,
   PlacementsData,
+  ResearchPortfolioData,
   SeoSettings,
   SiteSettings,
   SportsData,
@@ -51,6 +52,7 @@ interface PublicBootstrapData {
   placements?: PlacementsData;
   sports?: SportsData;
   facilities?: FacilitiesData;
+  researchPortfolio?: ResearchPortfolioData;
   settings: SiteSettings;
   seo?: SeoSettings;
   hitCounter?: HitCounterStats;
@@ -264,6 +266,8 @@ export default function App() {
           events={data.events}
           conferences={data.conferences || []}
           researchSliderSlides={data.settings.researchSliderSlides || []}
+          researchPortfolio={data.researchPortfolio}
+          settings={data.settings}
           onNavigate={navigate}
         />
       );

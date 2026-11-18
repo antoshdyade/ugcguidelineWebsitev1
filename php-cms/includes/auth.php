@@ -8,18 +8,20 @@ if (session_status() === PHP_SESSION_NONE) {
         if ($dir === '' || !@is_dir($dir)) {
             return false;
         }
-        $probe = @tempnam($dir, 'svs_');
-        if ($probe === false) {
+        $probe = rtrim($dir, '/\\') . '/.svs_' . bin2hex(random_bytes(4));
+        $fp = @fopen($probe, 'xb');
+        if ($fp === false) {
             return false;
         }
-        $ok = @file_put_contents($probe, '1') !== false;
+        $written = @fwrite($fp, '1');
+        @fclose($fp);
         @unlink($probe);
-        return $ok;
+        return $written !== false;
     };
 
     $configuredPath = (string)session_save_path();
     // Strip optional "N;" depth prefix if php.ini specifies one
-    if (str_contains($configuredPath, ';')) {
+    if (strpos($configuredPath, ';') !== false) {
         $parts = explode(';', $configuredPath);
         $configuredPath = (string)end($parts);
     }
@@ -47,64 +49,107 @@ if (session_status() === PHP_SESSION_NONE) {
     // Automatic MySQL PDO SessionHandler fallback when Apache/Webmin blocks file session dirs
     if (!$sessionConfigured && defined('DB_HOST') && defined('DB_NAME') && defined('DB_USER')) {
         try {
-            $sessDsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, defined('DB_CHARSET') ? DB_CHARSET : 'utf8mb4');
-            $sessPdo = new PDO($sessDsn, DB_USER, defined('DB_PASS') ? DB_PASS : '', [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-            $sessPdo->exec(
-                'CREATE TABLE IF NOT EXISTS php_sessions (
-                    id VARCHAR(128) PRIMARY KEY,
-                    data MEDIUMTEXT NOT NULL,
-                    updated_at INT UNSIGNED NOT NULL,
-                    INDEX idx_php_sess_updated (updated_at)
-                ) ENGINE=InnoDB'
-            );
-            $dbSessionHandler = new class ($sessPdo) implements SessionHandlerInterface {
-                private PDO $pdo;
-                public function __construct(PDO $pdo) { $this->pdo = $pdo; }
-                public function open(string $path, string $name): bool { return true; }
-                public function close(): bool { return true; }
-                public function read(string $id): string|false {
-                    $st = $this->pdo->prepare('SELECT data FROM php_sessions WHERE id = ? LIMIT 1');
-                    $st->execute([$id]);
-                    $val = $st->fetchColumn();
-                    return is_string($val) ? $val : '';
+            $sessPdo = null;
+            $sessHosts = [DB_HOST];
+            if (strtolower((string)DB_HOST) === 'localhost') {
+                $sessHosts[] = '127.0.0.1';
+            }
+            foreach ($sessHosts as $trySessHost) {
+                try {
+                    $sessDsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', $trySessHost, DB_NAME, defined('DB_CHARSET') ? DB_CHARSET : 'utf8mb4');
+                    $sessPdo = new PDO($sessDsn, DB_USER, defined('DB_PASS') ? DB_PASS : '', [
+                        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    ]);
+                    break;
+                } catch (PDOException $sessHostEx) {
+                    $sessPdo = null;
                 }
-                public function write(string $id, string $data): bool {
-                    $st = $this->pdo->prepare(
-                        'INSERT INTO php_sessions (id, data, updated_at) VALUES (?, ?, ?)
-                         ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = VALUES(updated_at)'
-                    );
-                    return $st->execute([$id, $data, time()]);
-                }
-                public function destroy(string $id): bool {
-                    $this->pdo->prepare('DELETE FROM php_sessions WHERE id = ?')->execute([$id]);
-                    return true;
-                }
-                public function gc(int $max_lifetime): int|false {
-                    $st = $this->pdo->prepare('DELETE FROM php_sessions WHERE updated_at < ?');
-                    $st->execute([time() - max(60, $max_lifetime)]);
-                    return $st->rowCount();
-                }
-            };
-            session_set_save_handler($dbSessionHandler, true);
+            }
+            if ($sessPdo instanceof PDO) {
+                $sessPdo->exec(
+                    'CREATE TABLE IF NOT EXISTS php_sessions (
+                        id VARCHAR(128) PRIMARY KEY,
+                        data MEDIUMTEXT NOT NULL,
+                        updated_at INT UNSIGNED NOT NULL,
+                        INDEX idx_php_sess_updated (updated_at)
+                    ) ENGINE=InnoDB'
+                );
+                $dbSessionHandler = new class ($sessPdo) implements SessionHandlerInterface {
+                    private PDO $pdo;
+                    public function __construct(PDO $pdo) { $this->pdo = $pdo; }
+                    #[\ReturnTypeWillChange]
+                    public function open($path, $name) { return true; }
+                    #[\ReturnTypeWillChange]
+                    public function close() { return true; }
+                    #[\ReturnTypeWillChange]
+                    public function read($id) {
+                        try {
+                            $st = $this->pdo->prepare('SELECT data FROM php_sessions WHERE id = ? LIMIT 1');
+                            $st->execute([(string)$id]);
+                            $val = $st->fetchColumn();
+                            return is_string($val) ? $val : '';
+                        } catch (Throwable $e) {
+                            return '';
+                        }
+                    }
+                    #[\ReturnTypeWillChange]
+                    public function write($id, $data) {
+                        try {
+                            $st = $this->pdo->prepare(
+                                'INSERT INTO php_sessions (id, data, updated_at) VALUES (?, ?, ?)
+                                 ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = VALUES(updated_at)'
+                            );
+                            return (bool)$st->execute([(string)$id, (string)$data, time()]);
+                        } catch (Throwable $e) {
+                            return false;
+                        }
+                    }
+                    #[\ReturnTypeWillChange]
+                    public function destroy($id) {
+                        try {
+                            $this->pdo->prepare('DELETE FROM php_sessions WHERE id = ?')->execute([(string)$id]);
+                        } catch (Throwable $e) {
+                        }
+                        return true;
+                    }
+                    #[\ReturnTypeWillChange]
+                    public function gc($max_lifetime) {
+                        try {
+                            $st = $this->pdo->prepare('DELETE FROM php_sessions WHERE updated_at < ?');
+                            $st->execute([time() - max(60, (int)$max_lifetime)]);
+                            return (int)$st->rowCount();
+                        } catch (Throwable $e) {
+                            return 0;
+                        }
+                    }
+                };
+                @session_set_save_handler($dbSessionHandler, true);
+            }
         } catch (Throwable $ignoredSess) {
             // Fall through to default PHP handler
         }
     }
 
-    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
-        || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443)
-        || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
-    session_set_cookie_params([
-        'lifetime' => 43200,
-        'path'     => '/',
-        'secure'   => $isHttps,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-    session_start();
+    if (!headers_sent()) {
+        $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+            || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443)
+            || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
+        @session_set_cookie_params([
+            'lifetime' => 43200,
+            'path'     => '/',
+            'secure'   => $isHttps,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        try {
+            @session_start();
+        } catch (Throwable $ignoredStart) {
+        }
+    }
+    if (!isset($_SESSION) || !is_array($_SESSION)) {
+        $_SESSION = [];
+    }
 }
 
 function csrfToken(): string
@@ -165,25 +210,39 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
     if ($role === 'specific_page_editor') {
         return $resource === 'pages' && $hasExplicitScope;
     }
-    return match ($resource) {
-        'users', 'settings', 'audit_logs' => false,
-        'sliders_events', 'gallery', 'directory' => $role === 'content_editor',
-        'categories'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'pages'                           => in_array($role, ['content_editor', 'iqac_officer', 'exam_controller'], true) || $hasExplicitScope,
-        'documents'                       => in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true),
-        'leadership'                      => in_array($role, ['iqac_officer', 'content_editor'], true),
-        'alumni'                          => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'conferences'                     => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'placements'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'sports'                          => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'facilities'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'grievances'                      => in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true),
-        'seo'                             => in_array($role, ['content_editor', 'iqac_officer'], true),
-        'analytics'                       => $role === 'iqac_officer',
-        'departments'                     => $role === 'department_admin'
-            && ($targetDeptId === null ? count($allowedDepts) > 0 : in_array($targetDeptId, $allowedDepts, true)),
-        default                           => false,
-    };
+    switch ($resource) {
+        case 'users':
+        case 'settings':
+        case 'audit_logs':
+            return false;
+        case 'sliders_events':
+        case 'gallery':
+        case 'directory':
+            return $role === 'content_editor';
+        case 'categories':
+            return in_array($role, ['content_editor', 'iqac_officer'], true);
+        case 'pages':
+            return in_array($role, ['content_editor', 'iqac_officer', 'exam_controller'], true) || $hasExplicitScope;
+        case 'documents':
+            return in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true);
+        case 'leadership':
+        case 'alumni':
+        case 'conferences':
+        case 'placements':
+        case 'sports':
+        case 'facilities':
+        case 'seo':
+            return in_array($role, ['content_editor', 'iqac_officer'], true);
+        case 'grievances':
+            return in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true);
+        case 'analytics':
+            return $role === 'iqac_officer';
+        case 'departments':
+            return $role === 'department_admin'
+                && ($targetDeptId === null ? count($allowedDepts) > 0 : in_array($targetDeptId, $allowedDepts, true));
+        default:
+            return false;
+    }
 }
 
 function rbacModuleOptions(): array
@@ -829,13 +888,18 @@ function formatCommitteeGroupLabel(?string $group): string
     if ($raw === '') {
         return 'Leadership & Governance';
     }
-    return match ($raw) {
-        'statutory'           => 'Statutory Officer',
-        'governance'          => 'Governing Body',
-        'icc'                 => 'Internal Complaint Committee (ICC)',
-        'academic_leadership' => 'Academic Leadership',
-        default               => $raw,
-    };
+    switch ($raw) {
+        case 'statutory':
+            return 'Statutory Officer';
+        case 'governance':
+            return 'Governing Body';
+        case 'icc':
+            return 'Internal Complaint Committee (ICC)';
+        case 'academic_leadership':
+            return 'Academic Leadership';
+        default:
+            return $raw;
+    }
 }
 
 function defaultAlumniSettings(): array

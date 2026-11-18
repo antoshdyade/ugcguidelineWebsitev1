@@ -24,6 +24,10 @@ import type {
   ConferenceSubmission,
   ConferenceTrack,
   Department,
+  ResearchPatentItem,
+  ResearchPortfolioData,
+  ResearchPortalConfig,
+  ResearchProjectItem,
   SiteSettings,
 } from '../types/cms';
 import {
@@ -31,6 +35,8 @@ import {
   CONFERENCE_ROLE_PRESETS,
   CONFERENCE_SCOPE_PRESETS,
   CONFERENCE_SUBMISSION_PLATFORM_PRESETS,
+  RESEARCH_AGENCY_PRESETS,
+  RESEARCH_PATENT_TYPE_PRESETS,
   isExternalPaperSubmissionActive,
 } from '../lib/collegeFeaturesLogic';
 import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
@@ -44,6 +50,7 @@ interface ConferenceAdminPanelProps {
   registrations: ConferenceRegistration[];
   departments: Department[];
   settings: SiteSettings;
+  researchPortfolio?: ResearchPortfolioData;
   adminFetch: <T = unknown>(url: string, method?: string, body?: unknown) => Promise<T>;
   uploadBinary: (file: File) => Promise<string>;
   notify: (type: 'ok' | 'err', text: string) => void;
@@ -72,12 +79,13 @@ export function ConferenceAdminPanel({
   registrations,
   departments,
   settings,
+  researchPortfolio,
   adminFetch,
   uploadBinary,
   notify,
 }: ConferenceAdminPanelProps) {
   const [selectedId, setSelectedId] = useState<number>(conferences[0]?.id || 0);
-  const [subTab, setSubTab] = useState<'overview' | 'program' | 'people' | 'submissions' | 'registrations' | 'research-slider'>('overview');
+  const [subTab, setSubTab] = useState<'overview' | 'program' | 'people' | 'submissions' | 'registrations' | 'research-slider' | 'research-projects' | 'research-patents'>('overview');
   const [showCreate, setShowCreate] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [researchSlides, setResearchSlides] = useState<ConferenceSlide[]>(settings.researchSliderSlides || []);
@@ -103,9 +111,56 @@ export function ConferenceAdminPanel({
   const [posterImg, setPosterImg] = useState('/src/assets/images/poster_session_1794991330669.jpg');
   const [posterPdfUrl, setPosterPdfUrl] = useState('');
 
+  // Research Portfolio (R&D Config, Projects, Patents/IPR/Start-ups)
+  const [rpConfig, setRpConfig] = useState<ResearchPortalConfig>(
+    researchPortfolio?.config || {
+      heroBadge: 'UGC Section 5(e) · Sponsored R&D & IPR',
+      heroTitle: 'Research, Funded Grants, Patents & Incubation Cell',
+      heroSubtitle: 'Sponsored R&D projects, IPR patents, start-ups & consultancy cell.',
+      deanName: 'Dr. M. S. Kadam',
+      deanTitle: 'Dean Research & Development',
+      deanEmail: 'dean.rd@coe.sveri.ac.in',
+      deanPhone: '+91-02186-216066',
+      totalGrantsHighlight: '₹3.85 Cr+ Sponsored Grants',
+      activeLabsHighlight: '4 Approved Ph.D. Centres & 18+ Labs',
+      consultancyPolicyUrl: '/quick-links',
+    },
+  );
+  const [editingProjId, setEditingProjId] = useState<number | null>(null);
+  const [projTitle, setProjTitle] = useState('');
+  const [projAgency, setProjAgency] = useState<string>(RESEARCH_AGENCY_PRESETS[0]);
+  const [projPi, setProjPi] = useState('');
+  const [projCoPi, setProjCoPi] = useState('');
+  const [projDept, setProjDept] = useState(departments[0]?.code || 'CSE');
+  const [projGrant, setProjGrant] = useState('₹15.00 Lakhs');
+  const [projYear, setProjYear] = useState('2026-27');
+  const [projDuration, setProjDuration] = useState('24 Months');
+  const [projStatus, setProjStatus] = useState<string>('Ongoing');
+  const [projCode, setProjCode] = useState('');
+  const [projSummary, setProjSummary] = useState('');
+  const [projDocUrl, setProjDocUrl] = useState('');
+
+  const [editingPatId, setEditingPatId] = useState<number | null>(null);
+  const [patType, setPatType] = useState<string>(RESEARCH_PATENT_TYPE_PRESETS[0]);
+  const [patTitle, setPatTitle] = useState('');
+  const [patInventors, setPatInventors] = useState('');
+  const [patDept, setPatDept] = useState(departments[0]?.code || 'CSE');
+  const [patRef, setPatRef] = useState('');
+  const [patDate, setPatDate] = useState(new Date().toISOString().slice(0, 10));
+  const [patStatus, setPatStatus] = useState('Granted');
+  const [patPartner, setPatPartner] = useState('Indian Patent Office');
+  const [patSummary, setPatSummary] = useState('');
+  const [patUrl, setPatUrl] = useState('');
+
   useEffect(() => {
     setResearchSlides(settings.researchSliderSlides || []);
   }, [settings.researchSliderSlides]);
+
+  useEffect(() => {
+    if (researchPortfolio?.config) {
+      setRpConfig(researchPortfolio.config);
+    }
+  }, [researchPortfolio?.config]);
 
   // Create New Conference State
   const [newTitle, setNewTitle] = useState('');
@@ -245,6 +300,34 @@ export function ConferenceAdminPanel({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreate(false);
+              setSubTab('research-projects');
+            }}
+            className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+              subTab === 'research-projects' && !showCreate
+                ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300'
+                : 'border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800'
+            }`}
+          >
+            Funded Projects &amp; R&amp;D ({researchPortfolio?.projects.length || 0})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreate(false);
+              setSubTab('research-patents');
+            }}
+            className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+              subTab === 'research-patents' && !showCreate
+                ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300'
+                : 'border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800'
+            }`}
+          >
+            Patents, IPR &amp; Start-ups ({researchPortfolio?.patents.length || 0})
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -2148,6 +2231,575 @@ export function ConferenceAdminPanel({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* RESEARCH PROJECTS, FUNDING & R&D CONFIG */}
+      {!showCreate && subTab === 'research-projects' && (
+        <div className="space-y-6">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await adminFetch('/api/admin/research/config', 'PUT', rpConfig);
+              notify('ok', 'Saved Research Portal Header, Dean R&D & Grant Highlights.');
+            }}
+            className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold">Research Cell Configuration &amp; R&amp;D Leadership Contact</h2>
+                <p className="text-xs text-stone-500">
+                  Displayed prominently across all UGC Section 5(e) Research pages alongside Funded Projects &amp; IPR records.
+                </p>
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg text-xs font-bold text-white"
+                style={{ backgroundColor: 'var(--primary-color)' }}
+              >
+                Save R&amp;D Cell Config
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <input
+                type="text"
+                value={rpConfig.heroBadge}
+                onChange={(e) => setRpConfig({ ...rpConfig, heroBadge: e.target.value })}
+                placeholder="Section Badge"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={rpConfig.heroTitle}
+                onChange={(e) => setRpConfig({ ...rpConfig, heroTitle: e.target.value })}
+                placeholder="Research Portal Title"
+                className="md:col-span-2 px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <textarea
+                rows={2}
+                value={rpConfig.heroSubtitle}
+                onChange={(e) => setRpConfig({ ...rpConfig, heroSubtitle: e.target.value })}
+                placeholder="Research Overview Subtitle"
+                className="md:col-span-3 px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={rpConfig.deanName}
+                onChange={(e) => setRpConfig({ ...rpConfig, deanName: e.target.value })}
+                placeholder="Dean R&D Name"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={rpConfig.deanTitle}
+                onChange={(e) => setRpConfig({ ...rpConfig, deanTitle: e.target.value })}
+                placeholder="Dean Designation"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="email"
+                value={rpConfig.deanEmail}
+                onChange={(e) => setRpConfig({ ...rpConfig, deanEmail: e.target.value })}
+                placeholder="Dean Email"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={rpConfig.deanPhone}
+                onChange={(e) => setRpConfig({ ...rpConfig, deanPhone: e.target.value })}
+                placeholder="Dean Phone"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={rpConfig.totalGrantsHighlight}
+                onChange={(e) => setRpConfig({ ...rpConfig, totalGrantsHighlight: e.target.value })}
+                placeholder="Total Grants Highlight (e.g. ₹3.85 Cr+)"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={rpConfig.activeLabsHighlight}
+                onChange={(e) => setRpConfig({ ...rpConfig, activeLabsHighlight: e.target.value })}
+                placeholder="Ph.D. Centres & Labs Highlight"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+            </div>
+          </form>
+
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!projTitle.trim()) return;
+                const payload = {
+                  title: projTitle,
+                  fundingAgency: projAgency,
+                  principalInvestigator: projPi,
+                  coInvestigator: projCoPi,
+                  departmentCode: projDept,
+                  grantAmountLakhs: projGrant,
+                  sanctionYear: projYear,
+                  duration: projDuration,
+                  status: projStatus,
+                  projectCode: projCode,
+                  summary: projSummary,
+                  documentUrl: projDocUrl,
+                  isPublished: true,
+                };
+                if (editingProjId) {
+                  await adminFetch(`/api/admin/research/projects/${editingProjId}`, 'PUT', payload);
+                  notify('ok', 'Updated funded research project.');
+                } else {
+                  await adminFetch('/api/admin/research/projects', 'POST', payload);
+                  notify('ok', 'Added new funded research project.');
+                }
+                setEditingProjId(null);
+                setProjTitle('');
+                setProjPi('');
+                setProjCoPi('');
+                setProjCode('');
+                setProjSummary('');
+                setProjDocUrl('');
+              }}
+              className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold">
+                  {editingProjId ? 'Edit Funded Project / Grant' : 'Add Sponsored Research Project'}
+                </h3>
+                {editingProjId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProjId(null);
+                      setProjTitle('');
+                    }}
+                    className="text-xs text-stone-500 hover:underline"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                required
+                value={projTitle}
+                onChange={(e) => setProjTitle(e.target.value)}
+                placeholder="Project Title *"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <CustomSelectInput
+                label="Funding Agency"
+                value={projAgency}
+                onChange={setProjAgency}
+                options={[...RESEARCH_AGENCY_PRESETS]}
+                customPlaceholder="Enter custom funding agency..."
+              />
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <input
+                  type="text"
+                  required
+                  value={projPi}
+                  onChange={(e) => setProjPi(e.target.value)}
+                  placeholder="Principal Investigator *"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={projCoPi}
+                  onChange={(e) => setProjCoPi(e.target.value)}
+                  placeholder="Co-Investigator"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <CustomSelectInput
+                  label="Department"
+                  value={projDept}
+                  onChange={setProjDept}
+                  options={departments.map((d) => d.code)}
+                  customPlaceholder="Dept Code"
+                />
+                <CustomSelectInput
+                  label="Project Status"
+                  value={projStatus}
+                  onChange={setProjStatus}
+                  options={['Ongoing', 'Completed', 'Sanctioned']}
+                  customPlaceholder="Status"
+                />
+                <input
+                  type="text"
+                  value={projGrant}
+                  onChange={(e) => setProjGrant(e.target.value)}
+                  placeholder="Grant (e.g. ₹24.5 Lakhs)"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={projYear}
+                  onChange={(e) => setProjYear(e.target.value)}
+                  placeholder="Year (e.g. 2026-27)"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={projDuration}
+                  onChange={(e) => setProjDuration(e.target.value)}
+                  placeholder="Duration (e.g. 36 Months)"
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+                <input
+                  type="text"
+                  value={projCode}
+                  onChange={(e) => setProjCode(e.target.value)}
+                  placeholder="Sanction Ref No."
+                  className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <textarea
+                rows={2}
+                value={projSummary}
+                onChange={(e) => setProjSummary(e.target.value)}
+                placeholder="Project deliverables / outcomes summary..."
+                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={projDocUrl}
+                onChange={(e) => setProjDocUrl(e.target.value)}
+                placeholder="Sanction Order PDF / URL (optional)"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <button
+                type="submit"
+                className="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-white"
+                style={{ backgroundColor: 'var(--primary-color)' }}
+              >
+                {editingProjId ? 'Update Research Project' : 'Publish Funded Research Project'}
+              </button>
+            </form>
+
+            <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+              <div className="px-4 py-3 border-b border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/50 text-xs font-bold">
+                Sponsored Research Projects ({(researchPortfolio?.projects || []).length})
+              </div>
+              <div className="divide-y divide-stone-100 dark:divide-slate-800 max-h-[680px] overflow-y-auto">
+                {(researchPortfolio?.projects || []).map((p: ResearchProjectItem, idx: number, arr: ResearchProjectItem[]) => (
+                  <div key={p.id} className="p-3.5 flex items-start justify-between gap-3 text-xs">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-amber-700 dark:text-amber-400">{p.fundingAgency}</span>
+                        <span className="font-mono text-stone-500">{p.grantAmountLakhs}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${p.isPublished ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {p.isPublished ? 'Visible' : 'Hidden'}
+                        </span>
+                      </div>
+                      <p className="font-semibold text-sm text-stone-900 dark:text-white">{p.title}</p>
+                      <p className="text-stone-500">
+                        PI: {p.principalInvestigator} ({p.departmentCode}) · {p.sanctionYear} · {p.status}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={async () => {
+                          const ids = arr.map((x) => x.id);
+                          [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+                          await adminFetch('/api/admin/research/projects/reorder', 'PUT', { orderedIds: ids });
+                        }}
+                        className="p-1 rounded border disabled:opacity-30"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={async () => {
+                          const ids = arr.map((x) => x.id);
+                          [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+                          await adminFetch('/api/admin/research/projects/reorder', 'PUT', { orderedIds: ids });
+                        }}
+                        className="p-1 rounded border disabled:opacity-30"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await adminFetch(`/api/admin/research/projects/${p.id}`, 'PUT', { isPublished: !p.isPublished });
+                          notify('ok', p.isPublished ? 'Project hidden from public Research tab.' : 'Project published on Research tab.');
+                        }}
+                        className="px-2 py-1 rounded border text-[11px] font-semibold"
+                      >
+                        {p.isPublished ? 'Hide' : 'Show'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProjId(p.id);
+                          setProjTitle(p.title);
+                          setProjAgency(p.fundingAgency);
+                          setProjPi(p.principalInvestigator);
+                          setProjCoPi(p.coInvestigator || '');
+                          setProjDept(p.departmentCode);
+                          setProjGrant(p.grantAmountLakhs);
+                          setProjYear(p.sanctionYear);
+                          setProjDuration(p.duration || '');
+                          setProjStatus(p.status);
+                          setProjCode(p.projectCode || '');
+                          setProjSummary(p.summary || '');
+                          setProjDocUrl(p.documentUrl || '');
+                        }}
+                        className="px-2 py-1 rounded border text-[11px] font-semibold"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await adminFetch(`/api/admin/research/projects/${p.id}`, 'DELETE');
+                          notify('ok', 'Deleted research project.');
+                        }}
+                        className="p-1 text-rose-600"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PATENTS, IPR, INCUBATED START-UPS & CONSULTANCY */}
+      {!showCreate && subTab === 'research-patents' && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!patTitle.trim()) return;
+              const payload = {
+                itemType: patType,
+                title: patTitle,
+                inventorsOrLead: patInventors,
+                departmentCode: patDept,
+                referenceNumber: patRef,
+                filingOrGrantDate: patDate,
+                status: patStatus,
+                partnerOrAgency: patPartner,
+                summary: patSummary,
+                externalUrl: patUrl,
+                isPublished: true,
+              };
+              if (editingPatId) {
+                await adminFetch(`/api/admin/research/patents/${editingPatId}`, 'PUT', payload);
+                notify('ok', 'Updated Patent / IPR / Start-up record.');
+              } else {
+                await adminFetch('/api/admin/research/patents', 'POST', payload);
+                notify('ok', 'Added Patent / IPR / Start-up record.');
+              }
+              setEditingPatId(null);
+              setPatTitle('');
+              setPatInventors('');
+              setPatRef('');
+              setPatSummary('');
+              setPatUrl('');
+            }}
+            className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold">
+                {editingPatId ? 'Edit IPR / Patent / Start-up Entry' : 'Add Patent, IPR, Start-up or Consultancy'}
+              </h3>
+              {editingPatId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPatId(null);
+                    setPatTitle('');
+                  }}
+                  className="text-xs text-stone-500 hover:underline"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            <CustomSelectInput
+              label="Entry Category"
+              value={patType}
+              onChange={setPatType}
+              options={[...RESEARCH_PATENT_TYPE_PRESETS]}
+              customPlaceholder="Enter custom IPR/Start-up category..."
+            />
+            <input
+              type="text"
+              required
+              value={patTitle}
+              onChange={(e) => setPatTitle(e.target.value)}
+              placeholder="Title of Patent / Start-up / Consultancy *"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <input
+              type="text"
+              required
+              value={patInventors}
+              onChange={(e) => setPatInventors(e.target.value)}
+              placeholder="Inventors / Founders / Lead Faculty *"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <CustomSelectInput
+                label="Department"
+                value={patDept}
+                onChange={setPatDept}
+                options={departments.map((d) => d.code)}
+                customPlaceholder="Dept Code"
+              />
+              <div>
+                <label className="block font-semibold mb-1">Filing / Grant Date</label>
+                <input
+                  type="date"
+                  value={patDate}
+                  onChange={(e) => setPatDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+              <input
+                type="text"
+                value={patRef}
+                onChange={(e) => setPatRef(e.target.value)}
+                placeholder="Application / Patent / CIN No."
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+              <input
+                type="text"
+                value={patStatus}
+                onChange={(e) => setPatStatus(e.target.value)}
+                placeholder="Status (e.g. Granted / Seed Funded)"
+                className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+              />
+            </div>
+            <input
+              type="text"
+              value={patPartner}
+              onChange={(e) => setPatPartner(e.target.value)}
+              placeholder="Patent Office / Incubator / Industry Client"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <textarea
+              rows={2}
+              value={patSummary}
+              onChange={(e) => setPatSummary(e.target.value)}
+              placeholder="Innovation abstract / impact details..."
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <input
+              type="text"
+              value={patUrl}
+              onChange={(e) => setPatUrl(e.target.value)}
+              placeholder="Verification Link / Gazette PDF URL (optional)"
+              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+            />
+            <button
+              type="submit"
+              className="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-white"
+              style={{ backgroundColor: 'var(--primary-color)' }}
+            >
+              {editingPatId ? 'Update Record' : 'Publish IPR / Start-up Entry'}
+            </button>
+          </form>
+
+          <div className="xl:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+            <div className="px-4 py-3 border-b border-stone-200 dark:border-slate-800 bg-stone-50 dark:bg-slate-800/50 text-xs font-bold">
+              Published Patents, IPR, Start-ups &amp; Consultancy ({(researchPortfolio?.patents || []).length})
+            </div>
+            <div className="divide-y divide-stone-100 dark:divide-slate-800 max-h-[680px] overflow-y-auto">
+              {(researchPortfolio?.patents || []).map((pat: ResearchPatentItem, idx: number, arr: ResearchPatentItem[]) => (
+                <div key={pat.id} className="p-3.5 flex items-start justify-between gap-3 text-xs">
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-amber-700 dark:text-amber-400">{pat.itemType}</span>
+                      <span className="font-mono text-stone-500">{pat.referenceNumber}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pat.isPublished ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                        {pat.isPublished ? 'Visible' : 'Hidden'}
+                      </span>
+                    </div>
+                    <p className="font-semibold text-sm text-stone-900 dark:text-white">{pat.title}</p>
+                    <p className="text-stone-500">
+                      {pat.inventorsOrLead} ({pat.departmentCode}) · {pat.status}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={async () => {
+                        const ids = arr.map((x) => x.id);
+                        [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
+                        await adminFetch('/api/admin/research/patents/reorder', 'PUT', { orderedIds: ids });
+                      }}
+                      className="p-1 rounded border disabled:opacity-30"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === arr.length - 1}
+                      onClick={async () => {
+                        const ids = arr.map((x) => x.id);
+                        [ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]];
+                        await adminFetch('/api/admin/research/patents/reorder', 'PUT', { orderedIds: ids });
+                      }}
+                      className="p-1 rounded border disabled:opacity-30"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await adminFetch(`/api/admin/research/patents/${pat.id}`, 'PUT', { isPublished: !pat.isPublished });
+                        notify('ok', pat.isPublished ? 'Record hidden.' : 'Record published.');
+                      }}
+                      className="px-2 py-1 rounded border text-[11px] font-semibold"
+                    >
+                      {pat.isPublished ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingPatId(pat.id);
+                        setPatType(pat.itemType);
+                        setPatTitle(pat.title);
+                        setPatInventors(pat.inventorsOrLead);
+                        setPatDept(pat.departmentCode);
+                        setPatRef(pat.referenceNumber);
+                        setPatDate(pat.filingOrGrantDate);
+                        setPatStatus(pat.status);
+                        setPatPartner(pat.partnerOrAgency || '');
+                        setPatSummary(pat.summary || '');
+                        setPatUrl(pat.externalUrl || '');
+                      }}
+                      className="px-2 py-1 rounded border text-[11px] font-semibold"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await adminFetch(`/api/admin/research/patents/${pat.id}`, 'DELETE');
+                        notify('ok', 'Deleted patent / IPR record.');
+                      }}
+                      className="p-1 text-rose-600"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

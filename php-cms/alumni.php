@@ -37,25 +37,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute([$email]);
             $prof = $st->fetch();
             if (!$prof || empty($prof['password_hash']) || !password_verify($pass, $prof['password_hash'])) {
-                recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'alumni', $email);
+                try {
+                    recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'alumni', $email);
+                } catch (Throwable $ignored) {
+                }
                 $err = 'Invalid alumni email or password.';
             } elseif (($prof['status'] ?? 'pending') !== 'approved') {
                 $err = 'Your alumni account is awaiting Alumni Cell verification (' . ($prof['status'] ?? 'pending') . ').';
             } else {
-                clearPhpLoginFailures($pdo, normalizePhpClientIp(), 'alumni');
-                session_regenerate_id(true);
+                try {
+                    clearPhpLoginFailures($pdo, normalizePhpClientIp(), 'alumni');
+                } catch (Throwable $ignored) {
+                }
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    @session_regenerate_id(true);
+                }
                 setAlumniSession($prof);
                 $loggedAlumni = currentAlumni();
                 $activeTab = 'discussions';
-                logPhpVisitorEvent($pdo, [
-                    'method'      => 'POST',
-                    'path'        => 'alumni.php?tab=login',
-                    'status_code' => 200,
-                    'event_type'  => 'alumni_login',
-                    'severity'    => 'info',
-                    'actor_email' => $prof['email'],
-                    'note'        => 'Verified Alumni Member Sign-In',
-                ]);
+                try {
+                    logPhpVisitorEvent($pdo, [
+                        'method'      => 'POST',
+                        'path'        => 'alumni.php?tab=login',
+                        'status_code' => 200,
+                        'event_type'  => 'alumni_login',
+                        'severity'    => 'info',
+                        'actor_email' => $prof['email'],
+                        'note'        => 'Verified Alumni Member Sign-In',
+                    ]);
+                } catch (Throwable $ignored) {
+                }
                 $msg = 'Welcome back, ' . $prof['full_name'] . '! You now have access to Job Posting & Members-Only Discussions.';
             }
         }

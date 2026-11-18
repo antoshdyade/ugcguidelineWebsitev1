@@ -361,6 +361,8 @@ export interface SiteSettings {
     youtube: string;
     twitter: string;
   };
+  socialMediaLinks?: SocialMediaLink[];
+  socialSharing?: SocialSharingConfig;
   mapEmbedQuery: string;
   maxPhotoUploadMb?: number;
   maxDocumentUploadMb?: number;
@@ -371,6 +373,50 @@ export interface SiteSettings {
   portalMenuItems?: HeaderPortalMenuItem[];
   grievancePortal?: GrievancePortalConfig;
   intakePrograms?: SanctionedIntakeProgram[];
+}
+
+export type SocialPlatformKey =
+  | 'facebook'
+  | 'linkedin'
+  | 'instagram'
+  | 'youtube'
+  | 'twitter'
+  | 'whatsapp'
+  | 'telegram'
+  | 'github'
+  | 'custom';
+
+export interface SocialMediaLink {
+  id: number;
+  platform: SocialPlatformKey | string;
+  label: string;
+  url: string;
+  handle?: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface SocialSharingConfig {
+  enabled: boolean;
+  showIconsInHeader: boolean;
+  showIconsInFooter: boolean;
+  showOnPages: boolean;
+  showOnResearch: boolean;
+  showOnConferences: boolean;
+  showOnPortals: boolean;
+  shareHeading: string;
+  defaultHashtags: string;
+  twitterHandle?: string;
+  platforms: {
+    whatsapp: boolean;
+    linkedin: boolean;
+    twitter: boolean;
+    facebook: boolean;
+    telegram: boolean;
+    email: boolean;
+    copyLink: boolean;
+    nativeShare: boolean;
+  };
 }
 
 export type BackupMode = 'full' | 'incremental';
@@ -1140,6 +1186,69 @@ export interface FacilitiesData {
   items: FacilityItem[];
 }
 
+export type ResearchProjectStatus = 'Ongoing' | 'Completed' | 'Sanctioned';
+
+export interface ResearchProjectItem {
+  id: number;
+  title: string;
+  fundingAgency: string;
+  principalInvestigator: string;
+  coInvestigator?: string;
+  departmentCode: string;
+  grantAmountLakhs: string;
+  sanctionYear: string;
+  duration?: string;
+  status: ResearchProjectStatus | string;
+  projectCode?: string;
+  summary?: string;
+  documentUrl?: string;
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export type ResearchPatentType =
+  | 'Patent Granted'
+  | 'Patent Published'
+  | 'Patent Filed'
+  | 'Copyright / Design'
+  | 'Incubated Start-up'
+  | 'Industry Consultancy';
+
+export interface ResearchPatentItem {
+  id: number;
+  itemType: ResearchPatentType | string;
+  title: string;
+  inventorsOrLead: string;
+  departmentCode: string;
+  referenceNumber: string;
+  filingOrGrantDate: string;
+  status: string;
+  partnerOrAgency?: string;
+  summary?: string;
+  externalUrl?: string;
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export interface ResearchPortalConfig {
+  heroBadge: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  deanName: string;
+  deanTitle: string;
+  deanEmail: string;
+  deanPhone: string;
+  totalGrantsHighlight: string;
+  activeLabsHighlight: string;
+  consultancyPolicyUrl?: string;
+}
+
+export interface ResearchPortfolioData {
+  config: ResearchPortalConfig;
+  projects: ResearchProjectItem[];
+  patents: ResearchPatentItem[];
+}
+
 export interface CmsDatabase {
   schemaVersion?: number;
   categories: CmsCategory[];
@@ -1159,6 +1268,7 @@ export interface CmsDatabase {
   placements?: PlacementsData;
   sports?: SportsData;
   facilities?: FacilitiesData;
+  researchPortfolio?: ResearchPortfolioData;
   grievances?: GrievanceTicket[];
   seo?: SeoSettings;
   hitCounter?: HitCounterStats;
@@ -1174,7 +1284,7 @@ export interface CmsDatabase {
 
 export interface SearchResultItem {
   id: string;
-  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni' | 'conference' | 'placement' | 'sports' | 'facility';
+  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni' | 'conference' | 'placement' | 'sports' | 'facility' | 'research';
   title: string;
   subtitle: string;
   url: string;

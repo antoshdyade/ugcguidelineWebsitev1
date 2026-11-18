@@ -5,6 +5,7 @@ require_once __DIR__ . '/../includes/auth.php';
 
 $user = requireRoleAccess('documents');
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 $msg = '';
 $err = '';
 

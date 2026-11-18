@@ -66,7 +66,7 @@ function ensureBackupsStorage(): string
     return $dir;
 }
 
-function kvGet(PDO $pdo, string $key, mixed $default = null): mixed
+function kvGet(PDO $pdo, string $key, $default = null)
 {
     try {
         $stmt = $pdo->prepare('SELECT val_json FROM cms_kv_store WHERE key_name = ? LIMIT 1');
@@ -81,7 +81,7 @@ function kvGet(PDO $pdo, string $key, mixed $default = null): mixed
     return $default;
 }
 
-function kvSet(PDO $pdo, string $key, mixed $value): void
+function kvSet(PDO $pdo, string $key, $value): void
 {
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS cms_kv_store (
@@ -133,12 +133,16 @@ function getBackupSchedule(PDO $pdo): array
 
 function computeNextRunIso(string $frequency, int $fromTs): ?string
 {
-    return match ($frequency) {
-        'hourly' => gmdate('Y-m-d\TH:i:s\Z', $fromTs + 3600),
-        'daily'  => gmdate('Y-m-d\TH:i:s\Z', $fromTs + 86400),
-        'weekly' => gmdate('Y-m-d\TH:i:s\Z', $fromTs + 604800),
-        default  => null,
-    };
+    switch ($frequency) {
+        case 'hourly':
+            return gmdate('Y-m-d\TH:i:s\Z', $fromTs + 3600);
+        case 'daily':
+            return gmdate('Y-m-d\TH:i:s\Z', $fromTs + 86400);
+        case 'weekly':
+            return gmdate('Y-m-d\TH:i:s\Z', $fromTs + 604800);
+        default:
+            return null;
+    }
 }
 
 function captureUploadsManifest(): array
@@ -366,7 +370,7 @@ function createBackupArchive(PDO $pdo, string $mode, string $destination, string
     return $record;
 }
 
-function validateBackupPackage(mixed $decoded): array
+function validateBackupPackage($decoded): array
 {
     if (!is_array($decoded) || ($decoded['format'] ?? '') !== 'svcoer-cms-backup' || !is_array($decoded['data'] ?? null)) {
         return ['valid' => false, 'error' => 'Invalid backup file: expected svcoer-cms-backup JSON format.'];
@@ -669,7 +673,7 @@ function isSafeMigrationRestoreAsset(string $entryName): ?string
     return $norm;
 }
 
-function rewriteDomainUrlsRecursive(mixed $value, string $oldUrl, string $newUrl): mixed
+function rewriteDomainUrlsRecursive($value, string $oldUrl, string $newUrl)
 {
     $oldNorm = rtrim(trim($oldUrl), '/');
     $newNorm = rtrim(trim($newUrl), '/');
@@ -791,7 +795,7 @@ function createFullSiteMigrationZip(
     $snapshot = $includeData ? captureCmsSnapshot($pdo) : [];
     $kvExtras = $includeData
         ? [
-            'alumni_settings' => kvGet($pdo, 'alumni_settings', defaultAlumniSettings()),
+            'alumni_settings' => kvGet($pdo, 'alumni_settings', function_exists('defaultAlumniSettings') ? defaultAlumniSettings() : []),
             'upload_policy'   => kvGet($pdo, 'upload_policy', null),
         ]
         : [];

@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createServer as createViteServer } from 'vite';
-import { createSeedAlumniData, createSeedDatabase, createSeedFacilitiesData, createSeedSportsData, hashPassword, verifyPassword } from './src/data/seedDatabase';
+import { createSeedAlumniData, createSeedDatabase, createSeedFacilitiesData, createSeedResearchPortfolio, createSeedSportsData, hashPassword, verifyPassword } from './src/data/seedDatabase';
 import {
   canUserAccessCategory,
   canUserAccessPage,
@@ -48,6 +48,8 @@ import {
   generateReferenceCode,
   isExternalPaperSubmissionActive,
   migrateDatabaseInPlace,
+  normalizeSocialSharingConfig,
+  syncLegacySocialLinks,
   validateAlumniPledgeInput,
   validateConferenceRegistrationInput,
   validateConferenceSubmissionInput,
@@ -105,6 +107,9 @@ import type {
   HomeComponentPlacement,
   PlacementStory,
   PlacementYearStat,
+  ResearchPatentItem,
+  ResearchPortfolioData,
+  ResearchProjectItem,
   ScpConfig,
   SecurityConfig,
   SeoSettings,
@@ -772,6 +777,7 @@ async function startServer() {
     const { seo, hitCounter } = ensureSecurityState();
     const sportsRaw = db.sports ?? createSeedSportsData();
     const facilitiesRaw = db.facilities ?? createSeedFacilitiesData();
+    const researchRaw = db.researchPortfolio ?? createSeedResearchPortfolio();
     res.json({
       categories: sortByOrder(db.categories),
       pages: sortByOrder(db.pages.filter((p) => p.isPublished)),
@@ -808,6 +814,11 @@ async function startServer() {
       facilities: {
         config: facilitiesRaw.config,
         items: sortByOrder((facilitiesRaw.items ?? []).filter((item) => item.isPublished)),
+      },
+      researchPortfolio: {
+        config: researchRaw.config,
+        projects: sortByOrder((researchRaw.projects ?? []).filter((p) => p.isPublished)),
+        patents: sortByOrder((researchRaw.patents ?? []).filter((p) => p.isPublished)),
       },
       settings: db.settings,
       seo,
@@ -1735,6 +1746,7 @@ async function startServer() {
       placements: db.placements ?? createSeedDatabase().placements,
       sports: ensureSportsState(),
       facilities: ensureFacilitiesState(),
+      researchPortfolio: ensureResearchPortfolioState(),
       grievances: db.grievances ?? [],
       settings: db.settings,
       seo: canUserAccessResource(currentUser, 'seo') || canUserAccessResource(currentUser, 'settings') ? seo : undefined,
@@ -1751,6 +1763,17 @@ async function startServer() {
       auditLogs: canUserAccessResource(currentUser, 'audit_logs') ? db.auditLogs : [],
     });
   });
+
+  function ensureResearchPortfolioState(): ResearchPortfolioData {
+    if (!db.researchPortfolio) {
+      db.researchPortfolio = createSeedResearchPortfolio();
+    }
+    return {
+      config: db.researchPortfolio.config,
+      projects: sortByOrder(db.researchPortfolio.projects ?? []),
+      patents: sortByOrder(db.researchPortfolio.patents ?? []),
+    };
+  }
 
   function ensureSportsState(): SportsData {
     if (!db.sports) {
@@ -3653,9 +3676,30 @@ async function startServer() {
       0.5,
       50,
     );
+    const nextSocialMediaLinks = Array.isArray(incoming.socialMediaLinks)
+      ? incoming.socialMediaLinks.map((item: any, idx: number) => ({
+          id: Number(item?.id || idx + 1),
+          platform: String(item?.platform || 'custom').trim() || 'custom',
+          label: String(item?.label || item?.platform || 'Social').trim(),
+          url: String(item?.url || '').trim(),
+          handle: item?.handle ? String(item.handle).trim() : '',
+          isActive: item?.isActive !== false,
+          sortOrder: Number(item?.sortOrder || idx + 1),
+        }))
+      : db.settings.socialMediaLinks;
+
+    const nextSocialSharing = incoming.socialSharing
+      ? normalizeSocialSharingConfig(incoming.socialSharing)
+      : db.settings.socialSharing;
+
     db.settings = {
       ...db.settings,
       ...incoming,
+      socialMediaLinks: nextSocialMediaLinks,
+      socialLinks: Array.isArray(nextSocialMediaLinks)
+        ? syncLegacySocialLinks(nextSocialMediaLinks)
+        : (incoming.socialLinks || db.settings.socialLinks),
+      socialSharing: nextSocialSharing,
       maxPhotoUploadMb: nextPhotoMb,
       maxDocumentUploadMb: nextDocMb,
       autoCropImages:
@@ -4656,6 +4700,210 @@ async function startServer() {
     }
     const [removed] = list.splice(idx, 1);
     addAudit(actor, 'DELETE_CONF_REG', 'ConferenceReg', removed.regCode);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // ============================================================================
+  // RESEARCH PORTFOLIO ADMIN ROUTES (Funded Projects, Patents/IPR, R&D Config)
+  // ============================================================================
+  app.put('/api/admin/research/config', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const rp = ensureResearchPortfolioState();
+    const b = req.body || {};
+    rp.config = {
+      ...rp.config,
+      heroBadge: String(b.heroBadge ?? rp.config.heroBadge).trim(),
+      heroTitle: String(b.heroTitle ?? rp.config.heroTitle).trim(),
+      heroSubtitle: String(b.heroSubtitle ?? rp.config.heroSubtitle).trim(),
+      deanName: String(b.deanName ?? rp.config.deanName).trim(),
+      deanTitle: String(b.deanTitle ?? rp.config.deanTitle).trim(),
+      deanEmail: String(b.deanEmail ?? rp.config.deanEmail).trim(),
+      deanPhone: String(b.deanPhone ?? rp.config.deanPhone).trim(),
+      totalGrantsHighlight: String(b.totalGrantsHighlight ?? rp.config.totalGrantsHighlight).trim(),
+      activeLabsHighlight: String(b.activeLabsHighlight ?? rp.config.activeLabsHighlight).trim(),
+      consultancyPolicyUrl: String(b.consultancyPolicyUrl ?? rp.config.consultancyPolicyUrl ?? '').trim(),
+    };
+    db.researchPortfolio = rp;
+    addAudit(actor, 'UPDATE_RESEARCH_CONFIG', 'ResearchPortfolio', rp.config.heroTitle);
+    saveDatabase();
+    res.json(rp.config);
+  });
+
+  app.post('/api/admin/research/projects', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const rp = ensureResearchPortfolioState();
+    const b = req.body || {};
+    if (!String(b.title || '').trim()) {
+      res.status(400).json({ error: 'Project title is required.' });
+      return;
+    }
+    const list = db.researchPortfolio!.projects;
+    const nextId = Math.max(0, ...list.map((p) => p.id)) + 1;
+    const item: ResearchProjectItem = {
+      id: nextId,
+      title: String(b.title).trim(),
+      fundingAgency: String(b.fundingAgency || 'DST-SERB (Govt. of India)').trim(),
+      principalInvestigator: String(b.principalInvestigator || '').trim(),
+      coInvestigator: String(b.coInvestigator || '').trim(),
+      departmentCode: String(b.departmentCode || 'CSE').trim(),
+      grantAmountLakhs: String(b.grantAmountLakhs || '').trim(),
+      sanctionYear: String(b.sanctionYear || '2026-27').trim(),
+      duration: String(b.duration || '').trim(),
+      status: String(b.status || 'Ongoing').trim(),
+      projectCode: String(b.projectCode || '').trim(),
+      summary: String(b.summary || '').trim(),
+      documentUrl: String(b.documentUrl || '').trim(),
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder || list.length + 1),
+    };
+    list.push(item);
+    addAudit(actor, 'CREATE_RESEARCH_PROJECT', 'ResearchProject', item.title);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/research/projects/reorder', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureResearchPortfolioState();
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? (req.body.orderedIds as number[]).map(Number) : [];
+    const list = db.researchPortfolio!.projects;
+    orderedIds.forEach((id, idx) => {
+      const target = list.find((p) => p.id === id);
+      if (target) target.sortOrder = idx + 1;
+    });
+    addAudit(actor, 'REORDER_RESEARCH_PROJECTS', 'ResearchProject', `${orderedIds.length} items`);
+    saveDatabase();
+    res.json({ ok: true, projects: sortByOrder(list) });
+  });
+
+  app.put('/api/admin/research/projects/:id', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureResearchPortfolioState();
+    const list = db.researchPortfolio!.projects;
+    const item = list.find((p) => p.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Research project not found.' });
+      return;
+    }
+    const b = req.body || {};
+    if (b.title !== undefined) item.title = String(b.title).trim();
+    if (b.fundingAgency !== undefined) item.fundingAgency = String(b.fundingAgency).trim();
+    if (b.principalInvestigator !== undefined) item.principalInvestigator = String(b.principalInvestigator).trim();
+    if (b.coInvestigator !== undefined) item.coInvestigator = String(b.coInvestigator).trim();
+    if (b.departmentCode !== undefined) item.departmentCode = String(b.departmentCode).trim();
+    if (b.grantAmountLakhs !== undefined) item.grantAmountLakhs = String(b.grantAmountLakhs).trim();
+    if (b.sanctionYear !== undefined) item.sanctionYear = String(b.sanctionYear).trim();
+    if (b.duration !== undefined) item.duration = String(b.duration).trim();
+    if (b.status !== undefined) item.status = String(b.status).trim();
+    if (b.projectCode !== undefined) item.projectCode = String(b.projectCode).trim();
+    if (b.summary !== undefined) item.summary = String(b.summary).trim();
+    if (b.documentUrl !== undefined) item.documentUrl = String(b.documentUrl).trim();
+    if (b.isPublished !== undefined) item.isPublished = Boolean(b.isPublished);
+    if (b.sortOrder !== undefined) item.sortOrder = Number(b.sortOrder);
+    addAudit(actor, 'UPDATE_RESEARCH_PROJECT', 'ResearchProject', item.title);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/research/projects/:id', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureResearchPortfolioState();
+    const list = db.researchPortfolio!.projects;
+    const idx = list.findIndex((p) => p.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Research project not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    addAudit(actor, 'DELETE_RESEARCH_PROJECT', 'ResearchProject', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/research/patents', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureResearchPortfolioState();
+    const b = req.body || {};
+    if (!String(b.title || '').trim()) {
+      res.status(400).json({ error: 'Patent / IPR / Start-up title is required.' });
+      return;
+    }
+    const list = db.researchPortfolio!.patents;
+    const nextId = Math.max(0, ...list.map((p) => p.id)) + 1;
+    const item: ResearchPatentItem = {
+      id: nextId,
+      itemType: String(b.itemType || 'Patent Granted').trim(),
+      title: String(b.title).trim(),
+      inventorsOrLead: String(b.inventorsOrLead || '').trim(),
+      departmentCode: String(b.departmentCode || 'CSE').trim(),
+      referenceNumber: String(b.referenceNumber || '').trim(),
+      filingOrGrantDate: String(b.filingOrGrantDate || '').trim(),
+      status: String(b.status || 'Granted').trim(),
+      partnerOrAgency: String(b.partnerOrAgency || '').trim(),
+      summary: String(b.summary || '').trim(),
+      externalUrl: String(b.externalUrl || '').trim(),
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder || list.length + 1),
+    };
+    list.push(item);
+    addAudit(actor, 'CREATE_RESEARCH_PATENT', 'ResearchPatent', item.title);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/research/patents/reorder', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureResearchPortfolioState();
+    const orderedIds = Array.isArray(req.body?.orderedIds) ? (req.body.orderedIds as number[]).map(Number) : [];
+    const list = db.researchPortfolio!.patents;
+    orderedIds.forEach((id, idx) => {
+      const target = list.find((p) => p.id === id);
+      if (target) target.sortOrder = idx + 1;
+    });
+    addAudit(actor, 'REORDER_RESEARCH_PATENTS', 'ResearchPatent', `${orderedIds.length} items`);
+    saveDatabase();
+    res.json({ ok: true, patents: sortByOrder(list) });
+  });
+
+  app.put('/api/admin/research/patents/:id', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureResearchPortfolioState();
+    const list = db.researchPortfolio!.patents;
+    const item = list.find((p) => p.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Research patent / IPR entry not found.' });
+      return;
+    }
+    const b = req.body || {};
+    if (b.itemType !== undefined) item.itemType = String(b.itemType).trim();
+    if (b.title !== undefined) item.title = String(b.title).trim();
+    if (b.inventorsOrLead !== undefined) item.inventorsOrLead = String(b.inventorsOrLead).trim();
+    if (b.departmentCode !== undefined) item.departmentCode = String(b.departmentCode).trim();
+    if (b.referenceNumber !== undefined) item.referenceNumber = String(b.referenceNumber).trim();
+    if (b.filingOrGrantDate !== undefined) item.filingOrGrantDate = String(b.filingOrGrantDate).trim();
+    if (b.status !== undefined) item.status = String(b.status).trim();
+    if (b.partnerOrAgency !== undefined) item.partnerOrAgency = String(b.partnerOrAgency).trim();
+    if (b.summary !== undefined) item.summary = String(b.summary).trim();
+    if (b.externalUrl !== undefined) item.externalUrl = String(b.externalUrl).trim();
+    if (b.isPublished !== undefined) item.isPublished = Boolean(b.isPublished);
+    if (b.sortOrder !== undefined) item.sortOrder = Number(b.sortOrder);
+    addAudit(actor, 'UPDATE_RESEARCH_PATENT', 'ResearchPatent', item.title);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/research/patents/:id', requireAdmin('conferences'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureResearchPortfolioState();
+    const list = db.researchPortfolio!.patents;
+    const idx = list.findIndex((p) => p.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Research patent / IPR entry not found.' });
+      return;
+    }
+    const [removed] = list.splice(idx, 1);
+    addAudit(actor, 'DELETE_RESEARCH_PATENT', 'ResearchPatent', removed.title);
     saveDatabase();
     res.json({ ok: true });
   });
