@@ -625,6 +625,13 @@ CREATE TABLE IF NOT EXISTS conferences (
   external_submission_url VARCHAR(500) NULL,
   external_submission_label VARCHAR(160) NULL,
   submission_instructions_html MEDIUMTEXT NULL,
+  enable_poster_presentation TINYINT(1) DEFAULT 1,
+  poster_dimensions VARCHAR(160) NULL,
+  poster_guidelines_html MEDIUMTEXT NULL,
+  poster_template_url VARCHAR(400) NULL,
+  poster_prizes_text VARCHAR(240) NULL,
+  poster_items_json MEDIUMTEXT NULL,
+  custom_sections_json MEDIUMTEXT NULL,
   is_published TINYINT(1) DEFAULT 1,
   is_featured TINYINT(1) DEFAULT 0,
   sort_order INT DEFAULT 1,
@@ -637,6 +644,7 @@ CREATE TABLE IF NOT EXISTS conference_submissions (
   tracking_code VARCHAR(40) NOT NULL,
   paper_title VARCHAR(280) NOT NULL,
   track_title VARCHAR(180) NOT NULL,
+  presentation_type VARCHAR(100) NOT NULL DEFAULT 'Oral Paper Presentation',
   author_name VARCHAR(160) NOT NULL,
   author_email VARCHAR(160) NOT NULL,
   author_phone VARCHAR(60) NULL,
@@ -735,4 +743,144 @@ CREATE TABLE IF NOT EXISTS grievances (
   submitted_at VARCHAR(32) NOT NULL,
   updated_at VARCHAR(32) NOT NULL
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS visitor_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  timestamp_iso VARCHAR(40) NOT NULL,
+  ip VARCHAR(64) NOT NULL,
+  country VARCHAR(100) NOT NULL DEFAULT 'India',
+  country_code VARCHAR(12) NOT NULL DEFAULT 'IN',
+  state VARCHAR(120) NOT NULL DEFAULT 'Maharashtra',
+  area VARCHAR(140) NOT NULL DEFAULT 'Pandharpur',
+  method VARCHAR(12) NOT NULL DEFAULT 'GET',
+  path VARCHAR(260) NOT NULL DEFAULT '/',
+  query_string VARCHAR(500) NULL,
+  status_code INT NOT NULL DEFAULT 200,
+  latency_ms INT NOT NULL DEFAULT 8,
+  referrer VARCHAR(320) NULL,
+  user_agent VARCHAR(320) NULL,
+  device_type VARCHAR(32) NOT NULL DEFAULT 'Desktop',
+  browser VARCHAR(64) NOT NULL DEFAULT 'Chrome',
+  os VARCHAR(64) NOT NULL DEFAULT 'Windows',
+  event_type VARCHAR(40) NOT NULL DEFAULT 'page_view',
+  severity VARCHAR(16) NOT NULL DEFAULT 'info',
+  threat_category VARCHAR(160) NULL,
+  actor_email VARCHAR(160) NULL,
+  note VARCHAR(320) NULL,
+  INDEX idx_vl_country_state (country, state),
+  INDEX idx_vl_severity (severity),
+  INDEX idx_vl_event (event_type)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS security_blocked_ips (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ip VARCHAR(64) NOT NULL,
+  reason VARCHAR(260) NOT NULL,
+  blocked_by VARCHAR(160) NOT NULL,
+  blocked_at VARCHAR(40) NOT NULL,
+  expires_at VARCHAR(40) NULL,
+  INDEX idx_blk_ip (ip)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS php_sessions (
+  sess_id VARCHAR(128) PRIMARY KEY,
+  sess_data MEDIUMTEXT NOT NULL,
+  updated_at INT UNSIGNED NOT NULL,
+  INDEX idx_sess_upd (updated_at)
+) ENGINE=InnoDB;
+
+-- 18. Sports Portal & Campus Facilities Tables
+CREATE TABLE IF NOT EXISTS sports_facilities (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  facility_type VARCHAR(100) NOT NULL DEFAULT 'Outdoor Ground / Track',
+  dimensions_or_capacity VARCHAR(160) NULL,
+  timings VARCHAR(160) NULL,
+  incharge_name VARCHAR(150) NULL,
+  description TEXT NULL,
+  image_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
+  custom_fields_json MEDIUMTEXT NULL,
+  is_published TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS sports_events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(240) NOT NULL,
+  event_type VARCHAR(100) NOT NULL DEFAULT 'Annual Sports Meet',
+  discipline VARCHAR(120) NOT NULL DEFAULT 'Multi-Sport',
+  event_date VARCHAR(60) NOT NULL,
+  venue VARCHAR(220) NOT NULL,
+  organizer VARCHAR(180) NULL,
+  status ENUM('Upcoming','Registrations Open','Completed') DEFAULT 'Upcoming',
+  registration_url VARCHAR(500) NULL,
+  description TEXT NULL,
+  banner_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
+  is_published TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS sports_achievements (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  student_or_team_name VARCHAR(200) NOT NULL,
+  department_code VARCHAR(32) NOT NULL,
+  batch_year VARCHAR(30) NULL,
+  sport_name VARCHAR(120) NOT NULL,
+  level ENUM('University','State','National','International','Zonal / Intercollegiate') DEFAULT 'State',
+  medal_or_rank VARCHAR(120) NOT NULL,
+  event_name VARCHAR(240) NOT NULL,
+  event_date VARCHAR(40) NOT NULL,
+  photo_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
+  highlights TEXT NULL,
+  is_featured TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS sports_gallery (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(220) NOT NULL,
+  media_type ENUM('Photo','Video') DEFAULT 'Photo',
+  category VARCHAR(120) DEFAULT 'Annual Sports Meet',
+  media_url VARCHAR(500) NOT NULL,
+  thumbnail_url VARCHAR(300) NULL,
+  event_date VARCHAR(40) NULL,
+  caption TEXT NULL,
+  is_published TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS sports_notices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(260) NOT NULL,
+  notice_date VARCHAR(40) NOT NULL,
+  category VARCHAR(100) DEFAULT 'Trials & Selection',
+  summary TEXT NULL,
+  attachment_url VARCHAR(500) NULL,
+  registration_link VARCHAR(500) NULL,
+  is_pinned TINYINT(1) DEFAULT 0,
+  is_published TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS facilities (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(220) NOT NULL,
+  category VARCHAR(140) NOT NULL DEFAULT 'Infrastructural Facilities',
+  short_summary VARCHAR(320) NULL,
+  description_html MEDIUMTEXT NULL,
+  location_block VARCHAR(180) NULL,
+  capacity VARCHAR(140) NULL,
+  timings VARCHAR(160) NULL,
+  incharge_name VARCHAR(150) NULL,
+  incharge_email VARCHAR(160) NULL,
+  incharge_phone VARCHAR(60) NULL,
+  image_url VARCHAR(300) DEFAULT 'assets/images/campus_facilities.jpg',
+  brochure_url VARCHAR(500) NULL,
+  custom_fields_json MEDIUMTEXT NULL,
+  is_featured TINYINT(1) DEFAULT 0,
+  is_published TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+
 

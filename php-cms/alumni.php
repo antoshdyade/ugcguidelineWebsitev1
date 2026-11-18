@@ -27,21 +27,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = strtolower(trim((string)($_POST['email'] ?? '')));
         $pass = (string)($_POST['password'] ?? '');
         $captchaAns = (string)($_POST['captcha_answer'] ?? '');
-        if (!verifyCaptchaAnswer($captchaAns, 'alumni_login')) {
+        $waitMins = isPhpLoginRateLimited($pdo, normalizePhpClientIp(), 'alumni');
+        if ($waitMins !== null) {
+            $err = "Too many failed alumni login attempts. Try again in {$waitMins} minute(s).";
+        } elseif (!verifyCaptchaAnswer($captchaAns, 'alumni_login')) {
             $err = 'Incorrect or expired security CAPTCHA code. Please try again.';
         } else {
             $st = $pdo->prepare('SELECT * FROM alumni_profiles WHERE LOWER(email) = ? LIMIT 1');
             $st->execute([$email]);
             $prof = $st->fetch();
             if (!$prof || empty($prof['password_hash']) || !password_verify($pass, $prof['password_hash'])) {
+                recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'alumni', $email);
                 $err = 'Invalid alumni email or password.';
             } elseif (($prof['status'] ?? 'pending') !== 'approved') {
                 $err = 'Your alumni account is awaiting Alumni Cell verification (' . ($prof['status'] ?? 'pending') . ').';
             } else {
+                clearPhpLoginFailures($pdo, normalizePhpClientIp(), 'alumni');
                 session_regenerate_id(true);
                 setAlumniSession($prof);
                 $loggedAlumni = currentAlumni();
                 $activeTab = 'discussions';
+                logPhpVisitorEvent($pdo, [
+                    'method'      => 'POST',
+                    'path'        => 'alumni.php?tab=login',
+                    'status_code' => 200,
+                    'event_type'  => 'alumni_login',
+                    'severity'    => 'info',
+                    'actor_email' => $prof['email'],
+                    'note'        => 'Verified Alumni Member Sign-In',
+                ]);
                 $msg = 'Welcome back, ' . $prof['full_name'] . '! You now have access to Job Posting & Members-Only Discussions.';
             }
         }
@@ -555,7 +569,7 @@ require_once __DIR__ . '/includes/header.php';
         <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.85rem;">Role Description &amp; Referral Instructions *
           <textarea name="description" rows="3" required style="width:100%;padding:0.55rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"></textarea>
         </label>
-        <?= renderCaptchaWidget('alumni_job', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
+        <?= renderCaptchaWidget('alumni_job', baseUrl('captcha.php'), 'Security CAPTCHA Verification *') ?>
         <button type="submit" class="btn-primary">Submit Opportunity for Moderation</button>
       </form>
     <?php endif; ?>
@@ -665,7 +679,7 @@ require_once __DIR__ . '/includes/header.php';
       <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.85rem;">Message / Department Note
         <textarea name="message" rows="2" style="width:100%;padding:0.55rem;border:1px solid var(--border-color);border-radius:7px;margin-top:4px;"><?= e($_POST['message'] ?? '') ?></textarea>
       </label>
-      <?= renderCaptchaWidget('alumni_pledge', baseUrl('includes/captcha.php'), 'Endowment Pledge CAPTCHA *') ?>
+      <?= renderCaptchaWidget('alumni_pledge', baseUrl('captcha.php'), 'Endowment Pledge CAPTCHA *') ?>
       <button type="submit" class="btn-primary">Submit Endowment / Mentorship Pledge</button>
     </form>
   </div>
@@ -811,7 +825,7 @@ require_once __DIR__ . '/includes/header.php';
         <span class="login-label">Password *</span>
         <input class="login-input" type="password" name="password" required placeholder="••••••••">
       </label>
-      <?= renderCaptchaWidget('alumni_login', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
+      <?= renderCaptchaWidget('alumni_login', baseUrl('captcha.php'), 'Security CAPTCHA Verification *') ?>
       <button type="submit" class="login-submit">Sign In to Alumni Portal</button>
     </form>
     <p style="font-size:0.76rem;color:#78716C;margin:0.85rem 0 0;">
@@ -869,7 +883,7 @@ require_once __DIR__ . '/includes/header.php';
         <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.86rem;font-weight:600;margin-bottom:0.85rem;">
           <input type="checkbox" name="open_to_mentorship" value="1"> Willing to mentor current students &amp; provide career guidance
         </label>
-        <?= renderCaptchaWidget('alumni_register', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
+        <?= renderCaptchaWidget('alumni_register', baseUrl('captcha.php'), 'Security CAPTCHA Verification *') ?>
         <button type="submit" class="btn-primary">Submit Alumni Registration</button>
       </form>
     <?php endif; ?>

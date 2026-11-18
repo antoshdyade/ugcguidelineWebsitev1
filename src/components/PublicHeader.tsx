@@ -558,6 +558,16 @@ export function PublicHeader({
                               type="button"
                               onClick={() => {
                                 setOpenDropdown(null);
+                                onNavigate('/sports');
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 text-xs font-bold rounded bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40"
+                            >
+                              Sports, Athletics &amp; Recreation &rarr;
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdown(null);
                                 onNavigate('/placements');
                               }}
                               className="w-full text-left px-2.5 py-1.5 text-xs font-bold rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
@@ -722,6 +732,16 @@ export function PublicHeader({
                                   type="button"
                                   onClick={() => {
                                     setOpenDropdown(null);
+                                    onNavigate('/sports');
+                                  }}
+                                  className="w-full text-left px-3 py-1 text-xs font-bold rounded bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300"
+                                >
+                                  Sports, Athletics &amp; Recreation &rarr;
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
                                     onNavigate('/placements');
                                   }}
                                   className="w-full text-left px-3 py-1 text-xs font-bold rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300"
@@ -822,6 +842,40 @@ export function PublicHeader({
                       >
                         Conferences, Workshops &amp; Events Portal &rarr;
                       </button>
+                    )}
+                    {cat.slug === 'student-life' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            onNavigate('/sports');
+                          }}
+                          className="block w-full text-left py-1 text-xs font-bold text-sky-800"
+                        >
+                          Sports, Athletics &amp; Recreation &rarr;
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            onNavigate('/placements');
+                          }}
+                          className="block w-full text-left py-1 text-xs font-bold text-emerald-800"
+                        >
+                          Training &amp; Placement Hub &rarr;
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            onNavigate('/grievance');
+                          }}
+                          className="block w-full text-left py-1 text-xs font-bold text-rose-800"
+                        >
+                          Grievance Redressal Portal &rarr;
+                        </button>
+                      </>
                     )}
                     {getCategoryPages(cat.slug).map((pg) => (
                       <button

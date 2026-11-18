@@ -1,21 +1,102 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/analytics_security.php';
+
 if (session_status() === PHP_SESSION_NONE) {
-    $currentSavePath = session_save_path() ?: sys_get_temp_dir();
-    if (!@is_writable($currentSavePath)) {
-        $fallbackSessions = __DIR__ . '/../uploads/.sessions';
-        if (!is_dir($fallbackSessions)) {
-            @mkdir($fallbackSessions, 0700, true);
+    $svcoerDirWritable = static function (string $dir): bool {
+        if ($dir === '' || !@is_dir($dir)) {
+            return false;
         }
-        if (is_dir($fallbackSessions) && is_writable($fallbackSessions)) {
-            session_save_path($fallbackSessions);
-        } else {
-            session_save_path(sys_get_temp_dir());
+        $probe = @tempnam($dir, 'svs_');
+        if ($probe === false) {
+            return false;
+        }
+        $ok = @file_put_contents($probe, '1') !== false;
+        @unlink($probe);
+        return $ok;
+    };
+
+    $configuredPath = (string)session_save_path();
+    // Strip optional "N;" depth prefix if php.ini specifies one
+    if (str_contains($configuredPath, ';')) {
+        $parts = explode(';', $configuredPath);
+        $configuredPath = (string)end($parts);
+    }
+
+    $sessionConfigured = false;
+    if ($configuredPath !== '' && $svcoerDirWritable($configuredPath)) {
+        $sessionConfigured = true;
+    } else {
+        $candidates = [
+            __DIR__ . '/../uploads/.sessions',
+            sys_get_temp_dir(),
+        ];
+        foreach ($candidates as $cand) {
+            if (!@is_dir($cand)) {
+                @mkdir($cand, 0700, true);
+            }
+            if ($svcoerDirWritable($cand)) {
+                @session_save_path($cand);
+                $sessionConfigured = true;
+                break;
+            }
         }
     }
-    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+
+    // Automatic MySQL PDO SessionHandler fallback when Apache/Webmin blocks file session dirs
+    if (!$sessionConfigured && defined('DB_HOST') && defined('DB_NAME') && defined('DB_USER')) {
+        try {
+            $sessDsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, defined('DB_CHARSET') ? DB_CHARSET : 'utf8mb4');
+            $sessPdo = new PDO($sessDsn, DB_USER, defined('DB_PASS') ? DB_PASS : '', [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+            $sessPdo->exec(
+                'CREATE TABLE IF NOT EXISTS php_sessions (
+                    id VARCHAR(128) PRIMARY KEY,
+                    data MEDIUMTEXT NOT NULL,
+                    updated_at INT UNSIGNED NOT NULL,
+                    INDEX idx_php_sess_updated (updated_at)
+                ) ENGINE=InnoDB'
+            );
+            $dbSessionHandler = new class ($sessPdo) implements SessionHandlerInterface {
+                private PDO $pdo;
+                public function __construct(PDO $pdo) { $this->pdo = $pdo; }
+                public function open(string $path, string $name): bool { return true; }
+                public function close(): bool { return true; }
+                public function read(string $id): string|false {
+                    $st = $this->pdo->prepare('SELECT data FROM php_sessions WHERE id = ? LIMIT 1');
+                    $st->execute([$id]);
+                    $val = $st->fetchColumn();
+                    return is_string($val) ? $val : '';
+                }
+                public function write(string $id, string $data): bool {
+                    $st = $this->pdo->prepare(
+                        'INSERT INTO php_sessions (id, data, updated_at) VALUES (?, ?, ?)
+                         ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = VALUES(updated_at)'
+                    );
+                    return $st->execute([$id, $data, time()]);
+                }
+                public function destroy(string $id): bool {
+                    $this->pdo->prepare('DELETE FROM php_sessions WHERE id = ?')->execute([$id]);
+                    return true;
+                }
+                public function gc(int $max_lifetime): int|false {
+                    $st = $this->pdo->prepare('DELETE FROM php_sessions WHERE updated_at < ?');
+                    $st->execute([time() - max(60, $max_lifetime)]);
+                    return $st->rowCount();
+                }
+            };
+            session_set_save_handler($dbSessionHandler, true);
+        } catch (Throwable $ignoredSess) {
+            // Fall through to default PHP handler
+        }
+    }
+
+    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+        || ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443)
+        || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
     session_set_cookie_params([
         'lifetime' => 43200,
         'path'     => '/',
@@ -94,7 +175,11 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
         'alumni'                          => in_array($role, ['content_editor', 'iqac_officer'], true),
         'conferences'                     => in_array($role, ['content_editor', 'iqac_officer'], true),
         'placements'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'sports'                          => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'facilities'                      => in_array($role, ['content_editor', 'iqac_officer'], true),
         'grievances'                      => in_array($role, ['iqac_officer', 'content_editor', 'exam_controller'], true),
+        'seo'                             => in_array($role, ['content_editor', 'iqac_officer'], true),
+        'analytics'                       => $role === 'iqac_officer',
         'departments'                     => $role === 'department_admin'
             && ($targetDeptId === null ? count($allowedDepts) > 0 : in_array($targetDeptId, $allowedDepts, true)),
         default                           => false,
@@ -112,7 +197,11 @@ function rbacModuleOptions(): array
         'alumni'         => 'Alumni Network & Portal',
         'conferences'    => 'Conferences, Workshops & R&D',
         'placements'     => 'Placements Desk (T&P)',
+        'sports'         => 'Student Life — Sports Portal',
+        'facilities'     => 'Campus Facilities & Infrastructure',
         'grievances'     => 'Grievance Redressal Desk',
+        'seo'            => 'SEO Studio & Hit Counter',
+        'analytics'      => 'Log Analyzer & Security Shield',
         'gallery'        => 'Picture Gallery',
         'documents'      => 'Document Repository',
         'directory'      => 'Telephone Directory',
@@ -128,7 +217,63 @@ function conferenceScopePresets(): array
         'Technical Event / Symposium',
         'Faculty Development Program (FDP)',
         'Short-Term Training Program (STTP)',
+        'Poster Presentation',
+        'Poster Presentation & Technical Expo',
         'Patent & IPR Clinic',
+    ];
+}
+
+function conferencePresentationTypePresets(): array
+{
+    return [
+        'Oral Paper Presentation',
+        'Poster Presentation',
+        'Hardware / Prototype Demo',
+    ];
+}
+
+function sportsFacilityTypePresets(): array
+{
+    return [
+        'Outdoor Ground / Track',
+        'Indoor Court / Hall',
+        'Fitness & Gymnasium',
+        'Aquatic / Synthetic Court',
+        'Yoga & Wellness Studio',
+    ];
+}
+
+function sportsEventTypePresets(): array
+{
+    return [
+        'Annual Sports Meet',
+        'Intercollegiate Tournament',
+        'University Zonal Trials',
+        'Fitness & Marathon Drive',
+        'Coaching Camp / Clinic',
+    ];
+}
+
+function sportsAchievementLevelPresets(): array
+{
+    return [
+        'University',
+        'State',
+        'National',
+        'International',
+        'Zonal / Intercollegiate',
+    ];
+}
+
+function facilityCategoryPresets(): array
+{
+    return [
+        'Infrastructural Facilities',
+        'IT & Computing Facilities',
+        'Student Facilities',
+        'Research & Central Labs',
+        'Library & Digital Resources',
+        'Green & Barrier-Free Campus',
     ];
 }
 
@@ -252,12 +397,13 @@ function defaultPortalMenuItems(): array
 {
     return [
         ['id' => 'conferences', 'label' => 'Conferences', 'href' => 'conferences.php', 'matchScripts' => ['conferences.php', 'conference.php'], 'menuLocation' => 'main', 'sortOrder' => 1, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'placements',  'label' => 'Placements',  'href' => 'placements.php',  'matchScripts' => ['placements.php'], 'menuLocation' => 'main', 'sortOrder' => 2, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'grievance',   'label' => 'Grievance & Anti-Ragging', 'href' => 'grievance.php', 'matchScripts' => ['grievance.php'], 'menuLocation' => 'main', 'sortOrder' => 3, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'alumni',      'label' => 'Alumni',      'href' => 'alumni.php',      'matchScripts' => ['alumni.php'], 'menuLocation' => 'main', 'sortOrder' => 4, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'gallery',     'label' => 'Gallery',     'href' => 'gallery.php',     'matchScripts' => ['gallery.php'], 'menuLocation' => 'more', 'sortOrder' => 5, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'contact',     'label' => 'Contact Us',  'href' => 'contact.php',     'matchScripts' => ['contact.php'], 'menuLocation' => 'more', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'quick-links', 'label' => 'Quick Links & Disclosures', 'href' => 'quick-links.php', 'matchScripts' => ['quick-links.php'], 'menuLocation' => 'more', 'sortOrder' => 7, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'facilities',  'label' => 'Facilities',  'href' => 'facilities.php',  'matchScripts' => ['facilities.php'], 'menuLocation' => 'main', 'sortOrder' => 2, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'placements',  'label' => 'Placements',  'href' => 'placements.php',  'matchScripts' => ['placements.php'], 'menuLocation' => 'main', 'sortOrder' => 3, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'grievance',   'label' => 'Grievance & Anti-Ragging', 'href' => 'grievance.php', 'matchScripts' => ['grievance.php'], 'menuLocation' => 'main', 'sortOrder' => 4, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'alumni',      'label' => 'Alumni',      'href' => 'alumni.php',      'matchScripts' => ['alumni.php'], 'menuLocation' => 'main', 'sortOrder' => 5, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'gallery',     'label' => 'Gallery',     'href' => 'gallery.php',     'matchScripts' => ['gallery.php'], 'menuLocation' => 'more', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'contact',     'label' => 'Contact Us',  'href' => 'contact.php',     'matchScripts' => ['contact.php'], 'menuLocation' => 'more', 'sortOrder' => 7, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'quick-links', 'label' => 'Quick Links & Disclosures', 'href' => 'quick-links.php', 'matchScripts' => ['quick-links.php'], 'menuLocation' => 'more', 'sortOrder' => 8, 'isSystem' => true, 'openInNewTab' => false],
     ];
 }
 
@@ -725,6 +871,68 @@ function getAlumniSettings(PDO $pdo): array
     return $def;
 }
 
+function defaultSportsPortalConfig(): array
+{
+    return [
+        'heroBadge'          => 'Student Life · Directorate of Physical Education & Sports',
+        'heroTitle'          => 'Athletics, Indoor Courts, Fitness & Sports Portal',
+        'heroSubtitle'       => 'Dedicated athletic grounds, indoor badminton & table-tennis arenas, university zonal championships, student medalists, and fitness schedules at SVERI Pandharpur.',
+        'directorName'       => 'Prof. R. S. Jadhav',
+        'directorTitle'      => 'Director of Physical Education & Sports',
+        'directorEmail'      => 'sports@coe.sveri.ac.in',
+        'directorPhone'      => '+91-02186-216063',
+        'gymkhanaTimings'    => '6:00 AM – 8:30 AM & 4:30 PM – 8:00 PM (Mon – Sat)',
+        'annualFlagshipName' => 'SVERI Utsav & Inter-Engineering Krida Mahotsav',
+        'customFields'       => [
+            ['label' => 'Campus Sports Area', 'value' => '8.5 Acres Dedicated Athletic Grounds'],
+            ['label' => 'Affiliated Sports Board', 'value' => 'PAHSUS Solapur & AIU Inter-University'],
+            ['label' => 'Medical & First-Aid Support', 'value' => 'On-Field Physiotherapist & Ambulance Standby'],
+        ],
+    ];
+}
+
+function getSportsPortalConfig(PDO $pdo): array
+{
+    $def = defaultSportsPortalConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'sports_portal_config' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                return array_merge($def, $dec);
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function defaultFacilitiesPortalConfig(): array
+{
+    return [
+        'heroBadge'          => 'Institutional Infrastructure, IT & Student Support Campus',
+        'heroTitle'          => 'Campus Facilities & Infrastructure Showcase',
+        'heroSubtitle'       => 'Explore AICTE/UGC-compliant smart lecture theatres, 1 Gbps campus computing backbone, central library, hostels, research centres, green solar microgrids, and barrier-free student amenities.',
+        'customFieldPresets' => ['Area (Sq. Ft.)', 'Equipment Highlights', 'Accessibility / Divyangjan Support', 'Power & Safety Compliance', 'Booking / Access Policy'],
+    ];
+}
+
+function getFacilitiesPortalConfig(PDO $pdo): array
+{
+    $def = defaultFacilitiesPortalConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'facilities_portal_config' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                return array_merge($def, $dec);
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
 function ensureCmsSchemaUpgraded(PDO $pdo): void
 {
     static $upgraded = false;
@@ -1083,6 +1291,13 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             "ALTER TABLE conferences ADD COLUMN external_submission_url VARCHAR(500) NULL AFTER submission_mode",
             "ALTER TABLE conferences ADD COLUMN external_submission_label VARCHAR(160) NULL AFTER external_submission_url",
             "ALTER TABLE conferences ADD COLUMN submission_instructions_html MEDIUMTEXT NULL AFTER external_submission_label",
+            "ALTER TABLE conferences ADD COLUMN enable_poster_presentation TINYINT(1) DEFAULT 1 AFTER submission_instructions_html",
+            "ALTER TABLE conferences ADD COLUMN poster_dimensions VARCHAR(160) DEFAULT 'A0 Portrait (841 x 1189 mm)' AFTER enable_poster_presentation",
+            "ALTER TABLE conferences ADD COLUMN poster_guidelines_html MEDIUMTEXT NULL AFTER poster_dimensions",
+            "ALTER TABLE conferences ADD COLUMN poster_template_url VARCHAR(500) NULL AFTER poster_guidelines_html",
+            "ALTER TABLE conferences ADD COLUMN poster_prizes_text VARCHAR(300) NULL AFTER poster_template_url",
+            "ALTER TABLE conferences ADD COLUMN poster_items_json MEDIUMTEXT NULL AFTER poster_prizes_text",
+            "ALTER TABLE conference_submissions ADD COLUMN presentation_type VARCHAR(80) DEFAULT 'Oral Paper Presentation' AFTER track_title",
             "ALTER TABLE alumni_jobs MODIFY COLUMN job_type VARCHAR(80) DEFAULT 'Full-Time'",
             "ALTER TABLE grievances ADD COLUMN is_anonymous TINYINT(1) DEFAULT 0 AFTER urgency",
             "ALTER TABLE grievances ADD COLUMN attachment_url VARCHAR(300) NULL AFTER is_anonymous",
@@ -1410,6 +1625,296 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('placements_enhanced_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
                 ->execute();
         }
+
+        // Sports & Campus Facilities Tables (Schema v7, non-destructive)
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS sports_facilities (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(200) NOT NULL,
+                facility_type VARCHAR(100) NOT NULL DEFAULT 'Outdoor Ground / Track',
+                dimensions_or_capacity VARCHAR(160) NULL,
+                timings VARCHAR(160) NULL,
+                incharge_name VARCHAR(150) NULL,
+                description TEXT NULL,
+                image_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
+                custom_fields_json MEDIUMTEXT NULL,
+                is_published TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS sports_events (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(240) NOT NULL,
+                event_type VARCHAR(100) NOT NULL DEFAULT 'Annual Sports Meet',
+                discipline VARCHAR(120) NOT NULL DEFAULT 'Multi-Sport',
+                event_date VARCHAR(60) NOT NULL,
+                venue VARCHAR(220) NOT NULL,
+                organizer VARCHAR(180) NULL,
+                status ENUM('Upcoming','Registrations Open','Completed') DEFAULT 'Upcoming',
+                registration_url VARCHAR(500) NULL,
+                description TEXT NULL,
+                banner_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
+                is_published TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS sports_achievements (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                student_or_team_name VARCHAR(200) NOT NULL,
+                department_code VARCHAR(32) NOT NULL,
+                batch_year VARCHAR(30) NULL,
+                sport_name VARCHAR(120) NOT NULL,
+                level ENUM('University','State','National','International','Zonal / Intercollegiate') DEFAULT 'State',
+                medal_or_rank VARCHAR(120) NOT NULL,
+                event_name VARCHAR(240) NOT NULL,
+                event_date VARCHAR(40) NOT NULL,
+                photo_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
+                highlights TEXT NULL,
+                is_featured TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS sports_gallery (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(220) NOT NULL,
+                media_type ENUM('Photo','Video') DEFAULT 'Photo',
+                category VARCHAR(120) DEFAULT 'Annual Sports Meet',
+                media_url VARCHAR(500) NOT NULL,
+                thumbnail_url VARCHAR(300) NULL,
+                event_date VARCHAR(40) NULL,
+                caption TEXT NULL,
+                is_published TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS sports_notices (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(260) NOT NULL,
+                notice_date VARCHAR(40) NOT NULL,
+                category VARCHAR(100) DEFAULT 'Trials & Selection',
+                summary TEXT NULL,
+                attachment_url VARCHAR(500) NULL,
+                registration_link VARCHAR(500) NULL,
+                is_pinned TINYINT(1) DEFAULT 0,
+                is_published TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS facilities (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(220) NOT NULL,
+                category VARCHAR(140) NOT NULL DEFAULT 'Infrastructural Facilities',
+                short_summary VARCHAR(320) NULL,
+                description_html MEDIUMTEXT NULL,
+                location_block VARCHAR(180) NULL,
+                capacity VARCHAR(140) NULL,
+                timings VARCHAR(160) NULL,
+                incharge_name VARCHAR(150) NULL,
+                incharge_email VARCHAR(160) NULL,
+                incharge_phone VARCHAR(60) NULL,
+                image_url VARCHAR(300) DEFAULT 'assets/images/campus_facilities.jpg',
+                brochure_url VARCHAR(500) NULL,
+                custom_fields_json MEDIUMTEXT NULL,
+                is_featured TINYINT(1) DEFAULT 0,
+                is_published TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+
+        // Seed Sports Portal config & initial items once (non-destructive)
+        $spChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'sports_seeded_v1' LIMIT 1");
+        $spChk->execute();
+        if (!$spChk->fetchColumn()) {
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('sports_portal_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+                ->execute([json_encode([
+                    'heroBadge'          => 'Student Life · Directorate of Physical Education & Sports',
+                    'heroTitle'          => 'Athletics, Indoor Courts, Fitness & Sports Portal',
+                    'heroSubtitle'       => 'Dedicated athletic grounds, indoor badminton & table-tennis arenas, university zonal championships, student medalists, and fitness schedules at SVERI Pandharpur.',
+                    'directorName'       => 'Prof. R. S. Jadhav',
+                    'directorTitle'      => 'Director of Physical Education & Sports',
+                    'directorEmail'      => 'sports@coe.sveri.ac.in',
+                    'directorPhone'      => '+91-02186-216063',
+                    'gymkhanaTimings'    => '6:00 AM – 8:30 AM & 4:30 PM – 8:00 PM (Mon – Sat)',
+                    'annualFlagshipName' => 'SVERI Utsav & Inter-Engineering Krida Mahotsav',
+                    'customFields'       => [
+                        ['label' => 'Campus Sports Area', 'value' => '8.5 Acres Dedicated Athletic Grounds'],
+                        ['label' => 'Affiliated Sports Board', 'value' => 'PAHSUS Solapur & AIU Inter-University'],
+                        ['label' => 'Medical & First-Aid Support', 'value' => 'On-Field Physiotherapist & Ambulance Standby'],
+                    ],
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+
+            if ((int)$pdo->query('SELECT COUNT(*) FROM sports_facilities')->fetchColumn() === 0) {
+                $insSf = $pdo->prepare('INSERT INTO sports_facilities (name, facility_type, dimensions_or_capacity, timings, incharge_name, description, image_url, custom_fields_json, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)');
+                $insSf->execute([
+                    'SVERI Floodlit Cricket & 400m Athletic Stadium', 'Outdoor Ground / Track',
+                    '8-Lane 400m Track · Turf Cricket Pitch', '6:00 AM – 8:00 PM', 'Prof. R. S. Jadhav',
+                    'Full-size turf cricket oval surrounded by an 8-lane athletic track, long-jump pits, and pavilion seating.',
+                    'assets/images/sports_complex.jpg',
+                    json_encode([['label' => 'Lighting', 'value' => 'High-Mast LED Floodlights'], ['label' => 'Surface', 'value' => 'Natural Bermuda Grass']], JSON_UNESCAPED_UNICODE),
+                    1, 1,
+                ]);
+                $insSf->execute([
+                    'Indoor Wooden Badminton & Table Tennis Arena', 'Indoor Court / Hall',
+                    '4 BWF-Grade Courts · 6 Stag TT Tables', '6:30 AM – 8:30 PM', 'Prof. M. V. Kulkarni',
+                    'Cushioned maple-wood indoor stadium for badminton, table tennis, chess, and carrom championships.',
+                    'assets/images/campus_facilities.jpg',
+                    json_encode([['label' => 'Flooring', 'value' => 'Maple Wood Cushioned'], ['label' => 'Ventilation', 'value' => 'Acoustic High-Bay Exhaust']], JSON_UNESCAPED_UNICODE),
+                    1, 2,
+                ]);
+                $insSf->execute([
+                    'Multi-Station Gymnasium & Conditioning Centre', 'Fitness & Gymnasium',
+                    '3,200 Sq. Ft. · 40 Student Capacity', '6:00 AM – 9:00 AM & 4:30 PM – 8:00 PM', 'Mr. S. K. Pawar (Certified Trainer)',
+                    'Separate strength and cardio training zones equipped with Olympic barbells, treadmills, rowers, and wellness assessment.',
+                    'assets/images/sports_complex.jpg',
+                    json_encode([['label' => 'Batches', 'value' => 'Dedicated Men & Women Slots'], ['label' => 'Entry', 'value' => 'Student Smart ID Enabled']], JSON_UNESCAPED_UNICODE),
+                    1, 3,
+                ]);
+            }
+            if ((int)$pdo->query('SELECT COUNT(*) FROM sports_events')->fetchColumn() === 0) {
+                $insSe = $pdo->prepare('INSERT INTO sports_events (title, event_type, discipline, event_date, venue, organizer, status, registration_url, description, banner_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+                $insSe->execute(['PAHSUS Solapur Inter-Collegiate Volleyball & Kabaddi Zonal Championship', 'Intercollegiate Tournament', 'Volleyball & Kabaddi', '2026-12-04', 'SVERI Outdoor Courts, Pandharpur', 'Sports Cell & PAHSUS Board', 'Registrations Open', '', '24 engineering & degree colleges competing across men and women brackets.', 'assets/images/sports_complex.jpg', 1, 1]);
+                $insSe->execute(['Annual SVERI Krida Mahotsav 2026–27 & 5K Fitness Run', 'Annual Sports Meet', 'Athletics, Cricket, Badminton & Chess', '2027-01-18', 'Main Athletic Stadium & Indoor Arena', 'Student Gymkhana Council', 'Upcoming', '', 'Week-long inter-departmental championship featuring 14 indoor and outdoor sporting disciplines.', 'assets/images/sports_complex.jpg', 1, 2]);
+            }
+            if ((int)$pdo->query('SELECT COUNT(*) FROM sports_achievements')->fetchColumn() === 0) {
+                $insSa = $pdo->prepare('INSERT INTO sports_achievements (student_or_team_name, department_code, batch_year, sport_name, level, medal_or_rank, event_name, event_date, photo_url, highlights, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+                $insSa->execute(['Aarav Patil & SVERI Men\'s Kabaddi Squad', 'MECH', '2026', 'Kabaddi', 'State', 'Gold Medal (Champions)', 'Maharashtra State Inter-Engineering Krida Mahotsav', '2026-10-12', 'assets/images/sports_complex.jpg', 'Undefeated across 6 knockout matches against 28 autonomous engineering colleges.', 1, 1]);
+                $insSa->execute(['Sneha Deshmukh', 'CSE', '2027', 'Badminton (Singles)', 'National', 'Silver Medal (Runner-Up)', 'All-India Inter-University West Zone Championship', '2026-09-22', 'assets/images/principal.jpg', 'Selected to represent PAHSUS Solapur at the All-India Inter-University Nationals.', 1, 2]);
+                $insSa->execute(['Rohan Shinde', 'ENTC', '2026', '400m Hurdles Athletics', 'University', 'Gold Medal · Meet Record (52.8s)', 'PAHSUS Annual Inter-Collegiate Athletic Meet', '2026-11-01', 'assets/images/principal.jpg', 'Broke the 7-year university meet record in 400m hurdles.', 1, 3]);
+            }
+            if ((int)$pdo->query('SELECT COUNT(*) FROM sports_gallery')->fetchColumn() === 0) {
+                $insSg = $pdo->prepare('INSERT INTO sports_gallery (title, media_type, category, media_url, thumbnail_url, event_date, caption, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
+                $insSg->execute(['Floodlit Athletics Stadium & Main Cricket Turf', 'Photo', 'Campus Infrastructure', 'assets/images/sports_complex.jpg', 'assets/images/sports_complex.jpg', '2026-11-05', 'Evening athletics conditioning session at Gopalpur campus.', 1, 1]);
+                $insSg->execute(['Annual Krida Mahotsav Highlights & Opening March Past', 'Photo', 'Annual Sports Meet', 'assets/images/convocation.jpg', 'assets/images/convocation.jpg', '2026-10-15', 'Department contingents during the ceremonial sports parade.', 1, 2]);
+            }
+            if ((int)$pdo->query('SELECT COUNT(*) FROM sports_notices')->fetchColumn() === 0) {
+                $insSn = $pdo->prepare('INSERT INTO sports_notices (title, notice_date, category, summary, attachment_url, registration_link, is_pinned, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?)');
+                $insSn->execute(['University Zonal Selection Trials: Cricket, Basketball & Chess (Men/Women)', '2026-11-22', 'Trials & Selection', 'All eligible B.Tech & M.Tech students must report in proper sports kit with institutional ID card at 4:15 PM.', '', '', 1, 1, 1]);
+                $insSn->execute(['Morning Yoga & Marathon Conditioning Registration Open for AY 2026–27', '2026-11-16', 'Fitness Schedule', 'Daily 6:15 AM sessions led by certified physical trainers; certificates issued for 80%+ attendance.', '', '', 0, 1, 2]);
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('sports_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
+
+        // Seed Campus Facilities Portal once (non-destructive)
+        $facChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'facilities_seeded_v1' LIMIT 1");
+        $facChk->execute();
+        if (!$facChk->fetchColumn()) {
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('facilities_portal_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+                ->execute([json_encode([
+                    'heroBadge'          => 'Institutional Infrastructure, IT & Student Support Campus',
+                    'heroTitle'          => 'Campus Facilities & Infrastructure Showcase',
+                    'heroSubtitle'       => 'Explore AICTE/UGC-compliant smart lecture theatres, 1 Gbps campus computing backbone, central library, hostels, research centres, green solar microgrids, and barrier-free student amenities.',
+                    'customFieldPresets' => ['Area (Sq. Ft.)', 'Equipment Highlights', 'Accessibility / Divyangjan Support', 'Power & Safety Compliance', 'Booking / Access Policy'],
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+
+            if ((int)$pdo->query('SELECT COUNT(*) FROM facilities')->fetchColumn() === 0) {
+                $insFac = $pdo->prepare('INSERT INTO facilities (title, category, short_summary, description_html, location_block, capacity, timings, incharge_name, incharge_email, incharge_phone, image_url, brochure_url, custom_fields_json, is_featured, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                $insFac->execute([
+                    'Smart ICT Lecture Complexes & Acoustic Seminar Auditoriums', 'Infrastructural Facilities',
+                    '42 ICT-enabled smart classrooms, 350-seat central auditorium, and department seminar halls with hybrid recording.',
+                    '<p>Every classroom integrates short-throw 4K laser projection, podium audio, gigabit Wi-Fi 6 access, and automated lecture capture supporting OBE &amp; NEP 2020 pedagogy.</p>',
+                    'Academic Wings A, B & C', '350-Seat Auditorium + 42 Classrooms', '8:00 AM – 6:30 PM',
+                    'Prof. V. P. Chavan', 'infra@coe.sveri.ac.in', '+91-02186-216063',
+                    'assets/images/campus_facilities.jpg', '',
+                    json_encode([['label' => 'Area (Sq. Ft.)', 'value' => '68,400 Sq. Ft. Built-Up Instructional Area'], ['label' => 'Power Backup', 'value' => '320 kVA DG + 500 kWp Rooftop Solar']], JSON_UNESCAPED_UNICODE),
+                    1, 1, 1,
+                ]);
+                $insFac->execute([
+                    'Central Data Centre, High-Speed Wi-Fi 6 Campus & 1,250+ Workstations', 'IT & Computing Facilities',
+                    'Dual 1 Gbps NKN/leased fibre backbone, GPU AI Cluster, licensed CAD/MATLAB suites, and campus ERP.',
+                    '<p>Redundant multi-ISP fiber links serve academic blocks, hostels, and digital examination centres with enterprise firewall protection, NVIDIA CUDA AI labs, and 24x7 UPS backup.</p>',
+                    'IT & Central Computing Block', '1,250 Workstations + 2.0 Gbps Redundant Link', '8:00 AM – 9:00 PM (Labs) · 24x7 Wi-Fi',
+                    'Mr. A. B. Kadam (System Manager)', 'itcell@coe.sveri.ac.in', '+91-02186-216063',
+                    'assets/images/hero_lab.jpg', '',
+                    json_encode([['label' => 'Network Speed', 'value' => 'Dual 1 Gbps Leased Fiber'], ['label' => 'Software Stack', 'value' => 'MATLAB, ANSYS, SolidWorks, Oracle, Python/CUDA']], JSON_UNESCAPED_UNICODE),
+                    1, 1, 2,
+                ]);
+                $insFac->execute([
+                    'Residential Hostels, Hygienic Mess, Medical Clinic & Transport Fleet', 'Student Facilities',
+                    'Separate boys and girls hostels for 1,600+ residents, RO drinking water, solar hot water, campus clinic, and 18 buses.',
+                    '<p>Full residential care featuring reading rooms, high-speed hostel Wi-Fi, 24x7 resident rectors, on-campus ambulance &amp; medical officer, SBI ATM, and subsidized cafeteria.</p>',
+                    'East & West Residential Campus', '1,650 Hostel Beds · 18 Campus Buses', '24x7 Residential Support',
+                    'Dr. P. K. Deshmukh (Chief Warden)', 'hostel@coe.sveri.ac.in', '+91-9545553888',
+                    'assets/images/campus_facilities.jpg', '',
+                    json_encode([['label' => 'Medical Facility', 'value' => 'Daily Visiting Physician + Ambulance'], ['label' => 'Security', 'value' => '24x7 CCTV & Biometric Turnstiles']], JSON_UNESCAPED_UNICODE),
+                    1, 1, 3,
+                ]);
+                $insFac->execute([
+                    'Central Knowledge Resource Centre & 24x7 Digital Library', 'Library & Digital Resources',
+                    '74,000+ print volumes, IEEE/ASME/Springer e-journals, DELNET, NPTEL video servers, and quiet reading halls.',
+                    '<p>Automated Koha RFID circulation, plagiarism screening desk (Turnitin/DrillBit), book-bank scheme for reserved categories, and air-conditioned research cubicles.</p>',
+                    'Knowledge Block — Ground & First Floor', '450 Reading Seats + 60 Digital Terminals', '8:00 AM – 10:00 PM (Exam Weeks till Midnight)',
+                    'Mr. S. S. Kulkarni (Librarian)', 'library@coe.sveri.ac.in', '+91-02186-216063',
+                    'assets/images/hero_library.jpg', '',
+                    json_encode([['label' => 'E-Resources', 'value' => 'IEEE, ScienceDirect, Springer, NDLI'], ['label' => 'Circulation', 'value' => 'RFID Smart Card Self-Kiosk']], JSON_UNESCAPED_UNICODE),
+                    0, 1, 4,
+                ]);
+                $insFac->execute([
+                    '500 kWp Solar Microgrid, Rainwater Harvesting & Divyangjan Ramps', 'Green & Barrier-Free Campus',
+                    'ISO 14001 green campus practices, STP water recycling, tactile paths, lifts, and wheelchair accessibility across blocks.',
+                    '<p>Sustainable campus infrastructure with grid-tied solar generation, zero-liquid-discharge sewage treatment for gardens, e-waste collection tie-ups, and tactile Divyangjan signage.</p>',
+                    'Across All Academic & Hostel Blocks', '500 kWp Clean Energy + 100% Barrier-Free Lifts', 'All Campus Hours',
+                    'Green Audit & Estate Office', 'estate@coe.sveri.ac.in', '+91-02186-216063',
+                    'assets/images/hero_campus.jpg', '',
+                    json_encode([['label' => 'Green Certification', 'value' => 'NAAC Green & Energy Audited'], ['label' => 'Divyangjan Support', 'value' => 'Ramps, Lifts & Accessible Restrooms in Every Wing']], JSON_UNESCAPED_UNICODE),
+                    0, 1, 5,
+                ]);
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('facilities_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
+
+        // Seed Poster Showcase items on initial ICAEST-2026 conference if missing (non-destructive)
+        try {
+            $posterEmpty = (int)$pdo->query("SELECT COUNT(*) FROM conferences WHERE slug = 'icaest-2026' AND (poster_items_json IS NULL OR poster_items_json = '')")->fetchColumn();
+            if ($posterEmpty > 0) {
+                $defaultPosters = [
+                    [
+                        'id' => 'pst1',
+                        'posterCode' => 'PST-101',
+                        'title' => 'Edge-AI Transformer Inspection for 132kV Rural Substations',
+                        'authors' => 'Pranav Kulkarni, Dr. S. R. Mane',
+                        'affiliation' => 'SVCOER Pandharpur (CSE & Electrical)',
+                        'track' => 'Track 1: AI & Edge Systems',
+                        'abstract' => 'Lightweight quantized vision pipeline detecting bushing hotspots at 28 FPS on Jetson Orin Nano.',
+                        'imageUrl' => 'assets/images/poster_session.jpg',
+                        'posterPdfUrl' => '',
+                        'awardNote' => 'Best Poster Nominee',
+                    ],
+                    [
+                        'id' => 'pst2',
+                        'posterCode' => 'PST-102',
+                        'title' => 'Bio-Composite Phase-Change Thermal Cooling for EV Battery Packs',
+                        'authors' => 'Rutuja Deshmukh, Dr. R. B. Kulkarni',
+                        'affiliation' => 'SVCOER Pandharpur (Mechanical Engg.)',
+                        'track' => 'Track 3: EV Powertrains & Sustainable Tech',
+                        'abstract' => 'Experimental thermal runaway mitigation achieving 9.4 C peak cell drop under 2C fast discharge.',
+                        'imageUrl' => 'assets/images/poster_session.jpg',
+                        'posterPdfUrl' => '',
+                        'awardNote' => 'Industry Jury Choice',
+                    ],
+                ];
+                $pdo->prepare("UPDATE conferences SET enable_poster_presentation = 1, poster_dimensions = 'A0 Portrait (841 x 1189 mm)', poster_guidelines_html = ?, poster_prizes_text = 'Best Poster Awards: INR 10,000 + Certificates per Track', poster_items_json = ? WHERE slug = 'icaest-2026' AND (poster_items_json IS NULL OR poster_items_json = '')")
+                    ->execute([
+                        '<p>Authors selected for the <strong>Poster Presentation &amp; Prototype Demo Track</strong> must prepare an A0 vertical poster (841 &times; 1189 mm) highlighting problem statement, methodology, experimental metrics, and key conclusions. Print display boards and easels are provided in the SVERI Exhibition Atrium.</p>',
+                        json_encode($defaultPosters, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    ]);
+            }
+        } catch (Throwable $ignoredPosters) {
+        }
+
+        // Analytics, SEO, Hit Counter & Security WAF tables + firewall execution
+        if (function_exists('ensureAnalyticsTables')) {
+            ensureAnalyticsTables($pdo);
+        }
+        if (function_exists('runPhpSecurityFirewall')) {
+            runPhpSecurityFirewall($pdo);
+        }
     } catch (Throwable $ignoredSchema) {
     }
 }
@@ -1439,6 +1944,12 @@ function swapSortOrder(PDO $pdo, string $table, int $id, string $dir, ?string $s
         'placement_stories',
         'placement_notices',
         'placement_custom_sections',
+        'sports_facilities',
+        'sports_events',
+        'sports_achievements',
+        'sports_gallery',
+        'sports_notices',
+        'facilities',
     ];
     $allowedScopes = [null, 'category_id', 'department_id'];
     $allowedTies   = ['id ASC', 'id DESC', 'event_date DESC, id DESC', 'uploaded_at DESC, id DESC'];

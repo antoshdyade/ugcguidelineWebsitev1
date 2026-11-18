@@ -2,7 +2,10 @@
 declare(strict_types=1);
 require_once __DIR__ . '/auth.php';
 ensureCmsSchemaUpgraded($pdo);
+recordPhpWebsiteVisit($pdo);
 $settings = getSiteSettings($pdo);
+$seoSettings = getSeoSettings($pdo);
+$hitStats = getHitCounterStats($pdo);
 $allHeaderCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
 $portalMenuItems = getPortalMenuItems($pdo);
 $partitionedNav = partitionHeaderMenus($allHeaderCats, $portalMenuItems);
@@ -18,13 +21,47 @@ foreach ($navPagesStmt->fetchAll() as $pg) {
 }
 $dteDisplay = preg_replace('/^EN-/i', '', $settings['dte_code'] ?? '06220');
 $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
+$resolvedSeo = resolvePhpRouteSeo(
+    $seoSettings,
+    $settings,
+    (string)($pageTitle ?? $settings['institution_name']),
+    isset($pageDesc) ? (string)$pageDesc : null
+);
 ?>
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= e($pageTitle ?? $settings['institution_name']) ?></title>
+  <title><?= e($resolvedSeo['title']) ?></title>
+  <meta name="description" content="<?= e($resolvedSeo['description']) ?>">
+  <?php if (!empty($resolvedSeo['keywords'])): ?>
+  <meta name="keywords" content="<?= e($resolvedSeo['keywords']) ?>">
+  <?php endif; ?>
+  <meta name="robots" content="<?= e($resolvedSeo['robots']) ?>">
+  <link rel="canonical" href="<?= e($resolvedSeo['canonicalUrl']) ?>">
+  <?php if (!empty($resolvedSeo['googleVerify'])): ?>
+  <meta name="google-site-verification" content="<?= e($resolvedSeo['googleVerify']) ?>">
+  <?php endif; ?>
+  <?php if (!empty($resolvedSeo['bingVerify'])): ?>
+  <meta name="msvalidate.01" content="<?= e($resolvedSeo['bingVerify']) ?>">
+  <?php endif; ?>
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="<?= e($settings['institution_name']) ?>">
+  <meta property="og:title" content="<?= e($resolvedSeo['title']) ?>">
+  <meta property="og:description" content="<?= e($resolvedSeo['description']) ?>">
+  <meta property="og:url" content="<?= e($resolvedSeo['canonicalUrl']) ?>">
+  <meta property="og:image" content="<?= e($resolvedSeo['ogImageUrl']) ?>">
+  <meta name="twitter:card" content="summary_large_image">
+  <?php if (!empty($resolvedSeo['twitterHandle'])): ?>
+  <meta name="twitter:site" content="<?= e($resolvedSeo['twitterHandle']) ?>">
+  <?php endif; ?>
+  <meta name="twitter:title" content="<?= e($resolvedSeo['title']) ?>">
+  <meta name="twitter:description" content="<?= e($resolvedSeo['description']) ?>">
+  <meta name="twitter:image" content="<?= e($resolvedSeo['ogImageUrl']) ?>">
+  <?php if (!empty($resolvedSeo['enableJsonLd'])): ?>
+  <script type="application/ld+json"><?= json_encode($resolvedSeo['jsonLd'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?></script>
+  <?php endif; ?>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <link id="svcoer-public-css" rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
@@ -165,6 +202,7 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
               <?php if ($cat['slug'] === 'research'): ?>
                 <a href="<?= e(baseUrl('conferences.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Conferences, Workshops &amp; Events &rarr;</a>
               <?php elseif ($cat['slug'] === 'student-life'): ?>
+                <a href="<?= e(baseUrl('sports.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Sports, Athletics &amp; Recreation &rarr;</a>
                 <a href="<?= e(baseUrl('placements.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Training &amp; Placement (T&amp;P) Hub &rarr;</a>
                 <a href="<?= e(baseUrl('grievance.php')) ?>" style="background:#FFFBEB;color:#92400E;font-weight:700;">Online Grievance Redressal &rarr;</a>
               <?php endif; ?>
@@ -199,6 +237,7 @@ $currentScript = basename($_SERVER['PHP_SELF'] ?? 'index.php');
                 <?php if ($ocat['slug'] === 'research'): ?>
                   <a href="<?= e(baseUrl('conferences.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Conferences, Workshops &amp; Events</a>
                 <?php elseif ($ocat['slug'] === 'student-life'): ?>
+                  <a href="<?= e(baseUrl('sports.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Sports, Athletics &amp; Recreation</a>
                   <a href="<?= e(baseUrl('placements.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Training &amp; Placement Hub</a>
                   <a href="<?= e(baseUrl('grievance.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Grievance &amp; Anti-Ragging Helpdesk</a>
                 <?php endif; ?>

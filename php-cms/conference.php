@@ -51,6 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $paperTitle = trim((string)($_POST['paper_title'] ?? ''));
             $trackTitle = trim((string)($_POST['track_title'] ?? 'General Track'));
+            $presSel = trim((string)($_POST['presentation_type'] ?? 'Oral Paper Presentation'));
+            $presCustom = trim((string)($_POST['presentation_type_custom'] ?? ''));
+            $presentationType = ($presSel === '__custom__' ? $presCustom : $presSel) ?: 'Oral Paper Presentation';
             $authorName = trim((string)($_POST['author_name'] ?? ''));
             $authorEmail = trim((string)($_POST['author_email'] ?? ''));
             $authorPhone = trim((string)($_POST['author_phone'] ?? ''));
@@ -74,13 +77,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $trackCode = strtoupper(substr(preg_replace('/[^A-Z0-9]/i', '', $conf['short_name']), 0, 8) ?: 'CONF')
                         . '-P' . random_int(1000, 9999);
                     $pdo->prepare(
-                        'INSERT INTO conference_submissions (conference_id, tracking_code, paper_title, track_title, author_name, author_email, author_phone, affiliation, co_authors, abstract_text, manuscript_url, status, submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                        'INSERT INTO conference_submissions (conference_id, tracking_code, paper_title, track_title, presentation_type, author_name, author_email, author_phone, affiliation, co_authors, abstract_text, manuscript_url, status, submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                     )->execute([
-                        $confId, $trackCode, $paperTitle, $trackTitle, $authorName, $authorEmail,
+                        $confId, $trackCode, $paperTitle, $trackTitle, $presentationType, $authorName, $authorEmail,
                         $authorPhone, $affiliation, $coAuthors, $abstractText, $manuscriptUrl,
                         'Submitted', date('Y-m-d H:i'),
                     ]);
-                    $msg = 'Manuscript submitted successfully! Your Paper Tracking ID is: ' . $trackCode;
+                    $msg = 'Submission recorded (' . $presentationType . ')! Your Tracking ID is: ' . $trackCode;
                 }
             }
         }
@@ -128,7 +131,9 @@ $tracks   = json_decode((string)($conf['tracks_json'] ?? '[]'), true) ?: [];
 $dates    = json_decode((string)($conf['important_dates_json'] ?? '[]'), true) ?: [];
 $people   = json_decode((string)($conf['people_json'] ?? '[]'), true) ?: [];
 $schedule = json_decode((string)($conf['schedule_json'] ?? '[]'), true) ?: [];
-$fees     = json_decode((string)($conf['fee_tiers_json'] ?? '[]'), true) ?: [];
+$fees        = json_decode((string)($conf['fee_tiers_json'] ?? '[]'), true) ?: [];
+$posterItems = json_decode((string)($conf['poster_items_json'] ?? '[]'), true) ?: [];
+$hasPosterTrack = !isset($conf['enable_poster_presentation']) || !empty($conf['enable_poster_presentation']) || !empty($posterItems);
 
 $pageTitle = $conf['short_name'] . ' — ' . $conf['title'];
 require_once __DIR__ . '/includes/header.php';
@@ -230,6 +235,66 @@ require_once __DIR__ . '/includes/header.php';
             </div>
           <?php endforeach; ?>
         </div>
+      </section>
+    <?php endif; ?>
+
+    <?php if ($hasPosterTrack): ?>
+      <section id="poster-presentation" class="card">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:0.75rem;margin-bottom:0.85rem;">
+          <div>
+            <small style="font-weight:700;text-transform:uppercase;color:var(--secondary-color);letter-spacing:0.05em;">Research Expo &amp; Visual Showcase</small>
+            <h2 style="margin:0.15rem 0 0;color:var(--primary-color);">Poster Presentation Track &amp; Showcase</h2>
+          </div>
+          <?php if (!empty($conf['poster_template_url'])): ?>
+            <a href="<?= e(mediaUrl($conf['poster_template_url'])) ?>" target="_blank" rel="noopener noreferrer" class="btn-outline btn-sm">Download Poster Template &darr;</a>
+          <?php endif; ?>
+        </div>
+        <div class="grid-2" style="margin-bottom:0.85rem;">
+          <div style="padding:0.75rem;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-bg);">
+            <small style="font-weight:700;text-transform:uppercase;color:var(--text-muted);display:block;">Poster Format &amp; Dimensions</small>
+            <strong style="font-size:0.9rem;color:var(--primary-color);"><?= e((string)($conf['poster_dimensions'] ?: 'A0 Portrait (841 x 1189 mm)')) ?></strong>
+          </div>
+          <?php if (!empty($conf['poster_prizes_text'])): ?>
+            <div style="padding:0.75rem;border:1px solid var(--border-color);border-radius:8px;background:#FFFBEB;">
+              <small style="font-weight:700;text-transform:uppercase;color:#92400E;display:block;">Best Poster Awards</small>
+              <strong style="font-size:0.9rem;color:#78350F;"><?= e((string)$conf['poster_prizes_text']) ?></strong>
+            </div>
+          <?php endif; ?>
+        </div>
+        <?php if (!empty($conf['poster_guidelines_html'])): ?>
+          <div class="cms-prose" style="font-size:0.88rem;margin-bottom:0.95rem;">
+            <?= (string)$conf['poster_guidelines_html'] ?>
+          </div>
+        <?php endif; ?>
+        <?php if (!empty($posterItems)): ?>
+          <h3 style="margin:0 0 0.65rem;font-size:1rem;color:var(--primary-color);">Selected Poster Presentations (<?= count($posterItems) ?>)</h3>
+          <div class="grid-2">
+            <?php foreach ($posterItems as $pi): ?>
+              <article style="border:1px solid var(--border-color);border-radius:10px;overflow:hidden;background:var(--card-bg);display:flex;flex-direction:column;">
+                <?php if (!empty($pi['imageUrl'])): ?>
+                  <img src="<?= e(mediaUrl($pi['imageUrl'], 'assets/images/poster_session.jpg')) ?>" alt="<?= e((string)($pi['title'] ?? 'Poster')) ?>" style="width:100%;height:150px;object-fit:cover;display:block;">
+                <?php endif; ?>
+                <div style="padding:0.85rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;gap:0.45rem;">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;gap:0.4rem;flex-wrap:wrap;font-size:0.74rem;font-weight:700;color:var(--secondary-color);">
+                      <span><?= e((string)($pi['posterCode'] ?? 'POSTER')) ?></span>
+                      <?php if (!empty($pi['awardNote'])): ?><span><?= e((string)$pi['awardNote']) ?></span><?php endif; ?>
+                    </div>
+                    <h4 style="margin:0.2rem 0 0.25rem;font-size:0.95rem;color:var(--primary-color);"><?= e((string)($pi['title'] ?? '')) ?></h4>
+                    <div style="font-size:0.8rem;font-weight:600;color:var(--text-main);"><?= e((string)($pi['authors'] ?? '')) ?></div>
+                    <div style="font-size:0.76rem;color:var(--text-muted);"><?= e((string)($pi['affiliation'] ?? '')) ?><?= !empty($pi['track']) ? ' · ' . e((string)$pi['track']) : '' ?></div>
+                    <?php if (!empty($pi['abstract'])): ?>
+                      <p style="margin:0.4rem 0 0;font-size:0.8rem;color:var(--text-muted);"><?= e((string)$pi['abstract']) ?></p>
+                    <?php endif; ?>
+                  </div>
+                  <?php if (!empty($pi['posterPdfUrl'])): ?>
+                    <div><a href="<?= e(mediaUrl($pi['posterPdfUrl'])) ?>" target="_blank" rel="noopener noreferrer" class="btn-outline btn-sm">View Poster PDF &nearr;</a></div>
+                  <?php endif; ?>
+                </div>
+              </article>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
       </section>
     <?php endif; ?>
 
@@ -342,6 +407,15 @@ require_once __DIR__ . '/includes/header.php';
         <?php endif; ?>
       </select>
     </label>
+    <label class="login-field"><span class="login-label">Presentation Mode / Category *</span>
+      <select name="presentation_type" class="login-input" onchange="var c=this.parentNode.querySelector('.custom-opt-inp');if(c){c.style.display=this.value==='__custom__'?'block':'none';c.required=this.value==='__custom__';}">
+        <?php foreach (conferencePresentationTypePresets() as $pt): ?>
+          <option value="<?= e($pt) ?>"><?= e($pt) ?></option>
+        <?php endforeach; ?>
+        <option value="__custom__">+ Custom Presentation Format...</option>
+      </select>
+      <input type="text" name="presentation_type_custom" class="custom-opt-inp login-input" placeholder="Enter custom presentation format..." style="display:none;margin-top:4px;">
+    </label>
     <div class="grid-2">
       <label class="login-field"><span class="login-label">Corresponding Author *</span>
         <input type="text" name="author_name" required class="login-input">
@@ -367,7 +441,7 @@ require_once __DIR__ . '/includes/header.php';
     <label class="login-field"><span class="login-label">Upload Manuscript PDF / DOCX (Optional)</span>
       <input type="file" name="manuscript" accept=".pdf,.docx" class="login-input">
     </label>
-    <?= renderCaptchaWidget('conf_paper', baseUrl('includes/captcha.php'), 'Paper Submission CAPTCHA *') ?>
+    <?= renderCaptchaWidget('conf_paper', baseUrl('captcha.php'), 'Paper Submission CAPTCHA *') ?>
     <button type="submit" class="btn-primary" style="width:100%;">Submit Paper &amp; Generate Tracking ID</button>
   </form>
   <?php endif; ?>
@@ -412,7 +486,7 @@ require_once __DIR__ . '/includes/header.php';
         <input type="text" name="payment_ref" class="login-input" placeholder="Optional">
       </label>
     </div>
-    <?= renderCaptchaWidget('conf_reg', baseUrl('includes/captcha.php'), 'Delegate Registration CAPTCHA *') ?>
+    <?= renderCaptchaWidget('conf_reg', baseUrl('captcha.php'), 'Delegate Registration CAPTCHA *') ?>
     <button type="submit" class="btn-secondary" style="width:100%;">Complete Delegate Registration</button>
   </form>
 </section>

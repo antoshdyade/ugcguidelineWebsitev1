@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createServer as createViteServer } from 'vite';
-import { createSeedAlumniData, createSeedDatabase, hashPassword, verifyPassword } from './src/data/seedDatabase';
+import { createSeedAlumniData, createSeedDatabase, createSeedFacilitiesData, createSeedSportsData, hashPassword, verifyPassword } from './src/data/seedDatabase';
 import {
   canUserAccessCategory,
   canUserAccessPage,
@@ -53,6 +53,23 @@ import {
   validateConferenceSubmissionInput,
   validateGrievanceInput,
 } from './src/lib/collegeFeaturesLogic';
+import {
+  DEFAULT_SECURITY_CONFIG,
+  DEFAULT_SEO_SETTINGS,
+  aggregateVisitorLogs,
+  buildRobotsTxt,
+  buildSitemapXml,
+  createSeedHitCounter,
+  createSeedVisitorLogs,
+  detectRequestThreat,
+  evaluateSeoAudit,
+  filterVisitorLogs,
+  formatVisitorLogsCombinedText,
+  formatVisitorLogsCsv,
+  normalizeClientIp,
+  parseUserAgentSummary,
+  resolveVisitorGeo,
+} from './src/lib/securityAndSeoLogic';
 import { buildZipBuffer, parseZipBuffer, type ZipInputEntry } from './src/lib/zipArchive';
 import type {
   AdminModuleKey,
@@ -72,6 +89,7 @@ import type {
   BackupPackage,
   BackupRecord,
   BackupScheduleConfig,
+  BlockedIpEntry,
   CmsCategory,
   CmsDatabase,
   CmsUser,
@@ -80,14 +98,25 @@ import type {
   ConferenceRegistration,
   ConferenceSubmission,
   CustomHomeComponent,
+  FacilitiesData,
+  FacilityItem,
   GrievanceStatus,
   GrievanceTicket,
   HomeComponentPlacement,
   PlacementStory,
   PlacementYearStat,
   ScpConfig,
+  SecurityConfig,
+  SeoSettings,
   SiteMigrationManifest,
+  SportsAchievement,
+  SportsData,
+  SportsEvent,
+  SportsFacility,
+  SportsGalleryItem,
+  SportsNotice,
   UserRole,
+  VisitorLogEntry,
 } from './src/types/cms';
 
 const PORT = 3000;
@@ -372,8 +401,260 @@ function sanitizeAlumniProfile(profile: AlumniProfile): Omit<AlumniProfile, 'pas
 
 async function startServer() {
   const app = express();
+  app.disable('x-powered-by');
   app.set('trust proxy', true);
+
+  // Defense-in-depth HTTP security headers (preserves AI Studio Preview iframe compatibility)
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    next();
+  });
+
   app.use(express.json({ limit: '150mb' }));
+
+  function ensureSecurityState() {
+    if (!db.seo) db.seo = structuredClone(DEFAULT_SEO_SETTINGS);
+    if (!db.hitCounter) db.hitCounter = createSeedHitCounter();
+    if (!Array.isArray(db.hitCounter.uniqueTodayHashes)) db.hitCounter.uniqueTodayHashes = [];
+    if (!Array.isArray(db.visitorLogs)) db.visitorLogs = createSeedVisitorLogs();
+    if (!Array.isArray(db.blockedIps)) db.blockedIps = [];
+    if (!db.securityConfig) db.securityConfig = structuredClone(DEFAULT_SECURITY_CONFIG);
+    return {
+      seo: db.seo,
+      hitCounter: db.hitCounter,
+      visitorLogs: db.visitorLogs,
+      blockedIps: db.blockedIps,
+      securityConfig: db.securityConfig,
+    };
+  }
+
+  function recordVisitorEvent(
+    req: express.Request,
+    partial: {
+      statusCode: number;
+      responseTimeMs?: number;
+      severity: VisitorLogEntry['severity'];
+      eventType: VisitorLogEntry['eventType'];
+      threatCategory?: string;
+      actorEmail?: string;
+      pathOverride?: string;
+    },
+  ) {
+    ensureSecurityState();
+    const rawIp = normalizeClientIp(
+      req.ip || req.socket.remoteAddress || '127.0.0.1',
+      typeof req.headers['x-forwarded-for'] === 'string' ? req.headers['x-forwarded-for'] : undefined,
+    );
+    const geo = resolveVisitorGeo(req.headers, rawIp);
+    const uaStr = String(req.headers['user-agent'] || '');
+    const ua = parseUserAgentSummary(uaStr);
+    const nextId = Math.max(0, ...(db.visitorLogs ?? []).map((l) => l.id)) + 1;
+    const entry: VisitorLogEntry = {
+      id: nextId,
+      timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      ipAddress: geo.ipAddress,
+      country: geo.country,
+      countryCode: geo.countryCode,
+      state: geo.state,
+      area: geo.area,
+      method: req.method,
+      path: String(partial.pathOverride || req.originalUrl || req.path || '/').slice(0, 320),
+      statusCode: partial.statusCode,
+      deviceType: ua.deviceType,
+      browser: ua.browser,
+      os: ua.os,
+      referrer: String(req.headers.referer || 'Direct').slice(0, 220),
+      userAgent: uaStr.slice(0, 220),
+      responseTimeMs: partial.responseTimeMs ?? 1,
+      severity: partial.severity,
+      eventType: partial.eventType,
+      threatCategory: partial.threatCategory,
+      actorEmail: partial.actorEmail,
+    };
+    db.visitorLogs = [entry, ...(db.visitorLogs ?? [])].slice(0, 2500);
+    saveDatabase();
+    return entry;
+  }
+
+  function isIpCurrentlyBlocked(ip: string): BlockedIpEntry | null {
+    ensureSecurityState();
+    const now = Date.now();
+    let changed = false;
+    db.blockedIps = (db.blockedIps ?? []).filter((entry) => {
+      if (entry.expiresAt && Date.parse(entry.expiresAt) <= now) {
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+    if (changed) saveDatabase();
+    return (db.blockedIps ?? []).find((entry) => entry.ipAddress === ip) || null;
+  }
+
+  function blockIpAddressRecord(
+    ip: string,
+    reason: string,
+    blockedBy: string,
+    durationMinutes?: number | null,
+  ): BlockedIpEntry {
+    ensureSecurityState();
+    const existing = (db.blockedIps ?? []).find((b) => b.ipAddress === ip);
+    if (existing) {
+      existing.reason = reason;
+      existing.hitCount += 1;
+      saveDatabase();
+      return existing;
+    }
+    const nextId = Math.max(0, ...(db.blockedIps ?? []).map((b) => b.id)) + 1;
+    const created: BlockedIpEntry = {
+      id: nextId,
+      ipAddress: ip,
+      reason,
+      blockedBy,
+      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      expiresAt:
+        durationMinutes && durationMinutes > 0
+          ? new Date(Date.now() + durationMinutes * 60_000).toISOString()
+          : null,
+      hitCount: 1,
+    };
+    db.blockedIps = [created, ...(db.blockedIps ?? [])];
+    saveDatabase();
+    return created;
+  }
+
+  const rateWindowMap = new Map<string, number[]>();
+  const loginFailureMap = new Map<string, { count: number; lockedUntil: number }>();
+
+  // Global WAF, IP Blocklist & Sliding-Window Rate Limiter
+  app.use((req, res, next) => {
+    const startMs = Date.now();
+    const { securityConfig } = ensureSecurityState();
+    const clientIp = normalizeClientIp(
+      req.ip || req.socket.remoteAddress || '127.0.0.1',
+      typeof req.headers['x-forwarded-for'] === 'string' ? req.headers['x-forwarded-for'] : undefined,
+    );
+
+    // 1. Check active IP blocklist
+    const blocked = isIpCurrentlyBlocked(clientIp);
+    if (blocked) {
+      blocked.hitCount += 1;
+      recordVisitorEvent(req, {
+        statusCode: 403,
+        responseTimeMs: Date.now() - startMs,
+        severity: 'critical',
+        eventType: 'security_block',
+        threatCategory: `IP Blocklist Enforced (${blocked.reason})`,
+      });
+      res.status(403).json({
+        error: 'Access denied by SVCOER Security Shield. Your IP is currently blocked.',
+      });
+      return;
+    }
+
+    const reqPath = req.path || '/';
+    const isViteStatic =
+      reqPath.startsWith('/src/') ||
+      reqPath.startsWith('/@') ||
+      reqPath.startsWith('/node_modules/') ||
+      reqPath.startsWith('/assets/');
+
+    // 2. WAF Threat Detection (skip rich-HTML payload XSS inspection for authenticated admin/alumni editors & binary upload/backup blobs)
+    if (!isViteStatic && securityConfig.wafEnabled) {
+      const hasValidAdminSession = Boolean(verifySession(extractSessionToken(req)));
+      const hasValidAlumniSession = Boolean(verifyAlumniSession(extractAlumniToken(req)));
+      const isRichHtmlAdminRoute =
+        (reqPath.startsWith('/api/admin/') && hasValidAdminSession) ||
+        (reqPath.startsWith('/api/alumni/discussions') && hasValidAlumniSession);
+      const isBinaryTransferRoute =
+        reqPath.includes('upload') ||
+        reqPath.includes('/backups/import') ||
+        reqPath.includes('/backups/restore');
+
+      const bodyInspectStr =
+        !isBinaryTransferRoute && req.body && typeof req.body === 'object'
+          ? JSON.stringify(req.body).slice(0, 24000)
+          : '';
+
+      const threat = detectRequestThreat(
+        req.method,
+        req.originalUrl || req.url,
+        bodyInspectStr,
+        String(req.headers['user-agent'] || ''),
+        securityConfig,
+        isRichHtmlAdminRoute,
+      );
+
+      if (threat.blocked) {
+        const shouldAutoBlock =
+          securityConfig.autoBlockAttackers &&
+          (clientIp !== '127.0.0.1' || Boolean(req.headers['x-forwarded-for'])) &&
+          (threat.category.includes('SQL') ||
+            threat.category.includes('Scanner') ||
+            threat.category.includes('Command') ||
+            threat.category.includes('Path Traversal'));
+
+        if (shouldAutoBlock) {
+          blockIpAddressRecord(clientIp, `Auto-blocked: ${threat.category}`, 'WAF Auto-Shield', 60);
+        }
+        recordVisitorEvent(req, {
+          statusCode: 403,
+          responseTimeMs: Date.now() - startMs,
+          severity: 'critical',
+          eventType: 'security_block',
+          threatCategory: threat.category,
+        });
+        res.status(403).json({
+          error: `Request blocked by Web Application Firewall (${threat.category}).`,
+        });
+        return;
+      }
+    }
+
+    // 3. Sliding-Window Rate Limiting on /api/ routes
+    if (!isViteStatic && securityConfig.rateLimitEnabled && reqPath.startsWith('/api/')) {
+      const now = Date.now();
+      const windowStart = now - 60_000;
+      const limit = Math.max(20, Number(securityConfig.maxRequestsPerMinute || 120));
+      const history = (rateWindowMap.get(clientIp) || []).filter((ts) => ts > windowStart);
+      history.push(now);
+      rateWindowMap.set(clientIp, history);
+
+      if (history.length > limit) {
+        recordVisitorEvent(req, {
+          statusCode: 429,
+          responseTimeMs: Date.now() - startMs,
+          severity: 'warning',
+          eventType: 'rate_limit',
+          threatCategory: `API Rate Limit Exceeded (${history.length}/min > ${limit})`,
+        });
+        res.status(429).json({
+          error: 'Too many requests detected. Please wait 60 seconds before retrying.',
+        });
+        return;
+      }
+    }
+
+    // Log 4xx/5xx API errors passively
+    if (reqPath.startsWith('/api/') && !reqPath.startsWith('/api/admin/analytics')) {
+      res.on('finish', () => {
+        if (res.statusCode >= 500 || (res.statusCode === 404 && reqPath.startsWith('/api/'))) {
+          recordVisitorEvent(req, {
+            statusCode: res.statusCode,
+            responseTimeMs: Date.now() - startMs,
+            severity: res.statusCode >= 500 ? 'critical' : 'warning',
+            eventType: 'api_error',
+            threatCategory: res.statusCode >= 500 ? 'Server Error Response' : undefined,
+          });
+        }
+      });
+    }
+
+    next();
+  });
 
   // Serve uploaded safe assets statically
   app.use('/uploads', express.static(UPLOAD_DIR));
@@ -391,6 +672,95 @@ async function startServer() {
     return db.alumni;
   }
 
+  function resolveRequestOrigin(req: express.Request): string {
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0].trim();
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000').split(',')[0].trim();
+    return `${proto}://${host}`;
+  }
+
+  // Dynamic XML Sitemap & Robots.txt for Search Engines
+  app.get('/sitemap.xml', (req, res) => {
+    const { seo } = ensureSecurityState();
+    const origin = (seo.canonicalBaseUrl || resolveRequestOrigin(req)).replace(/\/+$/, '');
+    res.type('application/xml').send(buildSitemapXml(origin, db));
+  });
+
+  app.get('/robots.txt', (req, res) => {
+    const { seo } = ensureSecurityState();
+    res.type('text/plain').send(buildRobotsTxt(resolveRequestOrigin(req), seo));
+  });
+
+  // Public Website Hit Counter & Geo Visitor Log Tracker
+  app.post('/api/public/track-visit', (req, res) => {
+    const t0 = Date.now();
+    const { hitCounter } = ensureSecurityState();
+    const pathname = String((req.body as { pathname?: string })?.pathname || '/').slice(0, 220);
+    const referrer = String((req.body as { referrer?: string })?.referrer || req.headers.referer || 'Direct').slice(0, 220);
+    const todayDate = new Date().toISOString().slice(0, 10);
+
+    if (hitCounter.todayDate !== todayDate) {
+      hitCounter.todayDate = todayDate;
+      hitCounter.todayHits = 0;
+      hitCounter.uniqueTodayHashes = [];
+    }
+
+    const clientIp = normalizeClientIp(
+      req.ip || req.socket.remoteAddress || '127.0.0.1',
+      typeof req.headers['x-forwarded-for'] === 'string' ? req.headers['x-forwarded-for'] : undefined,
+    );
+    const uaStr = String(req.headers['user-agent'] || '');
+    const visitorHash = crypto
+      .createHash('sha256')
+      .update(`${clientIp}|${uaStr}|${todayDate}`)
+      .digest('hex')
+      .slice(0, 16);
+
+    const seen = hitCounter.uniqueTodayHashes ?? [];
+    if (!seen.includes(visitorHash)) {
+      seen.push(visitorHash);
+      hitCounter.uniqueTodayHashes = seen.slice(-5000);
+      hitCounter.uniqueVisitors = Number(hitCounter.uniqueVisitors || 0) + 1;
+    }
+
+    hitCounter.todayHits = Number(hitCounter.todayHits || 0) + 1;
+    hitCounter.totalHits = Number(hitCounter.totalHits || 0) + 1;
+    hitCounter.lastHitAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    const geo = resolveVisitorGeo(req.headers, clientIp);
+    const ua = parseUserAgentSummary(uaStr);
+    const nextId = Math.max(0, ...(db.visitorLogs ?? []).map((l) => l.id)) + 1;
+    const entry: VisitorLogEntry = {
+      id: nextId,
+      timestamp: hitCounter.lastHitAt,
+      ipAddress: geo.ipAddress,
+      country: geo.country,
+      countryCode: geo.countryCode,
+      state: geo.state,
+      area: geo.area,
+      method: 'GET',
+      path: pathname,
+      statusCode: 200,
+      deviceType: ua.deviceType,
+      browser: ua.browser,
+      os: ua.os,
+      referrer: referrer || 'Direct',
+      userAgent: uaStr.slice(0, 220),
+      responseTimeMs: Math.max(1, Number((req.body as { latencyMs?: number })?.latencyMs || (Date.now() - t0 + 8))),
+      severity: 'info',
+      eventType: 'page_view',
+    };
+    db.visitorLogs = [entry, ...(db.visitorLogs ?? [])].slice(0, 2500);
+    saveDatabase();
+
+    res.json({
+      totalHits: hitCounter.totalHits,
+      todayHits: hitCounter.todayHits,
+      todayDate: hitCounter.todayDate,
+      uniqueVisitors: hitCounter.uniqueVisitors,
+      lastHitAt: hitCounter.lastHitAt,
+    });
+  });
+
   // Server-generated single-use SVG CAPTCHA challenge
   app.get('/api/captcha', (_req, res) => {
     res.json(createCaptchaChallenge());
@@ -399,6 +769,9 @@ async function startServer() {
   // Public bootstrap endpoint (unrestricted access per UGC Rule 4; strips credentials & private member discussions)
   app.get('/api/public/bootstrap', (_req, res) => {
     const alumniState = ensureAlumniState();
+    const { seo, hitCounter } = ensureSecurityState();
+    const sportsRaw = db.sports ?? createSeedSportsData();
+    const facilitiesRaw = db.facilities ?? createSeedFacilitiesData();
     res.json({
       categories: sortByOrder(db.categories),
       pages: sortByOrder(db.pages.filter((p) => p.isPublished)),
@@ -424,7 +797,27 @@ async function startServer() {
       },
       conferences: sortByOrder((db.conferences ?? []).filter((c) => c.isPublished)),
       placements: db.placements ?? createSeedDatabase().placements,
+      sports: {
+        config: sportsRaw.config,
+        facilities: sortByOrder((sportsRaw.facilities ?? []).filter((f) => f.isPublished)),
+        events: sortByOrder((sportsRaw.events ?? []).filter((e) => e.isPublished)),
+        achievements: sortByOrder(sportsRaw.achievements ?? []),
+        gallery: sortByOrder((sportsRaw.gallery ?? []).filter((g) => g.isPublished)),
+        notices: sortByOrder((sportsRaw.notices ?? []).filter((n) => n.isPublished)),
+      },
+      facilities: {
+        config: facilitiesRaw.config,
+        items: sortByOrder((facilitiesRaw.items ?? []).filter((item) => item.isPublished)),
+      },
       settings: db.settings,
+      seo,
+      hitCounter: {
+        totalHits: hitCounter.totalHits,
+        todayHits: hitCounter.todayHits,
+        todayDate: hitCounter.todayDate,
+        uniqueVisitors: hitCounter.uniqueVisitors,
+        lastHitAt: hitCounter.lastHitAt,
+      },
     });
   });
 
@@ -498,6 +891,7 @@ async function startServer() {
       trackingCode,
       paperTitle: String(body.paperTitle).trim(),
       trackTitle: String(body.trackTitle).trim(),
+      presentationType: body.presentationType ? String(body.presentationType).trim() : 'Oral Paper Presentation',
       authorName: String(body.authorName).trim(),
       authorEmail: String(body.authorEmail).trim().toLowerCase(),
       authorPhone: String(body.authorPhone || '').trim(),
@@ -884,6 +1278,18 @@ async function startServer() {
   }
 
   app.post('/api/alumni/login', (req, res) => {
+    const { securityConfig } = ensureSecurityState();
+    const clientIp = normalizeClientIp(
+      req.ip || req.socket.remoteAddress || '127.0.0.1',
+      typeof req.headers['x-forwarded-for'] === 'string' ? req.headers['x-forwarded-for'] : undefined,
+    );
+    const lockRec = loginFailureMap.get(`alumni:${clientIp}`);
+    if (lockRec && lockRec.lockedUntil > Date.now()) {
+      const mins = Math.ceil((lockRec.lockedUntil - Date.now()) / 60_000);
+      res.status(429).json({ error: `Too many failed alumni login attempts. Locked for ${mins} minute(s).` });
+      return;
+    }
+
     const { email, password, captchaId, captchaAnswer } = req.body as {
       email?: string;
       password?: string;
@@ -904,6 +1310,20 @@ async function startServer() {
       (p) => p.email.trim().toLowerCase() === email.trim().toLowerCase(),
     );
     if (!profile || !profile.passwordHash || !verifyPassword(password, profile.passwordHash)) {
+      const nextCount = (lockRec?.count || 0) + 1;
+      const threshold = Math.max(3, Number(securityConfig.maxFailedLogins || 5));
+      const lockedUntil =
+        nextCount >= threshold
+          ? Date.now() + Math.max(5, Number(securityConfig.lockoutMinutes || 15)) * 60_000
+          : 0;
+      loginFailureMap.set(`alumni:${clientIp}`, { count: nextCount, lockedUntil });
+      recordVisitorEvent(req, {
+        statusCode: 401,
+        severity: nextCount >= threshold ? 'critical' : 'warning',
+        eventType: 'failed_login',
+        threatCategory: nextCount >= threshold ? 'Alumni Brute-Force Lockout' : 'Invalid Alumni Credentials',
+        actorEmail: email.trim().toLowerCase(),
+      });
       res.status(401).json({ error: 'Invalid alumni email or password.' });
       return;
     }
@@ -916,6 +1336,13 @@ async function startServer() {
       });
       return;
     }
+    loginFailureMap.delete(`alumni:${clientIp}`);
+    recordVisitorEvent(req, {
+      statusCode: 200,
+      severity: 'info',
+      eventType: 'alumni_login',
+      actorEmail: profile.email,
+    });
     const csrfToken = crypto.randomBytes(20).toString('hex');
     const token = signAlumniSession({
       alumniId: profile.id,
@@ -1149,8 +1576,22 @@ async function startServer() {
     res.json({ query: q, results });
   });
 
-  // Auth endpoints (with single-use CAPTCHA protection)
+  // Auth endpoints (with single-use CAPTCHA & brute-force lockout protection)
   app.post('/api/auth/login', (req, res) => {
+    const { securityConfig } = ensureSecurityState();
+    const clientIp = normalizeClientIp(
+      req.ip || req.socket.remoteAddress || '127.0.0.1',
+      typeof req.headers['x-forwarded-for'] === 'string' ? req.headers['x-forwarded-for'] : undefined,
+    );
+    const lockRec = loginFailureMap.get(`admin:${clientIp}`);
+    if (lockRec && lockRec.lockedUntil > Date.now()) {
+      const mins = Math.ceil((lockRec.lockedUntil - Date.now()) / 60_000);
+      res.status(429).json({
+        error: `Account protection lock active after repeated failed attempts. Try again in ${mins} minute(s).`,
+      });
+      return;
+    }
+
     const { email, password, captchaId, captchaAnswer } = req.body as {
       email?: string;
       password?: string;
@@ -1168,9 +1609,24 @@ async function startServer() {
     }
     const user = db.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
     if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) {
+      const nextCount = (lockRec?.count || 0) + 1;
+      const threshold = Math.max(3, Number(securityConfig.maxFailedLogins || 5));
+      const lockedUntil =
+        nextCount >= threshold
+          ? Date.now() + Math.max(5, Number(securityConfig.lockoutMinutes || 15)) * 60_000
+          : 0;
+      loginFailureMap.set(`admin:${clientIp}`, { count: nextCount, lockedUntil });
+      recordVisitorEvent(req, {
+        statusCode: 401,
+        severity: nextCount >= threshold ? 'critical' : 'warning',
+        eventType: 'failed_login',
+        threatCategory: nextCount >= threshold ? 'Admin Brute-Force Lockout' : 'Invalid Admin Credentials',
+        actorEmail: email.trim().toLowerCase(),
+      });
       res.status(401).json({ error: 'Invalid credentials or inactive account.' });
       return;
     }
+    loginFailureMap.delete(`admin:${clientIp}`);
     user.lastLoginAt = new Date().toISOString().replace('T', ' ').slice(0, 16);
     const csrfToken = crypto.randomBytes(24).toString('hex');
     const token = signSession({
@@ -1179,7 +1635,12 @@ async function startServer() {
       exp: Date.now() + 1000 * 60 * 60 * 12,
     });
     addAudit(sanitizeUser(user), 'LOGIN', 'Session', user.email);
-    saveDatabase();
+    recordVisitorEvent(req, {
+      statusCode: 200,
+      severity: 'info',
+      eventType: 'admin_login',
+      actorEmail: user.email,
+    });
 
     res.setHeader('Set-Cookie', buildSessionCookie(req, token, 43200));
     res.json({ user: sanitizeUser(user), csrfToken, sessionToken: token });
@@ -1241,6 +1702,7 @@ async function startServer() {
   app.get('/api/admin/state', requireAdmin(), (req, res) => {
     const currentUser = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const alumniState = ensureAlumniState();
+    const { seo, hitCounter, securityConfig, blockedIps } = ensureSecurityState();
     res.json({
       categories: sortByOrder(db.categories),
       pages: sortByOrder(db.pages),
@@ -1271,12 +1733,48 @@ async function startServer() {
       conferenceSubmissions: db.conferenceSubmissions ?? [],
       conferenceRegistrations: db.conferenceRegistrations ?? [],
       placements: db.placements ?? createSeedDatabase().placements,
+      sports: ensureSportsState(),
+      facilities: ensureFacilitiesState(),
       grievances: db.grievances ?? [],
       settings: db.settings,
+      seo: canUserAccessResource(currentUser, 'seo') || canUserAccessResource(currentUser, 'settings') ? seo : undefined,
+      hitCounter: {
+        totalHits: hitCounter.totalHits,
+        todayHits: hitCounter.todayHits,
+        todayDate: hitCounter.todayDate,
+        uniqueVisitors: hitCounter.uniqueVisitors,
+        lastHitAt: hitCounter.lastHitAt,
+      },
+      securityConfig: canUserAccessResource(currentUser, 'analytics') ? securityConfig : undefined,
+      blockedIpCount: canUserAccessResource(currentUser, 'analytics') ? blockedIps.length : 0,
       users: canUserAccessResource(currentUser, 'users') ? db.users.map(sanitizeUser) : [],
       auditLogs: canUserAccessResource(currentUser, 'audit_logs') ? db.auditLogs : [],
     });
   });
+
+  function ensureSportsState(): SportsData {
+    if (!db.sports) {
+      db.sports = createSeedSportsData();
+    }
+    return {
+      config: db.sports.config,
+      facilities: sortByOrder(db.sports.facilities ?? []),
+      events: sortByOrder(db.sports.events ?? []),
+      achievements: sortByOrder(db.sports.achievements ?? []),
+      gallery: sortByOrder(db.sports.gallery ?? []),
+      notices: sortByOrder(db.sports.notices ?? []),
+    };
+  }
+
+  function ensureFacilitiesState(): FacilitiesData {
+    if (!db.facilities) {
+      db.facilities = createSeedFacilitiesData();
+    }
+    return {
+      config: db.facilities.config,
+      items: sortByOrder(db.facilities.items ?? []),
+    };
+  }
 
   function applyReorderIds<T extends { id: number; sortOrder?: number }>(list: T[], orderedIds: number[]): T[] {
     const pos = new Map<number, number>();
@@ -2732,6 +3230,252 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  // ============================================================================
+  // SEO Studio, Hit Counter Config, Log Analyzer (Country/State/Area) & Security Shield
+  // ============================================================================
+  app.get('/api/admin/seo', requireAdmin('seo'), (_req, res) => {
+    const { seo, hitCounter } = ensureSecurityState();
+    res.json({
+      seo,
+      hitCounter: {
+        totalHits: hitCounter.totalHits,
+        todayHits: hitCounter.todayHits,
+        todayDate: hitCounter.todayDate,
+        uniqueVisitors: hitCounter.uniqueVisitors,
+        lastHitAt: hitCounter.lastHitAt,
+      },
+      audit: evaluateSeoAudit(db.settings, seo, db.pages),
+    });
+  });
+
+  app.put('/api/admin/seo', requireAdmin('seo'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { seo, hitCounter } = ensureSecurityState();
+    const prevOffset = Number(seo.hitCounterStartOffset || 0);
+    const body = (req.body || {}) as Partial<SeoSettings>;
+
+    const nextSeo: SeoSettings = {
+      ...seo,
+      ...body,
+      defaultTitle: String(body.defaultTitle ?? seo.defaultTitle).trim(),
+      titleSuffix: String(body.titleSuffix ?? seo.titleSuffix).trim(),
+      defaultDescription: String(body.defaultDescription ?? seo.defaultDescription).trim(),
+      defaultKeywords: String(body.defaultKeywords ?? seo.defaultKeywords).trim(),
+      canonicalBaseUrl: String(body.canonicalBaseUrl ?? seo.canonicalBaseUrl).trim().replace(/\/+$/, ''),
+      ogImageUrl: String(body.ogImageUrl ?? seo.ogImageUrl).trim(),
+      schemaOrgType: (String(body.schemaOrgType ?? seo.schemaOrgType).trim() || 'CollegeOrUniversity') as SeoSettings['schemaOrgType'],
+      enableJsonLd: body.enableJsonLd !== undefined ? Boolean(body.enableJsonLd) : seo.enableJsonLd,
+      allowIndexing: body.allowIndexing !== undefined ? Boolean(body.allowIndexing) : seo.allowIndexing,
+      googleVerificationCode: String(body.googleVerificationCode ?? seo.googleVerificationCode ?? '').trim(),
+      bingVerificationCode: String(body.bingVerificationCode ?? seo.bingVerificationCode ?? '').trim(),
+      robotsTxtCustom: String(body.robotsTxtCustom ?? seo.robotsTxtCustom ?? ''),
+      showHitCounterInFooter:
+        body.showHitCounterInFooter !== undefined
+          ? Boolean(body.showHitCounterInFooter)
+          : seo.showHitCounterInFooter,
+      hitCounterStartOffset: Math.max(0, Number(body.hitCounterStartOffset ?? seo.hitCounterStartOffset ?? 0)),
+      pageOverrides: Array.isArray(body.pageOverrides)
+        ? body.pageOverrides
+            .filter((ov) => ov && String(ov.routePattern || '').trim())
+            .map((ov, i) => ({
+              id: String(ov.id || `seo-ov-${Date.now()}-${i}`),
+              routePattern: String(ov.routePattern).trim().startsWith('/')
+                ? String(ov.routePattern).trim()
+                : `/${String(ov.routePattern).trim()}`,
+              title: String(ov.title || '').trim(),
+              description: String(ov.description || '').trim(),
+              keywords: ov.keywords ? String(ov.keywords).trim() : '',
+              ogImageUrl: ov.ogImageUrl ? String(ov.ogImageUrl).trim() : '',
+              noIndex: Boolean(ov.noIndex),
+            }))
+        : seo.pageOverrides,
+    };
+
+    const nextOffset = Number(nextSeo.hitCounterStartOffset || 0);
+    if (nextOffset !== prevOffset) {
+      hitCounter.totalHits = Math.max(nextOffset, Number(hitCounter.totalHits || 0) + (nextOffset - prevOffset));
+    }
+
+    db.seo = nextSeo;
+    addAudit(actor, 'UPDATE_SEO_CONFIG', 'SEO', `Updated SEO settings & footer counter (${nextSeo.canonicalBaseUrl})`);
+    saveDatabase();
+    res.json({
+      seo: db.seo,
+      hitCounter: {
+        totalHits: hitCounter.totalHits,
+        todayHits: hitCounter.todayHits,
+        todayDate: hitCounter.todayDate,
+        uniqueVisitors: hitCounter.uniqueVisitors,
+        lastHitAt: hitCounter.lastHitAt,
+      },
+      audit: evaluateSeoAudit(db.settings, db.seo, db.pages),
+    });
+  });
+
+  app.get('/api/admin/analytics', requireAdmin('analytics'), (req, res) => {
+    const { visitorLogs, blockedIps, securityConfig, hitCounter, seo } = ensureSecurityState();
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const filtered = filterVisitorLogs(
+      visitorLogs,
+      {
+        search: String(req.query.search || ''),
+        country: String(req.query.country || 'All'),
+        state: String(req.query.state || 'All'),
+        area: String(req.query.area || 'All'),
+        severity: (String(req.query.severity || 'all') as VisitorLogEntry['severity'] | 'all'),
+        eventType: (String(req.query.eventType || 'all') as VisitorLogEntry['eventType'] | 'all'),
+        dateRange: (String(req.query.dateRange || 'all') as 'today' | '7d' | '30d' | 'all'),
+      },
+      todayDate,
+    );
+
+    const summary = aggregateVisitorLogs(filtered, todayDate);
+    const countries = Array.from(new Set(visitorLogs.map((l) => l.country).filter(Boolean))).sort();
+    const states = Array.from(new Set(visitorLogs.map((l) => l.state).filter(Boolean))).sort();
+    const areas = Array.from(new Set(visitorLogs.map((l) => l.area).filter(Boolean))).sort();
+
+    const posture = [
+      { id: 'waf', label: 'Web Application Firewall (SQLi / XSS / Path Traversal / Cmd Injection)', ok: Boolean(securityConfig.wafEnabled) },
+      { id: 'ratelimit', label: `API Sliding-Window Rate Limiter (${securityConfig.maxRequestsPerMinute} req/min)`, ok: Boolean(securityConfig.rateLimitEnabled) },
+      { id: 'scanners', label: 'Automated Scanner & Sensitive File Probe Blocker (.env / sqlmap / nikto)', ok: Boolean(securityConfig.blockScannerProbes) },
+      { id: 'bruteforce', label: `Login Brute-Force Lockout (${securityConfig.maxFailedLogins} failures -> ${securityConfig.lockoutMinutes}m lock)`, ok: Number(securityConfig.maxFailedLogins) > 0 },
+      { id: 'captcha', label: 'Server-Verified Single-Use SVG CAPTCHA on Admin, Alumni, Conf & Grievances', ok: true },
+      { id: 'csrf', label: 'HMAC Signed HttpOnly Sessions + CSRF Token + Granular Page/Module RBAC', ok: true },
+      { id: 'uploads', label: `Strict File Upload Caps (${db.settings.maxPhotoUploadMb ?? 2} MB Photo / ${db.settings.maxDocumentUploadMb ?? 10} MB Doc) & Double-Ext Block`, ok: true },
+      { id: 'headers', label: 'HTTP Defense Headers (nosniff, Referrer-Policy, Permissions-Policy, X-Powered-By disabled)', ok: true },
+      { id: 'robots', label: 'Search Engine Crawling Isolation (/admin & /data Disallowed in robots.txt)', ok: Boolean(seo) },
+    ];
+
+    res.json({
+      summary,
+      totalUnfiltered: visitorLogs.length,
+      filteredCount: filtered.length,
+      logs: filtered.slice(0, 300),
+      blockedIps,
+      securityConfig,
+      hitCounter: {
+        totalHits: hitCounter.totalHits,
+        todayHits: hitCounter.todayHits,
+        todayDate: hitCounter.todayDate,
+        uniqueVisitors: hitCounter.uniqueVisitors,
+        lastHitAt: hitCounter.lastHitAt,
+      },
+      countries,
+      states,
+      areas,
+      posture,
+    });
+  });
+
+  app.get('/api/admin/analytics/export', requireAdmin('analytics'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { visitorLogs, securityConfig } = ensureSecurityState();
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const filtered = filterVisitorLogs(
+      visitorLogs,
+      {
+        search: String(req.query.search || ''),
+        country: String(req.query.country || 'All'),
+        state: String(req.query.state || 'All'),
+        area: String(req.query.area || 'All'),
+        severity: (String(req.query.severity || 'all') as VisitorLogEntry['severity'] | 'all'),
+        eventType: (String(req.query.eventType || 'all') as VisitorLogEntry['eventType'] | 'all'),
+        dateRange: (String(req.query.dateRange || 'all') as 'today' | '7d' | '30d' | 'all'),
+      },
+      todayDate,
+    );
+
+    const fmt = String(req.query.format || 'csv').toLowerCase();
+    const stamp = new Date().toISOString().slice(0, 10);
+    addAudit(actor, 'EXPORT_VISITOR_LOGS', 'Analytics', `Exported ${filtered.length} logs (${fmt.toUpperCase()})`);
+    saveDatabase();
+
+    if (fmt === 'json') {
+      res.setHeader('Content-Disposition', `attachment; filename="svcoer-visitor-logs-${stamp}.json"`);
+      res.type('application/json').send(JSON.stringify(filtered, null, 2));
+      return;
+    }
+    if (fmt === 'log' || fmt === 'txt') {
+      res.setHeader('Content-Disposition', `attachment; filename="svcoer-access-security-${stamp}.log"`);
+      res.type('text/plain').send(formatVisitorLogsCombinedText(filtered));
+      return;
+    }
+    res.setHeader('Content-Disposition', `attachment; filename="svcoer-visitor-logs-${stamp}.csv"`);
+    res.type('text/csv').send(formatVisitorLogsCsv(filtered, Boolean(securityConfig.maskExportedIps)));
+  });
+
+  app.post('/api/admin/analytics/prune', requireAdmin('analytics'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { visitorLogs } = ensureSecurityState();
+    const mode = req.body?.mode === 'clear_access' ? 'clear_access' : 'older_than';
+    const keepDays = Math.max(1, Number(req.body?.keepDays ?? 30));
+    const beforeCount = visitorLogs.length;
+
+    if (mode === 'clear_access') {
+      // Preserve security blocks & failed logins while pruning routine info page_view hits
+      db.visitorLogs = visitorLogs.filter((l) => l.eventType !== 'page_view' || l.severity !== 'info');
+    } else {
+      const cutoff = new Date();
+      cutoff.setUTCDate(cutoff.getUTCDate() - keepDays);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      db.visitorLogs = visitorLogs.filter((l) => l.timestamp.slice(0, 10) >= cutoffStr);
+    }
+
+    const removedCount = beforeCount - db.visitorLogs.length;
+    addAudit(actor, 'PRUNE_VISITOR_LOGS', 'Analytics', `Removed ${removedCount} log records (${mode})`);
+    saveDatabase();
+    res.json({ ok: true, removedCount, remainingCount: db.visitorLogs.length });
+  });
+
+  app.put('/api/admin/security/config', requireAdmin('analytics'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { securityConfig } = ensureSecurityState();
+    const body = (req.body || {}) as Partial<SecurityConfig>;
+    const nextConfig: SecurityConfig = {
+      wafEnabled: body.wafEnabled !== undefined ? Boolean(body.wafEnabled) : securityConfig.wafEnabled,
+      rateLimitEnabled: body.rateLimitEnabled !== undefined ? Boolean(body.rateLimitEnabled) : securityConfig.rateLimitEnabled,
+      autoBlockAttackers: body.autoBlockAttackers !== undefined ? Boolean(body.autoBlockAttackers) : securityConfig.autoBlockAttackers,
+      maxRequestsPerMinute: Math.min(2000, Math.max(20, Number(body.maxRequestsPerMinute ?? securityConfig.maxRequestsPerMinute))),
+      maxFailedLogins: Math.min(20, Math.max(3, Number(body.maxFailedLogins ?? securityConfig.maxFailedLogins))),
+      lockoutMinutes: Math.min(1440, Math.max(1, Number(body.lockoutMinutes ?? securityConfig.lockoutMinutes))),
+      blockScannerProbes: body.blockScannerProbes !== undefined ? Boolean(body.blockScannerProbes) : securityConfig.blockScannerProbes,
+      maskExportedIps: body.maskExportedIps !== undefined ? Boolean(body.maskExportedIps) : securityConfig.maskExportedIps,
+    };
+    db.securityConfig = nextConfig;
+    addAudit(actor, 'UPDATE_SECURITY_CONFIG', 'Security', `WAF=${nextConfig.wafEnabled}, RateLimit=${nextConfig.maxRequestsPerMinute}/m`);
+    saveDatabase();
+    res.json(nextConfig);
+  });
+
+  app.post('/api/admin/security/block-ip', requireAdmin('analytics'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const ip = String(req.body?.ipAddress || '').trim();
+    const reason = String(req.body?.reason || 'Manually blocked by Administrator').trim();
+    const hours = req.body?.hours !== undefined && req.body?.hours !== '' ? Number(req.body.hours) : null;
+    if (!ip || ip.length > 64) {
+      res.status(400).json({ error: 'A valid IP address is required.' });
+      return;
+    }
+    const created = blockIpAddressRecord(ip, reason, actor.email, hours ? hours * 60 : null);
+    addAudit(actor, 'BLOCK_IP', 'Security', `${ip} (${reason})`);
+    saveDatabase();
+    res.status(201).json(created);
+  });
+
+  app.delete('/api/admin/security/block-ip/:id', requireAdmin('analytics'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    ensureSecurityState();
+    const idx = (db.blockedIps ?? []).findIndex((b) => b.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Blocked IP record not found.' });
+      return;
+    }
+    const [removed] = db.blockedIps!.splice(idx, 1);
+    addAudit(actor, 'UNBLOCK_IP', 'Security', removed.ipAddress);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
   // Users & RBAC management (Super Admin only)
   app.post('/api/admin/users', requireAdmin('users'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
@@ -3765,8 +4509,19 @@ async function startServer() {
             ],
       brochureUrl: b.brochureUrl ? String(b.brochureUrl).trim() : '',
       templateUrl: b.templateUrl ? String(b.templateUrl).trim() : '',
+      submissionMode: b.submissionMode || 'portal',
+      externalSubmissionUrl: b.externalSubmissionUrl ? String(b.externalSubmissionUrl).trim() : '',
+      externalSubmissionLabel: b.externalSubmissionLabel ? String(b.externalSubmissionLabel).trim() : '',
+      submissionInstructionsHtml: b.submissionInstructionsHtml ? String(b.submissionInstructionsHtml) : '',
+      enablePosterPresentation: b.enablePosterPresentation !== false,
+      posterDimensions: String(b.posterDimensions || 'A0 Portrait (841 x 1189 mm)').trim(),
+      posterGuidelinesHtml: String(b.posterGuidelinesHtml || ''),
+      posterTemplateUrl: b.posterTemplateUrl ? String(b.posterTemplateUrl).trim() : '',
+      posterPrizesText: String(b.posterPrizesText || ''),
+      posterItems: Array.isArray(b.posterItems) ? b.posterItems : [],
       overviewHtml: String(b.overviewHtml || '<p>Conference overview and technical scope.</p>'),
       cfpHtml: String(b.cfpHtml || '<p>Original unpublished research papers are invited.</p>'),
+      customSections: Array.isArray(b.customSections) ? b.customSections : [],
       isPublished: b.isPublished !== false,
       isFeatured: Boolean(b.isFeatured ?? true),
       sortOrder: Number(b.sortOrder ?? nextSort),
@@ -4363,6 +5118,449 @@ async function startServer() {
     }
     const [removed] = pl.customSections.splice(idx, 1);
     addAudit(actor, 'DELETE_PLACEMENT_CUSTOM_SECTION', 'Placements', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // ============================================================================
+  // STUDENT LIFE — SPORTS PORTAL ADMIN CRUD
+  // ============================================================================
+  app.put('/api/admin/sports/config', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    db.sports = sp;
+    const b = req.body as Partial<SportsData['config']>;
+    sp.config = {
+      ...sp.config,
+      ...(b.heroBadge !== undefined ? { heroBadge: String(b.heroBadge).trim() } : {}),
+      ...(b.heroTitle !== undefined ? { heroTitle: String(b.heroTitle).trim() } : {}),
+      ...(b.heroSubtitle !== undefined ? { heroSubtitle: String(b.heroSubtitle).trim() } : {}),
+      ...(b.directorName !== undefined ? { directorName: String(b.directorName).trim() } : {}),
+      ...(b.directorTitle !== undefined ? { directorTitle: String(b.directorTitle).trim() } : {}),
+      ...(b.directorEmail !== undefined ? { directorEmail: String(b.directorEmail).trim() } : {}),
+      ...(b.directorPhone !== undefined ? { directorPhone: String(b.directorPhone).trim() } : {}),
+      ...(b.gymkhanaTimings !== undefined ? { gymkhanaTimings: String(b.gymkhanaTimings).trim() } : {}),
+      ...(b.annualFlagshipName !== undefined ? { annualFlagshipName: String(b.annualFlagshipName).trim() } : {}),
+      ...(Array.isArray(b.customFields)
+        ? {
+            customFields: b.customFields
+              .filter((cf) => cf && String(cf.label || '').trim())
+              .map((cf) => ({ label: String(cf.label).trim(), value: String(cf.value || '').trim() })),
+          }
+        : {}),
+    };
+    addAudit(actor, 'UPDATE_SPORTS_CONFIG', 'Sports', sp.config.heroTitle);
+    saveDatabase();
+    res.json(sp.config);
+  });
+
+  app.post('/api/admin/sports/facilities', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const b = req.body as Partial<SportsFacility>;
+    if (!b.name?.trim()) {
+      res.status(400).json({ error: 'Sports facility name is required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...sp.facilities.map((x) => x.id)) + 1;
+    const item: SportsFacility = {
+      id: nextId,
+      name: b.name.trim(),
+      facilityType: String(b.facilityType || 'Outdoor Ground / Track').trim(),
+      dimensionsOrCapacity: String(b.dimensionsOrCapacity || '').trim(),
+      timings: String(b.timings || '').trim(),
+      inchargeName: String(b.inchargeName || '').trim(),
+      description: String(b.description || '').trim(),
+      imageUrl: String(b.imageUrl || '/src/assets/images/sports_complex_1794991330591.jpg').trim(),
+      customFields: Array.isArray(b.customFields)
+        ? b.customFields.filter((cf) => cf && cf.label?.trim()).map((cf) => ({ label: cf.label.trim(), value: String(cf.value || '').trim() }))
+        : [],
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder ?? sp.facilities.length + 1),
+    };
+    sp.facilities.push(item);
+    db.sports = sp;
+    addAudit(actor, 'CREATE_SPORTS_FACILITY', 'Sports', item.name);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/sports/facilities/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const item = sp.facilities.find((x) => x.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Sports facility not found.' });
+      return;
+    }
+    const { id: _id, ...rest } = req.body as Partial<SportsFacility>;
+    Object.assign(item, rest);
+    db.sports = sp;
+    addAudit(actor, 'UPDATE_SPORTS_FACILITY', 'Sports', item.name);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/sports/facilities/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const idx = sp.facilities.findIndex((x) => x.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Sports facility not found.' });
+      return;
+    }
+    const [removed] = sp.facilities.splice(idx, 1);
+    db.sports = sp;
+    addAudit(actor, 'DELETE_SPORTS_FACILITY', 'Sports', removed.name);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/sports/events', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const b = req.body as Partial<SportsEvent>;
+    if (!b.title?.trim()) {
+      res.status(400).json({ error: 'Sports event title is required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...sp.events.map((x) => x.id)) + 1;
+    const item: SportsEvent = {
+      id: nextId,
+      title: b.title.trim(),
+      eventType: String(b.eventType || 'Intercollegiate Tournament').trim(),
+      discipline: String(b.discipline || '').trim(),
+      eventDate: String(b.eventDate || new Date().toISOString().slice(0, 10)).trim(),
+      venue: String(b.venue || '').trim(),
+      organizer: String(b.organizer || 'Gymkhana Committee').trim(),
+      status: b.status || 'Upcoming',
+      registrationUrl: String(b.registrationUrl || '').trim(),
+      description: String(b.description || '').trim(),
+      bannerUrl: String(b.bannerUrl || '/src/assets/images/sports_complex_1794991330591.jpg').trim(),
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder ?? sp.events.length + 1),
+    };
+    sp.events.push(item);
+    db.sports = sp;
+    addAudit(actor, 'CREATE_SPORTS_EVENT', 'Sports', item.title);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/sports/events/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const item = sp.events.find((x) => x.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Sports event not found.' });
+      return;
+    }
+    const { id: _id, ...rest } = req.body as Partial<SportsEvent>;
+    Object.assign(item, rest);
+    db.sports = sp;
+    addAudit(actor, 'UPDATE_SPORTS_EVENT', 'Sports', item.title);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/sports/events/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const idx = sp.events.findIndex((x) => x.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Sports event not found.' });
+      return;
+    }
+    const [removed] = sp.events.splice(idx, 1);
+    db.sports = sp;
+    addAudit(actor, 'DELETE_SPORTS_EVENT', 'Sports', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/sports/achievements', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const b = req.body as Partial<SportsAchievement>;
+    if (!b.studentOrTeamName?.trim() || !b.sportName?.trim()) {
+      res.status(400).json({ error: 'Student/Team name and sport name are required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...sp.achievements.map((x) => x.id)) + 1;
+    const item: SportsAchievement = {
+      id: nextId,
+      studentOrTeamName: b.studentOrTeamName.trim(),
+      departmentCode: String(b.departmentCode || 'CSE').trim(),
+      batchYear: String(b.batchYear || '2026').trim(),
+      sportName: b.sportName.trim(),
+      level: b.level || 'University',
+      medalOrRank: String(b.medalOrRank || 'Winner').trim(),
+      eventName: String(b.eventName || '').trim(),
+      eventDate: String(b.eventDate || new Date().toISOString().slice(0, 10)).trim(),
+      photoUrl: String(b.photoUrl || '/src/assets/images/sports_complex_1794991330591.jpg').trim(),
+      highlights: String(b.highlights || '').trim(),
+      isFeatured: b.isFeatured !== false,
+      sortOrder: Number(b.sortOrder ?? sp.achievements.length + 1),
+    };
+    sp.achievements.push(item);
+    db.sports = sp;
+    addAudit(actor, 'CREATE_SPORTS_ACHIEVEMENT', 'Sports', `${item.studentOrTeamName} (${item.level})`);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/sports/achievements/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const item = sp.achievements.find((x) => x.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Sports achievement not found.' });
+      return;
+    }
+    const { id: _id, ...rest } = req.body as Partial<SportsAchievement>;
+    Object.assign(item, rest);
+    db.sports = sp;
+    addAudit(actor, 'UPDATE_SPORTS_ACHIEVEMENT', 'Sports', item.studentOrTeamName);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/sports/achievements/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const idx = sp.achievements.findIndex((x) => x.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Sports achievement not found.' });
+      return;
+    }
+    const [removed] = sp.achievements.splice(idx, 1);
+    db.sports = sp;
+    addAudit(actor, 'DELETE_SPORTS_ACHIEVEMENT', 'Sports', removed.studentOrTeamName);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/sports/gallery', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const b = req.body as Partial<SportsGalleryItem>;
+    if (!b.title?.trim() || !b.mediaUrl?.trim()) {
+      res.status(400).json({ error: 'Gallery item title and media URL are required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...sp.gallery.map((x) => x.id)) + 1;
+    const item: SportsGalleryItem = {
+      id: nextId,
+      title: b.title.trim(),
+      mediaType: b.mediaType === 'Video' ? 'Video' : 'Photo',
+      category: String(b.category || 'Sports Gallery').trim(),
+      mediaUrl: b.mediaUrl.trim(),
+      thumbnailUrl: String(b.thumbnailUrl || '/src/assets/images/sports_complex_1794991330591.jpg').trim(),
+      eventDate: String(b.eventDate || new Date().toISOString().slice(0, 10)).trim(),
+      caption: String(b.caption || '').trim(),
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder ?? sp.gallery.length + 1),
+    };
+    sp.gallery.push(item);
+    db.sports = sp;
+    addAudit(actor, 'CREATE_SPORTS_GALLERY', 'Sports', item.title);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/sports/gallery/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const item = sp.gallery.find((x) => x.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Gallery item not found.' });
+      return;
+    }
+    const { id: _id, ...rest } = req.body as Partial<SportsGalleryItem>;
+    Object.assign(item, rest);
+    db.sports = sp;
+    addAudit(actor, 'UPDATE_SPORTS_GALLERY', 'Sports', item.title);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/sports/gallery/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const idx = sp.gallery.findIndex((x) => x.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Gallery item not found.' });
+      return;
+    }
+    const [removed] = sp.gallery.splice(idx, 1);
+    db.sports = sp;
+    addAudit(actor, 'DELETE_SPORTS_GALLERY', 'Sports', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/sports/notices', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const b = req.body as Partial<SportsNotice>;
+    if (!b.title?.trim()) {
+      res.status(400).json({ error: 'Sports notice title is required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...sp.notices.map((x) => x.id)) + 1;
+    const item: SportsNotice = {
+      id: nextId,
+      title: b.title.trim(),
+      noticeDate: String(b.noticeDate || new Date().toISOString().slice(0, 10)).trim(),
+      category: String(b.category || 'Trials & Selection').trim(),
+      summary: String(b.summary || '').trim(),
+      attachmentUrl: String(b.attachmentUrl || '').trim(),
+      registrationLink: String(b.registrationLink || '').trim(),
+      isPinned: Boolean(b.isPinned),
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder ?? sp.notices.length + 1),
+    };
+    sp.notices.unshift(item);
+    db.sports = sp;
+    addAudit(actor, 'CREATE_SPORTS_NOTICE', 'Sports', item.title);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/sports/notices/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const item = sp.notices.find((x) => x.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Sports notice not found.' });
+      return;
+    }
+    const { id: _id, ...rest } = req.body as Partial<SportsNotice>;
+    Object.assign(item, rest);
+    db.sports = sp;
+    addAudit(actor, 'UPDATE_SPORTS_NOTICE', 'Sports', item.title);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/sports/notices/:id', requireAdmin('sports'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const sp = ensureSportsState();
+    const idx = sp.notices.findIndex((x) => x.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Sports notice not found.' });
+      return;
+    }
+    const [removed] = sp.notices.splice(idx, 1);
+    db.sports = sp;
+    addAudit(actor, 'DELETE_SPORTS_NOTICE', 'Sports', removed.title);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // ============================================================================
+  // INSTITUTIONAL FACILITIES & INFRASTRUCTURE ADMIN CRUD
+  // ============================================================================
+  app.put('/api/admin/facilities/config', requireAdmin('facilities'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const fac = ensureFacilitiesState();
+    const b = req.body as Partial<FacilitiesData['config']>;
+    fac.config = {
+      ...fac.config,
+      ...(b.heroBadge !== undefined ? { heroBadge: String(b.heroBadge).trim() } : {}),
+      ...(b.heroTitle !== undefined ? { heroTitle: String(b.heroTitle).trim() } : {}),
+      ...(b.heroSubtitle !== undefined ? { heroSubtitle: String(b.heroSubtitle).trim() } : {}),
+      ...(Array.isArray(b.customFieldPresets)
+        ? { customFieldPresets: b.customFieldPresets.map((s) => String(s).trim()).filter(Boolean) }
+        : {}),
+    };
+    db.facilities = fac;
+    addAudit(actor, 'UPDATE_FACILITIES_CONFIG', 'Facilities', fac.config.heroTitle);
+    saveDatabase();
+    res.json(fac.config);
+  });
+
+  app.post('/api/admin/facilities/items', requireAdmin('facilities'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const fac = ensureFacilitiesState();
+    const b = req.body as Partial<FacilityItem>;
+    if (!b.title?.trim() || !b.category?.trim()) {
+      res.status(400).json({ error: 'Facility title and category are required.' });
+      return;
+    }
+    const nextId = Math.max(0, ...fac.items.map((x) => x.id)) + 1;
+    const item: FacilityItem = {
+      id: nextId,
+      title: b.title.trim(),
+      category: b.category.trim(),
+      shortSummary: String(b.shortSummary || '').trim(),
+      descriptionHtml: String(b.descriptionHtml || '<p></p>'),
+      locationBlock: String(b.locationBlock || '').trim(),
+      capacity: String(b.capacity || '').trim(),
+      timings: String(b.timings || '').trim(),
+      inchargeName: String(b.inchargeName || '').trim(),
+      inchargeEmail: b.inchargeEmail ? String(b.inchargeEmail).trim() : '',
+      inchargePhone: b.inchargePhone ? String(b.inchargePhone).trim() : '',
+      imageUrl: String(b.imageUrl || '/src/assets/images/campus_facilities_1794991331724.jpg').trim(),
+      brochureUrl: b.brochureUrl ? String(b.brochureUrl).trim() : '',
+      customFields: Array.isArray(b.customFields)
+        ? b.customFields
+            .filter((cf) => cf && String(cf.label || '').trim())
+            .map((cf) => ({ label: String(cf.label).trim(), value: String(cf.value || '').trim() }))
+        : [],
+      isFeatured: Boolean(b.isFeatured),
+      isPublished: b.isPublished !== false,
+      sortOrder: Number(b.sortOrder ?? fac.items.length + 1),
+    };
+    fac.items.push(item);
+    db.facilities = fac;
+    addAudit(actor, 'CREATE_FACILITY', 'Facilities', `${item.title} (${item.category})`);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/facilities/items/reorder', requireAdmin('facilities'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const fac = ensureFacilitiesState();
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    fac.items = applyReorderIds(fac.items, orderedIds);
+    db.facilities = fac;
+    addAudit(actor, 'REORDER_FACILITIES', 'Facilities', `${orderedIds.length} items`);
+    saveDatabase();
+    res.json({ ok: true, items: fac.items });
+  });
+
+  app.put('/api/admin/facilities/items/:id', requireAdmin('facilities'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const fac = ensureFacilitiesState();
+    const item = fac.items.find((x) => x.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Facility item not found.' });
+      return;
+    }
+    const { id: _id, ...rest } = req.body as Partial<FacilityItem>;
+    Object.assign(item, rest);
+    db.facilities = fac;
+    addAudit(actor, 'UPDATE_FACILITY', 'Facilities', item.title);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/facilities/items/:id', requireAdmin('facilities'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const fac = ensureFacilitiesState();
+    const idx = fac.items.findIndex((x) => x.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Facility item not found.' });
+      return;
+    }
+    const [removed] = fac.items.splice(idx, 1);
+    db.facilities = fac;
+    addAudit(actor, 'DELETE_FACILITY', 'Facilities', removed.title);
     saveDatabase();
     res.json({ ok: true });
   });

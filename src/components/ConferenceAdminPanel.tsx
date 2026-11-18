@@ -17,6 +17,7 @@ import type {
   ConferenceImportantDate,
   ConferencePaperStatus,
   ConferencePerson,
+  ConferencePosterItem,
   ConferenceRegistration,
   ConferenceScheduleItem,
   ConferenceSlide,
@@ -92,6 +93,15 @@ export function ConferenceAdminPanel({
   const [cSlideCtaLink, setCSlideCtaLink] = useState('');
   const [customSecTitle, setCustomSecTitle] = useState('');
   const [customSecHtml, setCustomSecHtml] = useState('<p>Add custom accommodation, publication ethics, or sponsorship details here.</p>');
+  const [posterCode, setPosterCode] = useState('PST-01');
+  const [posterTitle, setPosterTitle] = useState('');
+  const [posterAuthors, setPosterAuthors] = useState('');
+  const [posterAffil, setPosterAffil] = useState('');
+  const [posterTrack, setPosterTrack] = useState('');
+  const [posterAward, setPosterAward] = useState('');
+  const [posterAbstract, setPosterAbstract] = useState('');
+  const [posterImg, setPosterImg] = useState('/src/assets/images/poster_session_1794991330669.jpg');
+  const [posterPdfUrl, setPosterPdfUrl] = useState('');
 
   useEffect(() => {
     setResearchSlides(settings.researchSliderSlides || []);
@@ -923,6 +933,221 @@ export function ConferenceAdminPanel({
                 </div>
               </div>
 
+              {/* Poster Presentation & Expo Track Configuration */}
+              <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/30 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                      Poster Presentation &amp; Expo Track Configuration ({(draft.posterItems || []).length} Exhibits)
+                    </h3>
+                    <p className="text-[11px] text-stone-500 dark:text-slate-400">
+                      Configure poster dimensions, prizes, template PDF, guidelines, and showcase accepted research posters.
+                    </p>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draft.enablePosterPresentation !== false}
+                      onChange={(e) => setDraft({ ...draft, enablePosterPresentation: e.target.checked })}
+                    />
+                    <span>Enable Poster Presentation Track</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block font-semibold mb-1">Poster Board Dimensions</label>
+                    <input
+                      type="text"
+                      value={draft.posterDimensions || ''}
+                      onChange={(e) => setDraft({ ...draft, posterDimensions: e.target.value })}
+                      placeholder="A0 Portrait (841 mm x 1189 mm)"
+                      className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-1">Best Poster Prizes / Recognition</label>
+                    <input
+                      type="text"
+                      value={draft.posterPrizesText || ''}
+                      onChange={(e) => setDraft({ ...draft, posterPrizesText: e.target.value })}
+                      placeholder="Best Poster Award per Track + Certificate"
+                      className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-1">Poster Template URL (PPTX/PDF)</label>
+                    <div className="flex items-center gap-1.5">
+                      <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-semibold cursor-pointer shrink-0">
+                        <Upload className="w-3 h-3" />
+                        <span>Upload</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.pptx,.ppt,.docx"
+                          className="sr-only"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!f) return;
+                            try {
+                              const url = await uploadBinary(f);
+                              setDraft({ ...draft, posterTemplateUrl: url });
+                              notify('ok', 'Uploaded Poster Template.');
+                            } catch (err) {
+                              notify('err', (err as Error).message);
+                            }
+                          }}
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={draft.posterTemplateUrl || ''}
+                        onChange={(e) => setDraft({ ...draft, posterTemplateUrl: e.target.value })}
+                        placeholder="/uploads/... or https://..."
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <RichTextEditor
+                  label="Poster Presentation Guidelines (HTML)"
+                  value={draft.posterGuidelinesHtml || ''}
+                  onChange={(html) => setDraft({ ...draft, posterGuidelinesHtml: html })}
+                  uploadBinary={uploadBinary}
+                  maxPhotoMb={maxPhotoMb}
+                  autoCropEnabled={autoCrop}
+                  minHeight={130}
+                />
+
+                <div className="pt-2 border-t border-stone-200 dark:border-slate-700 space-y-2.5">
+                  <p className="text-xs font-bold">Add Accepted Poster / Technical Exhibit Card</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                    <input
+                      type="text"
+                      value={posterCode}
+                      onChange={(e) => setPosterCode(e.target.value)}
+                      placeholder="Code (e.g. PST-01)"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <input
+                      type="text"
+                      value={posterTitle}
+                      onChange={(e) => setPosterTitle(e.target.value)}
+                      placeholder="Poster Title *"
+                      className="md:col-span-2 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <input
+                      type="text"
+                      value={posterAuthors}
+                      onChange={(e) => setPosterAuthors(e.target.value)}
+                      placeholder="Authors *"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <input
+                      type="text"
+                      value={posterAffil}
+                      onChange={(e) => setPosterAffil(e.target.value)}
+                      placeholder="Affiliation / Dept"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <input
+                      type="text"
+                      value={posterTrack}
+                      onChange={(e) => setPosterTrack(e.target.value)}
+                      placeholder="Track Name"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <input
+                      type="text"
+                      value={posterAward}
+                      onChange={(e) => setPosterAward(e.target.value)}
+                      placeholder="Award Note (optional)"
+                      className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <input
+                      type="text"
+                      value={posterPdfUrl}
+                      onChange={(e) => setPosterPdfUrl(e.target.value)}
+                      placeholder="Poster PDF URL (optional)"
+                      className="md:col-span-2 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                    <textarea
+                      rows={2}
+                      value={posterAbstract}
+                      onChange={(e) => setPosterAbstract(e.target.value)}
+                      placeholder="Short Abstract / Summary"
+                      className="md:col-span-3 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                    />
+                  </div>
+                  <ImageUploader
+                    label="Poster Preview Image (16:9)"
+                    value={posterImg}
+                    onChange={setPosterImg}
+                    uploadBinary={uploadBinary}
+                    aspectRatio="16:9"
+                    maxPhotoMb={maxPhotoMb}
+                    autoCropEnabled={autoCrop}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!posterTitle.trim() || !posterAuthors.trim()) return;
+                      const list = draft.posterItems || [];
+                      const item: ConferencePosterItem = {
+                        id: Math.max(0, ...list.map((p) => p.id)) + 1,
+                        posterCode: posterCode.trim() || `PST-${list.length + 1}`,
+                        title: posterTitle.trim(),
+                        authors: posterAuthors.trim(),
+                        affiliation: posterAffil.trim(),
+                        track: posterTrack.trim(),
+                        awardNote: posterAward.trim(),
+                        abstract: posterAbstract.trim(),
+                        imageUrl: posterImg,
+                        posterPdfUrl: posterPdfUrl.trim(),
+                      };
+                      setDraft({ ...draft, posterItems: [...list, item] });
+                      setPosterTitle('');
+                      setPosterAuthors('');
+                      setPosterAbstract('');
+                      setPosterAward('');
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-stone-800 dark:bg-stone-700 text-white text-xs font-bold"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Poster Showcase Card
+                  </button>
+
+                  {(draft.posterItems || []).length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      {(draft.posterItems || []).map((p) => (
+                        <div
+                          key={p.id}
+                          className="p-2.5 rounded border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <span className="font-mono font-bold text-amber-700 mr-2">{p.posterCode}</span>
+                            <span className="font-bold">{p.title}</span>
+                            <span className="text-stone-500 ml-2">({p.authors})</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                posterItems: (draft.posterItems || []).filter((x) => x.id !== p.id),
+                              })
+                            }
+                            className="p-1 text-rose-600 shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Custom Extensible Sections per Conference */}
               <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-800/30 space-y-3">
                 <h3 className="text-sm font-bold">
@@ -1710,9 +1935,10 @@ export function ConferenceAdminPanel({
                   onClick={() =>
                     downloadCsv(
                       `${draft.slug}-papers.csv`,
-                      ['Tracking Code', 'Title', 'Track', 'Author', 'Email', 'Affiliation', 'Status', 'Submitted At'],
+                      ['Tracking Code', 'Presentation Mode', 'Title', 'Track', 'Author', 'Email', 'Affiliation', 'Status', 'Submitted At'],
                       confSubmissions.map((s) => [
                         s.trackingCode,
+                        s.presentationType || 'Oral Paper Presentation',
                         s.paperTitle,
                         s.trackTitle,
                         s.authorName,
@@ -1744,7 +1970,10 @@ export function ConferenceAdminPanel({
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
                             <span className="font-mono font-bold text-amber-700">{sub.trackingCode}</span> ·{' '}
-                            <span className="font-semibold">{sub.trackTitle}</span>
+                            <span className="font-bold text-sky-700 dark:text-sky-400">
+                              {sub.presentationType || 'Oral Paper Presentation'}
+                            </span>{' '}
+                            · <span className="font-semibold">{sub.trackTitle}</span>
                             <h4 className="font-bold text-sm text-stone-900 dark:text-white mt-0.5">
                               {sub.paperTitle}
                             </h4>

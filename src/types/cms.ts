@@ -255,7 +255,11 @@ export type AdminModuleKey =
   | 'alumni'
   | 'conferences'
   | 'placements'
-  | 'grievances';
+  | 'sports'
+  | 'facilities'
+  | 'grievances'
+  | 'seo'
+  | 'analytics';
 
 export interface CmsUser {
   id: number;
@@ -653,6 +657,20 @@ export interface ConferenceCustomSection {
   sortOrder?: number;
 }
 
+export interface ConferencePosterItem {
+  id: number;
+  posterCode: string;
+  title: string;
+  authors: string;
+  affiliation: string;
+  track?: string;
+  abstract?: string;
+  imageUrl?: string;
+  posterPdfUrl?: string;
+  awardNote?: string;
+  sortOrder?: number;
+}
+
 export interface Conference {
   id: number;
   slug: string;
@@ -676,6 +694,12 @@ export interface Conference {
   externalSubmissionUrl?: string;
   externalSubmissionLabel?: string;
   submissionInstructionsHtml?: string;
+  enablePosterPresentation?: boolean;
+  posterDimensions?: string;
+  posterGuidelinesHtml?: string;
+  posterTemplateUrl?: string;
+  posterPrizesText?: string;
+  posterItems?: ConferencePosterItem[];
   overviewHtml: string;
   cfpHtml: string;
   customSections?: ConferenceCustomSection[];
@@ -702,6 +726,7 @@ export interface ConferenceSubmission {
   trackingCode: string;
   paperTitle: string;
   trackTitle: string;
+  presentationType?: string;
   authorName: string;
   authorEmail: string;
   authorPhone: string;
@@ -885,6 +910,236 @@ export interface GrievanceTicket {
   updatedAt: string;
 }
 
+export interface SeoRouteOverride {
+  id: string;
+  routePattern: string;
+  title: string;
+  description: string;
+  keywords?: string;
+  ogImageUrl?: string;
+  noIndex?: boolean;
+}
+
+export interface SeoSettings {
+  defaultTitle: string;
+  titleSuffix: string;
+  defaultDescription: string;
+  defaultKeywords: string;
+  canonicalBaseUrl: string;
+  ogImageUrl: string;
+  schemaOrgType: 'CollegeOrUniversity' | 'EducationalOrganization' | 'University' | 'Organization' | 'WebSite';
+  enableJsonLd: boolean;
+  allowIndexing: boolean;
+  googleVerificationCode?: string;
+  bingVerificationCode?: string;
+  robotsTxtCustom?: string;
+  showHitCounterInFooter: boolean;
+  hitCounterStartOffset: number;
+  pageOverrides: SeoRouteOverride[];
+}
+
+export interface HitCounterStats {
+  totalHits: number;
+  todayHits: number;
+  todayDate: string;
+  uniqueVisitors: number;
+  uniqueTodayHashes?: string[];
+  lastHitAt?: string;
+}
+
+export type VisitorLogSeverity = 'info' | 'warning' | 'critical';
+
+export type VisitorLogEventType =
+  | 'page_view'
+  | 'admin_login'
+  | 'failed_login'
+  | 'alumni_login'
+  | 'security_block'
+  | 'rate_limit'
+  | 'file_upload'
+  | 'api_error';
+
+export interface VisitorLogEntry {
+  id: number;
+  timestamp: string;
+  ipAddress: string;
+  country: string;
+  countryCode: string;
+  state: string;
+  area: string;
+  method: string;
+  path: string;
+  statusCode: number;
+  deviceType: 'Desktop' | 'Mobile' | 'Tablet' | 'Bot';
+  browser: string;
+  os: string;
+  referrer: string;
+  userAgent: string;
+  responseTimeMs: number;
+  severity: VisitorLogSeverity;
+  eventType: VisitorLogEventType;
+  threatCategory?: string;
+  actorEmail?: string;
+}
+
+export interface BlockedIpEntry {
+  id: number;
+  ipAddress: string;
+  reason: string;
+  createdAt: string;
+  blockedBy: string;
+  expiresAt?: string | null;
+  hitCount: number;
+  autoBlocked?: boolean;
+}
+
+export interface SecurityConfig {
+  wafEnabled: boolean;
+  rateLimitEnabled: boolean;
+  autoBlockAttackers: boolean;
+  maxRequestsPerMinute: number;
+  maxFailedLogins: number;
+  lockoutMinutes: number;
+  blockScannerProbes: boolean;
+  maskExportedIps: boolean;
+}
+
+export interface SportsCustomField {
+  label: string;
+  value: string;
+}
+
+export interface SportsPortalConfig {
+  heroBadge: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  directorName: string;
+  directorTitle: string;
+  directorEmail: string;
+  directorPhone: string;
+  gymkhanaTimings: string;
+  annualFlagshipName: string;
+  customFields: SportsCustomField[];
+}
+
+export interface SportsFacility {
+  id: number;
+  name: string;
+  facilityType: string;
+  dimensionsOrCapacity: string;
+  timings: string;
+  inchargeName: string;
+  description: string;
+  imageUrl: string;
+  customFields?: SportsCustomField[];
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export interface SportsEvent {
+  id: number;
+  title: string;
+  eventType: string;
+  discipline: string;
+  eventDate: string;
+  venue: string;
+  organizer: string;
+  status: 'Upcoming' | 'Registrations Open' | 'Completed';
+  registrationUrl?: string;
+  description: string;
+  bannerUrl: string;
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export interface SportsAchievement {
+  id: number;
+  studentOrTeamName: string;
+  departmentCode: string;
+  batchYear: string;
+  sportName: string;
+  level: 'University' | 'State' | 'National' | 'International' | 'Zonal / Intercollegiate';
+  medalOrRank: string;
+  eventName: string;
+  eventDate: string;
+  photoUrl: string;
+  highlights: string;
+  isFeatured: boolean;
+  sortOrder: number;
+}
+
+export interface SportsGalleryItem {
+  id: number;
+  title: string;
+  mediaType: 'Photo' | 'Video';
+  category: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  eventDate: string;
+  caption: string;
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export interface SportsNotice {
+  id: number;
+  title: string;
+  noticeDate: string;
+  category: string;
+  summary: string;
+  attachmentUrl?: string;
+  registrationLink?: string;
+  isPinned: boolean;
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export interface SportsData {
+  config: SportsPortalConfig;
+  facilities: SportsFacility[];
+  events: SportsEvent[];
+  achievements: SportsAchievement[];
+  gallery: SportsGalleryItem[];
+  notices: SportsNotice[];
+}
+
+export interface FacilityCustomField {
+  label: string;
+  value: string;
+}
+
+export interface FacilitiesPortalConfig {
+  heroBadge: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  customFieldPresets: string[];
+}
+
+export interface FacilityItem {
+  id: number;
+  title: string;
+  category: string;
+  shortSummary: string;
+  descriptionHtml: string;
+  locationBlock: string;
+  capacity: string;
+  timings: string;
+  inchargeName: string;
+  inchargeEmail?: string;
+  inchargePhone?: string;
+  imageUrl: string;
+  brochureUrl?: string;
+  customFields: FacilityCustomField[];
+  isFeatured: boolean;
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export interface FacilitiesData {
+  config: FacilitiesPortalConfig;
+  items: FacilityItem[];
+}
+
 export interface CmsDatabase {
   schemaVersion?: number;
   categories: CmsCategory[];
@@ -902,7 +1157,14 @@ export interface CmsDatabase {
   conferenceSubmissions?: ConferenceSubmission[];
   conferenceRegistrations?: ConferenceRegistration[];
   placements?: PlacementsData;
+  sports?: SportsData;
+  facilities?: FacilitiesData;
   grievances?: GrievanceTicket[];
+  seo?: SeoSettings;
+  hitCounter?: HitCounterStats;
+  visitorLogs?: VisitorLogEntry[];
+  blockedIps?: BlockedIpEntry[];
+  securityConfig?: SecurityConfig;
   users: (CmsUser & { passwordHash: string })[];
   auditLogs: AuditLogEntry[];
   settings: SiteSettings;
@@ -912,11 +1174,9 @@ export interface CmsDatabase {
 
 export interface SearchResultItem {
   id: string;
-  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni' | 'conference' | 'placement';
+  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni' | 'conference' | 'placement' | 'sports' | 'facility';
   title: string;
   subtitle: string;
   url: string;
   meta: string;
 }
-
-

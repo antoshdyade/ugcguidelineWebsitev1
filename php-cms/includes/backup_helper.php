@@ -41,6 +41,14 @@ function backupTablesList(): array
         'placement_notices',
         'placement_custom_sections',
         'grievances',
+        'sports_facilities',
+        'sports_events',
+        'sports_achievements',
+        'sports_gallery',
+        'sports_notices',
+        'facilities',
+        'visitor_logs',
+        'security_blocked_ips',
         'cms_kv_store',
     ];
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ThemeAccessibilityProvider } from './context/ThemeAccessibilityContext';
 import { PublicHeader } from './components/PublicHeader';
 import { PublicFooter } from './components/PublicFooter';
@@ -10,7 +10,10 @@ import { GalleryView, ContactView } from './components/GalleryAndContact';
 import { AlumniPortal } from './components/AlumniPortal';
 import { ConferencePortal } from './components/ConferencePortal';
 import { GrievancePortal, PlacementsPortal } from './components/EngineeringPortals';
+import { SportsPortal } from './components/SportsPortal';
+import { FacilitiesPortal } from './components/FacilitiesPortal';
 import { AdminDashboard } from './components/AdminDashboard';
+import { DEFAULT_SEO_SETTINGS, resolveRouteSeo } from './lib/securityAndSeoLogic';
 import type {
   AlumniData,
   CampusEvent,
@@ -19,11 +22,15 @@ import type {
   CmsPage,
   Conference,
   Department,
+  FacilitiesData,
   GalleryAlbum,
   HeroSlide,
+  HitCounterStats,
   LeadershipProfile,
   PlacementsData,
+  SeoSettings,
   SiteSettings,
+  SportsData,
   TelephoneEntry,
   TickerItem,
 } from './types/cms';
@@ -42,15 +49,36 @@ interface PublicBootstrapData {
   alumni?: AlumniData;
   conferences?: Conference[];
   placements?: PlacementsData;
+  sports?: SportsData;
+  facilities?: FacilitiesData;
   settings: SiteSettings;
+  seo?: SeoSettings;
+  hitCounter?: HitCounterStats;
+}
+
+function upsertMetaTag(attr: 'name' | 'property', key: string, content: string) {
+  if (!key) return;
+  let el = document.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null;
+  if (!content) {
+    if (el) el.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', content);
 }
 
 export default function App() {
   const [data, setData] = useState<PublicBootstrapData | null>(null);
+  const [liveHitCounter, setLiveHitCounter] = useState<HitCounterStats | undefined>(undefined);
   const [error, setError] = useState<string>('');
   const [currentPath, setCurrentPath] = useState<string>(() => {
     return `${window.location.pathname}${window.location.search}` || '/';
   });
+  const lastTrackedPathRef = useRef<string>('');
 
   const loadBootstrap = useCallback(async () => {
     try {
@@ -58,6 +86,9 @@ export default function App() {
       if (!resp.ok) throw new Error('Failed to load institutional data.');
       const json = (await resp.json()) as PublicBootstrapData;
       setData(json);
+      if (json.hitCounter) {
+        setLiveHitCounter(json.hitCounter);
+      }
     } catch (err) {
       setError((err as Error).message);
     }
@@ -85,6 +116,91 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const [pathname, searchStr = ''] = currentPath.split('?');
+  const searchParams = new URLSearchParams(searchStr);
+  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+
+  // Dynamic SEO Metadata, Canonical Link, OpenGraph, Twitter & JSON-LD Injection
+  useEffect(() => {
+    if (!data) return;
+    const seo = data.seo || DEFAULT_SEO_SETTINGS;
+    const meta = resolveRouteSeo(
+      pathname,
+      window.location.origin,
+      data.settings,
+      seo,
+      data.categories,
+      data.pages,
+      data.departments,
+      data.conferences || [],
+    );
+    document.title = meta.title;
+    upsertMetaTag('name', 'description', meta.description);
+    upsertMetaTag('name', 'keywords', meta.keywords);
+    upsertMetaTag('name', 'robots', meta.robots);
+    upsertMetaTag('name', 'google-site-verification', seo.googleVerificationCode || '');
+    upsertMetaTag('name', 'msvalidate.01', seo.bingVerificationCode || '');
+    upsertMetaTag('property', 'og:type', meta.ogType);
+    upsertMetaTag('property', 'og:site_name', data.settings.institutionName);
+    upsertMetaTag('property', 'og:title', meta.title);
+    upsertMetaTag('property', 'og:description', meta.description);
+    upsertMetaTag('property', 'og:url', meta.canonicalUrl);
+    upsertMetaTag('property', 'og:image', meta.ogImageUrl);
+    upsertMetaTag('name', 'twitter:card', 'summary_large_image');
+    upsertMetaTag('name', 'twitter:title', meta.title);
+    upsertMetaTag('name', 'twitter:description', meta.description);
+    upsertMetaTag('name', 'twitter:image', meta.ogImageUrl);
+
+    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', meta.canonicalUrl);
+
+    const existingJsonLd = document.getElementById('svcoer-jsonld');
+    if (meta.jsonLd) {
+      const script = existingJsonLd || document.createElement('script');
+      script.id = 'svcoer-jsonld';
+      script.setAttribute('type', 'application/ld+json');
+      script.textContent = JSON.stringify(meta.jsonLd);
+      if (!existingJsonLd) document.head.appendChild(script);
+    } else if (existingJsonLd) {
+      existingJsonLd.remove();
+    }
+  }, [data, pathname]);
+
+  // Live Hit Counter & Geo Visitor Log Tracker on Public Navigation
+  useEffect(() => {
+    if (!data || isAdminRoute) return;
+    const visitKey = pathname || '/';
+    if (lastTrackedPathRef.current === visitKey) return;
+    lastTrackedPathRef.current = visitKey;
+
+    const controller = new AbortController();
+    fetch('/api/public/track-visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pathname: visitKey,
+        referrer: document.referrer || 'Direct',
+      }),
+      signal: controller.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((counter) => {
+        if (counter && typeof counter.totalHits === 'number') {
+          setLiveHitCounter(counter as HitCounterStats);
+        }
+      })
+      .catch(() => {
+        // Non-blocking hit counter telemetry
+      });
+
+    return () => controller.abort();
+  }, [data, isAdminRoute, pathname]);
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 text-center">
@@ -110,9 +226,6 @@ export default function App() {
       </div>
     );
   }
-
-  const [pathname, searchStr = ''] = currentPath.split('?');
-  const searchParams = new URLSearchParams(searchStr);
 
   const renderMainContent = () => {
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
@@ -206,6 +319,58 @@ export default function App() {
       return <GrievancePortal settings={data.settings} />;
     }
 
+    if (pathname === '/sports') {
+      return (
+        <SportsPortal
+          sports={
+            data.sports || {
+              config: {
+                heroBadge: 'Student Life · Gymkhana & Sports',
+                heroTitle: 'Sports, Athletics & Physical Education',
+                heroSubtitle: 'Campus Sports Complex, Intercollegiate Tournaments & University Medalists',
+                directorName: 'Director of Physical Education',
+                directorTitle: 'Sports & Gymkhana Incharge',
+                directorEmail: 'sports@coe.sveri.ac.in',
+                directorPhone: data.settings.phone,
+                gymkhanaTimings: '06:00 AM – 08:30 AM & 04:00 PM – 07:30 PM',
+                annualFlagshipName: 'Krida Mahotsav',
+                customFields: [],
+              },
+              facilities: [],
+              events: [],
+              achievements: [],
+              gallery: [],
+              notices: [],
+            }
+          }
+          settings={data.settings}
+          initialTab={searchParams.get('tab') || undefined}
+          onNavigate={navigate}
+        />
+      );
+    }
+
+    if (pathname === '/facilities') {
+      return (
+        <FacilitiesPortal
+          facilities={
+            data.facilities || {
+              config: {
+                heroBadge: 'Campus Infrastructure & Amenities',
+                heroTitle: 'Institutional Campus Facilities',
+                heroSubtitle: 'Infrastructural, IT Computing & Student Support Amenities',
+                customFieldPresets: ['Area / Capacity', 'Equipment Count', 'Operating Hours'],
+              },
+              items: [],
+            }
+          }
+          settings={data.settings}
+          initialCategory={searchParams.get('cat') || undefined}
+          onNavigate={navigate}
+        />
+      );
+    }
+
     if (pathname === '/quick-links') {
       return (
         <QuickLinksRepository
@@ -280,7 +445,6 @@ export default function App() {
     );
   };
 
-  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
   const cardRadiusClass =
     data.settings.cardRadius === 'sharp'
       ? 'theme-radius-sharp'
@@ -320,7 +484,12 @@ export default function App() {
           {renderMainContent()}
         </div>
         {!isAdminRoute && (
-          <PublicFooter settings={data.settings} onNavigate={navigate} />
+          <PublicFooter
+            settings={data.settings}
+            hitCounter={liveHitCounter || data.hitCounter}
+            seo={data.seo}
+            onNavigate={navigate}
+          />
         )}
       </div>
     </ThemeAccessibilityProvider>

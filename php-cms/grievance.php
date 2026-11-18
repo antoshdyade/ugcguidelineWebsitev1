@@ -158,7 +158,7 @@ require_once __DIR__ . '/includes/header.php';
     <label class="login-field"><span class="login-label">Supporting Document / Evidence (Optional PDF / JPG / PNG)</span>
       <input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx" class="login-input">
     </label>
-    <?= renderCaptchaWidget('grievance_submit', baseUrl('includes/captcha.php'), 'Grievance Security CAPTCHA *') ?>
+    <?= renderCaptchaWidget('grievance_submit', baseUrl('captcha.php'), 'Grievance Security CAPTCHA *') ?>
     <button type="submit" class="btn-primary" style="width:100%;">Submit Confidential Grievance Ticket</button>
   </form>
 

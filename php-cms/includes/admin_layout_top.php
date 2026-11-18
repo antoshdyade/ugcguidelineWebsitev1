@@ -24,6 +24,10 @@ $icons = [
     'settings'   => $navSvg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
     'users'      => $navSvg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
     'archive'    => $navSvg('<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>'),
+    'search'     => $navSvg('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
+    'activity'   => $navSvg('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'),
+    'trophy'     => $navSvg('<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>'),
+    'landmark'   => $navSvg('<line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/>'),
     'arrowleft'  => $navSvg('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
     'logout'     => $navSvg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>'),
 ];
@@ -132,6 +136,12 @@ $uploadPolicy = isset($pdo)
         <?php if (canAccessResource($user, 'placements') || canAccessResource($user, 'grievances')): ?>
           <a href="<?= e(baseUrl('admin/manage_portals.php')) ?>" class="<?= $activePage === 'manage_portals.php' ? 'active' : '' ?>"><?= $icons['shield'] ?><span>Placements &amp; Grievance Desk</span></a>
         <?php endif; ?>
+        <?php if (canAccessResource($user, 'sports')): ?>
+          <a href="<?= e(baseUrl('admin/manage_sports.php')) ?>" class="<?= $activePage === 'manage_sports.php' ? 'active' : '' ?>"><?= $icons['trophy'] ?><span>Sports &amp; Gymkhana</span></a>
+        <?php endif; ?>
+        <?php if (canAccessResource($user, 'facilities')): ?>
+          <a href="<?= e(baseUrl('admin/manage_facilities.php')) ?>" class="<?= $activePage === 'manage_facilities.php' ? 'active' : '' ?>"><?= $icons['landmark'] ?><span>Campus Facilities</span></a>
+        <?php endif; ?>
         <?php if (canAccessResource($user, 'gallery')): ?>
           <a href="<?= e(baseUrl('admin/manage_gallery.php')) ?>" class="<?= $activePage === 'manage_gallery.php' ? 'active' : '' ?>"><?= $icons['image'] ?><span>Picture Gallery</span></a>
         <?php endif; ?>
@@ -140,6 +150,12 @@ $uploadPolicy = isset($pdo)
         <?php endif; ?>
         <?php if (canAccessResource($user, 'directory')): ?>
           <a href="<?= e(baseUrl('admin/manage_directory.php')) ?>" class="<?= $activePage === 'manage_directory.php' ? 'active' : '' ?>"><?= $icons['phone'] ?><span>Telephone Directory</span></a>
+        <?php endif; ?>
+        <?php if (canAccessResource($user, 'seo')): ?>
+          <a href="<?= e(baseUrl('admin/manage_seo.php')) ?>" class="<?= $activePage === 'manage_seo.php' ? 'active' : '' ?>"><?= $icons['search'] ?><span>SEO Studio &amp; Hit Counter</span></a>
+        <?php endif; ?>
+        <?php if (canAccessResource($user, 'analytics')): ?>
+          <a href="<?= e(baseUrl('admin/manage_logs_security.php')) ?>" class="<?= $activePage === 'manage_logs_security.php' ? 'active' : '' ?>"><?= $icons['activity'] ?><span>Log Analyzer &amp; Security</span></a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'settings')): ?>
           <a href="<?= e(baseUrl('admin/site_settings.php')) ?>" class="<?= $activePage === 'site_settings.php' ? 'active' : '' ?>"><?= $icons['settings'] ?><span>Site Settings, Vision &amp; Theme</span></a>

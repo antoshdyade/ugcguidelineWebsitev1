@@ -56,7 +56,9 @@ try {
         && in_array('placement_custom_sections', $tables, true)
         && in_array('grievances', $tables, true)
         && in_array('alumni_achievers', $tables, true)
-        && in_array('alumni_pledges', $tables, true);
+        && in_array('alumni_pledges', $tables, true)
+        && in_array('sports_facilities', $tables, true)
+        && in_array('facilities', $tables, true);
     if (in_array('users', $tables, true)) {
         $usersCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
     }
@@ -75,24 +77,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
                 'iqac@svcoer.edu.in'    => 'Iqac@123',
                 'coe@coe.sveri.ac.in'   => 'Exam@123',
             ];
-            $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE email = ?');
+            $stmt = $pdo->prepare('UPDATE users SET password_hash = ?, is_active = 1 WHERE LOWER(email) = LOWER(?)');
             foreach ($defaults as $email => $pw) {
                 $stmt->execute([password_hash($pw, PASSWORD_DEFAULT), $email]);
             }
-            $chkCoe = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+            try {
+                $pdo->exec("DELETE FROM cms_kv_store WHERE key_name LIKE 'login_fail_%'");
+            } catch (Throwable $ignored) {}
+            $chkCoe = $pdo->prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1');
             $chkCoe->execute(['coe@coe.sveri.ac.in']);
             if (!$chkCoe->fetch()) {
                 try {
-                    $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('super_admin','content_editor','department_admin','iqac_officer','exam_controller') NOT NULL");
+                    $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('super_admin','content_editor','department_admin','iqac_officer','exam_controller','specific_page_editor') NOT NULL");
                 } catch (Throwable $ignored) {}
                 try {
                     $pdo->prepare('INSERT INTO users (full_name, email, password_hash, role, assigned_department_id, allowed_categories_json) VALUES (?, ?, ?, ?, NULL, ?)')
                         ->execute(['Dr. M. S. Kumbhar (Controller of Examinations)', 'coe@coe.sveri.ac.in', password_hash('Exam@123', PASSWORD_DEFAULT), 'exam_controller', '["examination"]']);
                 } catch (Throwable $ignored) {}
             }
-            $actionMsg = 'All 5 default RBAC account passwords (including coe@coe.sveri.ac.in) re-hashed with native PHP password_hash() and activated.';
+            $actionMsg = 'All 5 default RBAC account passwords re-hashed with native PHP password_hash(), activated, and any IP login lockouts cleared.';
         } else {
             $actionMsg = 'Please import database.sql into your MySQL database first.';
+        }
+    } elseif ($act === 'clear_lockouts') {
+        try {
+            $pdo->exec("DELETE FROM cms_kv_store WHERE key_name LIKE 'login_fail_%'");
+            $actionMsg = 'Cleared all temporary brute-force login rate-limit lockouts.';
+        } catch (Throwable $ex) {
+            $actionMsg = 'Could not clear lockouts: ' . $ex->getMessage();
         }
     } elseif ($act === 'upgrade_schema' && $tablesCount > 0) {
         $alters = [
@@ -131,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         require_once __DIR__ . '/includes/auth.php';
         ensureCmsSchemaUpgraded($pdo);
         $hasHomeComponents = true;
-        $actionMsg = 'Database schema upgraded cleanly with new tables and columns.';
+        $actionMsg = 'Database schema upgraded cleanly with new tables (Sports, Facilities, Poster Presentations, DB Sessions) and columns.';
     }
 }
 ?>
@@ -140,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SVCOER PHP CMS — Webmin & XAMPP Pre-Flight Check</title>
+  <title>SVCOER PHP CMS — Webmin &amp; XAMPP Pre-Flight Check</title>
   <link rel="stylesheet" href="<?= e(assetUrl('assets/css/style.css')) ?>">
 </head>
 <body class="container" style="padding:2rem 1rem;max-width:860px;">
@@ -163,9 +175,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         <tr><td>Apache Root <code>.htaccess</code></td><td><?= $htaccessOk ? 'PASS' : 'WARN' ?></td><td><?= $htaccessOk ? 'Present (MIME types &amp; DirectoryIndex configured)' : 'Upload .htaccess to public_html/' ?></td></tr>
         <tr><td>Uploads Directory</td><td><?= $uploadsWritable ? 'PASS' : 'FAIL' ?></td><td><code>uploads/</code> <?= $uploadsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
         <tr><td>Backups Directory</td><td><?= $backupsWritable ? 'PASS' : 'WARN' ?></td><td><code>backups/</code> <?= $backupsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
-        <tr><td>PHP Sessions</td><td><?= $sessionOk ? 'PASS' : 'FAIL' ?></td><td>Save path: <code><?= e($sessionPath) ?></code></td></tr>
+        <tr><td>PHP Sessions &amp; CAPTCHA</td><td><?= ($sessionOk || $dbConnected) ? 'PASS' : 'FAIL' ?></td><td>Save path: <code><?= e($sessionPath) ?></code> <?= $dbConnected ? '· MySQL DB Session + HMAC CAPTCHA fallback active' : '' ?></td></tr>
         <tr><td>MySQL Connection</td><td><?= $dbConnected ? 'PASS' : 'FAIL' ?></td><td><?= $dbConnected ? ('Connected to ' . e(DB_NAME) . " ($tablesCount tables, $usersCount users)") : e($dbError) ?></td></tr>
-        <tr><td>Enhanced Schema (Portals, Conferences, Alumni &amp; v4 Tables)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v4 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
+        <tr><td>Enhanced Schema (Sports, Facilities, Portals, Conferences &amp; v7)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v7 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
       </tbody>
     </table>
 
@@ -178,6 +190,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         <form method="post">
           <input type="hidden" name="action" value="reset_passwords">
           <button type="submit" class="btn-primary">Verify &amp; Reset Default RBAC Passwords (5 Accounts)</button>
+        </form>
+        <form method="post">
+          <input type="hidden" name="action" value="clear_lockouts">
+          <button type="submit" class="btn-secondary">Clear IP Login Lockouts</button>
         </form>
         <a href="<?= e(baseUrl('admin/login.php')) ?>" class="btn-secondary">Open Admin Login &rarr;</a>
         <a href="<?= e(baseUrl('index.php')) ?>" class="btn-secondary">Open Public Site &rarr;</a>

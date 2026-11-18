@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 7,
   "categories": [
     {
       "id": 1,
@@ -10,7 +10,8 @@
       "sortOrder": 1,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Institutional overview, Act & Statutes, IDP, Affiliating University, NAAC/NBA/NIRF status, UGC 2(f)/12B, Annual Reports & Audited Accounts."
+      "description": "Institutional overview, Act & Statutes, IDP, Affiliating University, NAAC/NBA/NIRF status, UGC 2(f)/12B, Annual Reports & Audited Accounts.",
+      "menuLocation": "main"
     },
     {
       "id": 2,
@@ -21,7 +22,8 @@
       "sortOrder": 2,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Statutory officers, Governing Body, Academic Council, Board of Studies, Finance Committee, ICC & Academic Leadership profiles."
+      "description": "Statutory officers, Governing Body, Academic Council, Board of Studies, Finance Committee, ICC & Academic Leadership profiles.",
+      "menuLocation": "main"
     },
     {
       "id": 3,
@@ -32,7 +34,8 @@
       "sortOrder": 3,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Academic Programs, Academic Calendar, OBE Curriculum, Department Microsites, Faculty Directory, IQAC, Central Library & Collaborations."
+      "description": "Academic Programs, Academic Calendar, OBE Curriculum, Department Microsites, Faculty Directory, IQAC, Central Library & Collaborations.",
+      "menuLocation": "main"
     },
     {
       "id": 9,
@@ -43,7 +46,8 @@
       "sortOrder": 4,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Controller of Examinations, Autonomous Exam Ordinances, Time Tables, Results, Photocopy/Revaluation, ABC/NAD Verification & Convocation."
+      "description": "Controller of Examinations, Autonomous Exam Ordinances, Time Tables, Results, Photocopy/Revaluation, ABC/NAD Verification & Convocation.",
+      "menuLocation": "main"
     },
     {
       "id": 4,
@@ -54,7 +58,8 @@
       "sortOrder": 5,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Information Brochure / Prospectus, FRA Approved Fee Structure, DTE/CAP Admission Process, and UGC Fee Refund Policy."
+      "description": "Information Brochure / Prospectus, FRA Approved Fee Structure, DTE/CAP Admission Process, and UGC Fee Refund Policy.",
+      "menuLocation": "main"
     },
     {
       "id": 5,
@@ -65,7 +70,8 @@
       "sortOrder": 6,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Research & Development Cell, Funded Projects, Consultancy, Foreign & Industry Collaborations, Incubation Centre & Central Facilities."
+      "description": "Research & Development Cell, Funded Projects, Consultancy, Foreign & Industry Collaborations, Incubation Centre & Central Facilities.",
+      "menuLocation": "main"
     },
     {
       "id": 6,
@@ -76,7 +82,8 @@
       "sortOrder": 7,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Sports, NCC/NSS, Hostels, Training & Placement, SGRC, Health Centre, Anti-Ragging, Equal Opportunity, SEDG & Barrier-Free Campus."
+      "description": "Sports, NCC/NSS, Hostels, Training & Placement, SGRC, Health Centre, Anti-Ragging, Equal Opportunity, SEDG & Barrier-Free Campus.",
+      "menuLocation": "more"
     },
     {
       "id": 7,
@@ -87,7 +94,8 @@
       "sortOrder": 8,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "Registered Alumni Association, chapter events, portal registration & distinguished alumni."
+      "description": "Registered Alumni Association, chapter events, portal registration & distinguished alumni.",
+      "menuLocation": "more"
     },
     {
       "id": 8,
@@ -98,7 +106,8 @@
       "sortOrder": 9,
       "showInMenu": true,
       "showOnHome": true,
-      "description": "RTI CPIO/Appellate details, Circulars & Notices, Announcements, Newsletters, Events, Job Openings, Reservation Roster & Study in India."
+      "description": "RTI CPIO/Appellate details, Circulars & Notices, Announcements, Newsletters, Events, Job Openings, Reservation Roster & Study in India.",
+      "menuLocation": "more"
     }
   ],
   "pages": [
@@ -1656,7 +1665,7 @@
       "assignedDepartmentId": null,
       "isActive": true,
       "passwordHash": "335e6ddf4ddc588b85ec23d250a58c44:a1263e80eb984bde57f804847c0500aa53f1d36ca07d151f067608e3878949b9917b20ba5b0bc8b143a8d992c737a5944c3aceb5dfa45a39b61f4e97481e3dce",
-      "lastLoginAt": "2026-11-16 10:45"
+      "lastLoginAt": "2026-11-18 09:05"
     },
     {
       "id": 2,
@@ -1706,6 +1715,267 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": 137,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_CONF_PAPER",
+      "entityType": "ConferencePaper",
+      "entityTitle": "CONF-2026-0002",
+      "timestamp": "2026-11-18 09:05:42"
+    },
+    {
+      "id": 136,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in (department_admin)",
+      "timestamp": "2026-11-18 09:05:42"
+    },
+    {
+      "id": 135,
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "UPDATE_SPORTS_CONFIG",
+      "entityType": "Sports",
+      "entityTitle": "Sports, Athletics & Campus Recreation Complex",
+      "timestamp": "2026-11-18 09:05:42"
+    },
+    {
+      "id": 134,
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "UPDATE_FACILITIES_CONFIG",
+      "entityType": "Facilities",
+      "entityTitle": "Institutional Facilities & Smart Campus Infrastructure",
+      "timestamp": "2026-11-18 09:05:42"
+    },
+    {
+      "id": 133,
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in",
+      "timestamp": "2026-11-18 09:05:42"
+    },
+    {
+      "id": 132,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in (department_admin)",
+      "timestamp": "2026-11-18 09:05:41"
+    },
+    {
+      "id": 131,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-18 09:05:41"
+    },
+    {
+      "id": 130,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in (department_admin)",
+      "timestamp": "2026-11-18 09:05:12"
+    },
+    {
+      "id": 129,
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "UPDATE_SPORTS_CONFIG",
+      "entityType": "Sports",
+      "entityTitle": "Sports, Athletics & Campus Recreation Complex",
+      "timestamp": "2026-11-18 09:05:12"
+    },
+    {
+      "id": 128,
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "UPDATE_FACILITIES_CONFIG",
+      "entityType": "Facilities",
+      "entityTitle": "Institutional Facilities & Smart Campus Infrastructure",
+      "timestamp": "2026-11-18 09:05:12"
+    },
+    {
+      "id": 127,
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in",
+      "actorRole": "department_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in",
+      "timestamp": "2026-11-18 09:05:12"
+    },
+    {
+      "id": 126,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in (department_admin)",
+      "timestamp": "2026-11-18 09:05:12"
+    },
+    {
+      "id": 125,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "DELETE_USER",
+      "entityType": "User",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in (department_admin)",
+      "timestamp": "2026-11-18 09:05:12"
+    },
+    {
+      "id": 124,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-18 09:05:12"
+    },
+    {
+      "id": 123,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "CREATE_USER",
+      "entityType": "User",
+      "entityTitle": "temp.rbac.verify@svcoer.edu.in (department_admin)",
+      "timestamp": "2026-11-18 09:04:55"
+    },
+    {
+      "id": 122,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-18 09:04:55"
+    },
+    {
+      "id": 121,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-18 09:04:32"
+    },
+    {
+      "id": 120,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "UNBLOCK_IP",
+      "entityType": "Security",
+      "entityTitle": "198.51.100.77",
+      "timestamp": "2026-11-17 12:40:10"
+    },
+    {
+      "id": 119,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "BLOCK_IP",
+      "entityType": "Security",
+      "entityTitle": "198.51.100.77 (Smoke Test Ban)",
+      "timestamp": "2026-11-17 12:40:10"
+    },
+    {
+      "id": 118,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-17 12:40:10"
+    },
+    {
+      "id": 117,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "BLOCK_IP",
+      "entityType": "Security",
+      "entityTitle": "198.51.100.77 (Smoke Test Ban)",
+      "timestamp": "2026-11-17 12:40:01"
+    },
+    {
+      "id": 116,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_VISITOR_LOGS",
+      "entityType": "Analytics",
+      "entityTitle": "Exported 19 logs (LOG)",
+      "timestamp": "2026-11-17 12:40:01"
+    },
+    {
+      "id": 115,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-17 12:40:01"
+    },
+    {
+      "id": 114,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_VISITOR_LOGS",
+      "entityType": "Analytics",
+      "entityTitle": "Exported 18 logs (LOG)",
+      "timestamp": "2026-11-17 12:39:45"
+    },
+    {
+      "id": 113,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "EXPORT_VISITOR_LOGS",
+      "entityType": "Analytics",
+      "entityTitle": "Exported 18 logs (CSV)",
+      "timestamp": "2026-11-17 12:39:45"
+    },
+    {
+      "id": 112,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-17 12:39:45"
+    },
+    {
+      "id": 111,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-17 12:39:33"
+    },
+    {
+      "id": 110,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-17 12:39:18"
+    },
+    {
+      "id": 109,
+      "actorEmail": "admin@svcoer.edu.in",
+      "actorRole": "super_admin",
+      "action": "LOGIN",
+      "entityType": "Session",
+      "entityTitle": "admin@svcoer.edu.in",
+      "timestamp": "2026-11-17 12:38:57"
+    },
     {
       "id": 108,
       "actorEmail": "admin@svcoer.edu.in",
@@ -2922,7 +3192,178 @@
         "ctaLink": "/conference/ai-edge-workshop-2026"
       }
     ],
-    "schemaVersion": 3
+    "portalMenuItems": [
+      {
+        "id": 1,
+        "label": "Conferences",
+        "url": "/conferences",
+        "menuLocation": "main",
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "label": "Placements",
+        "url": "/placements",
+        "menuLocation": "main",
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "label": "Grievance & Anti-Ragging",
+        "url": "/grievance",
+        "menuLocation": "main",
+        "sortOrder": 3
+      },
+      {
+        "id": 4,
+        "label": "Alumni",
+        "url": "/alumni",
+        "menuLocation": "main",
+        "sortOrder": 4
+      },
+      {
+        "id": 5,
+        "label": "Gallery",
+        "url": "/gallery",
+        "menuLocation": "more",
+        "sortOrder": 5
+      },
+      {
+        "id": 6,
+        "label": "Contact Us",
+        "url": "/contact",
+        "menuLocation": "more",
+        "sortOrder": 6
+      },
+      {
+        "id": 7,
+        "label": "Quick Links & Disclosures",
+        "url": "/quick-links",
+        "menuLocation": "more",
+        "sortOrder": 7
+      },
+      {
+        "id": 8,
+        "label": "Facilities",
+        "url": "/facilities",
+        "menuLocation": "main",
+        "sortOrder": 2
+      }
+    ],
+    "grievancePortal": {
+      "heroTitle": "Online Student Grievance Redressal (SGRC) & Anti-Ragging Helpdesk",
+      "heroSubtitle": "AICTE & UGC Statutory 2023 Compliant Mechanism — Lodge confidential academic, examination, scholarship, hostel, ICC, or anti-ragging complaints and track committee action online.",
+      "ombudspersonName": "Hon. Dr. S. R. Chougule (Retd. Vice-Chancellor)",
+      "ombudspersonDesignation": "Appointed Institutional Ombudsperson (UGC SGRC Regulations 2023)",
+      "ombudspersonEmail": "ombudsperson@coe.sveri.ac.in",
+      "ombudspersonPhone": "+91-02186-216063",
+      "ombudspersonPhotoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+      "antiRaggingSquadPhone": "+91-94220-88100 (24x7 Squad)",
+      "iccCoordinatorName": "Dr. M. S. Kulkarni",
+      "iccCoordinatorEmail": "icc@coe.sveri.ac.in",
+      "ugcAffidavitUrl": "https://www.antiragging.in/",
+      "slaAcknowledgementHours": "24 Hours",
+      "slaResolutionDays": "15 Working Days",
+      "charterHtml": "<h3>Statutory Escalation &amp; Redressal SLA</h3><table class=\"cms-table cms-table-navy\"><thead><tr><th>Stage</th><th>Authority / Committee</th><th>Turnaround Timeline</th><th>Action Protocol</th></tr></thead><tbody><tr><td>Level 1</td><td>Departmental / Hostel Nodal Officer</td><td>Within 48 Hours</td><td>Ticket acknowledgement &amp; preliminary inquiry</td></tr><tr><td>Level 2</td><td>Institutional Student Grievance Redressal Committee (SGRC)</td><td>Within 15 Working Days</td><td>Formal hearing, documentary review &amp; written order</td></tr><tr><td>Level 3</td><td>Institutional Ombudsperson</td><td>Appeal within 15 Days</td><td>Independent appellate adjudication (UGC Guidelines)</td></tr><tr><td>Emergency</td><td>Anti-Ragging Squad / ICC Cell</td><td>Immediate (Zero Tolerance)</td><td>24x7 campus intervention, interim protection &amp; FIR protocol if warranted</td></tr></tbody></table>",
+      "committeeMembers": [
+        {
+          "id": 1,
+          "name": "Dr. Prashant M. Pawar",
+          "roleTitle": "Chairperson, SGRC",
+          "designation": "Principal & Professor",
+          "committeeName": "Student Grievance Redressal Committee",
+          "email": "principal@coe.sveri.ac.in",
+          "phone": "+91-02186-216063",
+          "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+          "sortOrder": 1
+        },
+        {
+          "id": 2,
+          "name": "Prof. S. S. Deshmukh",
+          "roleTitle": "Convener, Anti-Ragging Squad",
+          "designation": "Dean Student Affairs",
+          "committeeName": "24x7 Anti-Ragging Flying Squad",
+          "email": "antiragging@coe.sveri.ac.in",
+          "phone": "+91-94220-88100",
+          "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+          "sortOrder": 2
+        },
+        {
+          "id": 3,
+          "name": "Dr. M. S. Kulkarni",
+          "roleTitle": "Presiding Officer, ICC",
+          "designation": "Professor, Electronics & Telecom",
+          "committeeName": "Internal Complaint Committee (Women Safety)",
+          "email": "icc@coe.sveri.ac.in",
+          "phone": "+91-02186-216065",
+          "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
+          "sortOrder": 3
+        }
+      ]
+    },
+    "intakePrograms": [
+      {
+        "id": 1,
+        "code": "622024510",
+        "programName": "B.Tech in Computer Science & Engineering",
+        "level": "UG (4 Years)",
+        "sanctionedIntake": 180,
+        "accreditationStatus": "NBA Accredited · Autonomous",
+        "annualFee": "₹1,14,500",
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "code": "622037210",
+        "programName": "B.Tech in Electronics & Telecommunication Engg.",
+        "level": "UG (4 Years)",
+        "sanctionedIntake": 120,
+        "accreditationStatus": "NBA Accredited · Autonomous",
+        "annualFee": "₹1,14,500",
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "code": "622061210",
+        "programName": "B.Tech in Mechanical Engineering",
+        "level": "UG (4 Years)",
+        "sanctionedIntake": 120,
+        "accreditationStatus": "NBA Accredited · Autonomous",
+        "annualFee": "₹1,14,500",
+        "sortOrder": 3
+      },
+      {
+        "id": 4,
+        "code": "622019110",
+        "programName": "B.Tech in Civil Engineering",
+        "level": "UG (4 Years)",
+        "sanctionedIntake": 60,
+        "accreditationStatus": "NAAC A+ · Autonomous",
+        "annualFee": "₹1,14,500",
+        "sortOrder": 4
+      },
+      {
+        "id": 5,
+        "code": "622029310",
+        "programName": "B.Tech in Electrical Engineering",
+        "level": "UG (4 Years)",
+        "sanctionedIntake": 60,
+        "accreditationStatus": "NAAC A+ · Autonomous",
+        "annualFee": "₹1,14,500",
+        "sortOrder": 5
+      },
+      {
+        "id": 6,
+        "code": "622010110",
+        "programName": "Master of Business Administration (MBA) & M.Tech",
+        "level": "PG (2 Years)",
+        "sanctionedIntake": 96,
+        "accreditationStatus": "AICTE & PAHSUS Approved",
+        "annualFee": "₹88,000",
+        "sortOrder": 6
+      }
+    ],
+    "schemaVersion": 7
   },
   "alumni": {
     "settings": {
@@ -3521,6 +3962,37 @@
           "caption": "Present in-person at Pandharpur or virtually via dedicated track rooms.",
           "imageUrl": "/src/assets/images/campus_convocation_1794512597749.jpg"
         }
+      ],
+      "enablePosterPresentation": true,
+      "posterDimensions": "A0 Portrait (841 x 1189 mm)",
+      "posterGuidelinesHtml": "<p>Accepted poster presenters must display an A0 vertical poster (841 &times; 1189 mm) in the Research Atrium Expo Hall. Include Title, Authors &amp; Affiliation, Problem Statement, Architecture/Methodology, Quantitative Benchmarks, and QR code to demo/repository.</p>",
+      "posterTemplateUrl": "/quick-links",
+      "posterPrizesText": "Best Poster Awards (₹15,000 Prize Pool + Excellence Certificates per Track)",
+      "posterItems": [
+        {
+          "id": 1,
+          "posterCode": "PST-101",
+          "title": "Federated TinyML Fault Diagnosis for Rural Microgrids",
+          "authors": "S. V. Deshpande, Dr. A. K. Kulkarni",
+          "affiliation": "Dept. of Electrical Engg., SVCOER Pandharpur",
+          "track": "Track 3: EV Powertrains & Smart Microgrids",
+          "abstract": "Edge inference quantization pipeline achieving 96.4% transformer fault detection accuracy on ESP32-S3 hardware.",
+          "imageUrl": "/src/assets/images/poster_session_1794991330669.jpg",
+          "awardNote": "Featured Track-3 Poster",
+          "sortOrder": 1
+        },
+        {
+          "id": 2,
+          "posterCode": "PST-102",
+          "title": "RISC-V Hardware Root-of-Trust Accelerator for Smart Sensors",
+          "authors": "P. R. Kulkarni, Dr. R. B. Patwardhan",
+          "affiliation": "Dept. of E&TC Engg., SVCOER Pandharpur",
+          "track": "Track 2: VLSI, Embedded Robotics & 6G IoT Networks",
+          "abstract": "Ultra-low-power AES-GCM + SHA-256 co-processor synthesized at 45nm technology node.",
+          "imageUrl": "/src/assets/images/hero_robotics_lab_1794512596365.jpg",
+          "awardNote": "Industry Jury Nominee",
+          "sortOrder": 2
+        }
       ]
     },
     {
@@ -3624,7 +4096,13 @@
           "caption": "Submit hardware demos, NEP pedagogy case studies, and student research papers.",
           "imageUrl": "/src/assets/images/hero_library_atrium_1794512596890.jpg"
         }
-      ]
+      ],
+      "enablePosterPresentation": true,
+      "posterDimensions": "A0 Portrait (841 x 1189 mm)",
+      "posterGuidelinesHtml": "<p>Authors presenting in the Poster Presentation track should prepare an A0 vertical poster (841 &times; 1189 mm) covering problem statement, methodology, experimental results, and key takeaways.</p>",
+      "posterTemplateUrl": "",
+      "posterPrizesText": "Best Poster Awards & Certificates per Track",
+      "posterItems": []
     }
   ],
   "conferenceSubmissions": [
@@ -3735,7 +4213,11 @@
         "batchYear": "2026",
         "photoUrl": "/src/assets/images/campus_convocation_1794512597749.jpg",
         "quote": "Daily DSA peer groups and 6-month autonomous industrial internships gave me confidence to crack top product engineering rounds directly from Pandharpur.",
-        "sortOrder": 1
+        "sortOrder": 1,
+        "entryType": "Campus Placement",
+        "headline": "Microsoft India / Enterprise Tech — ₹22.5 LPA",
+        "roleOrAward": "Selected Scholar",
+        "isFeatured": true
       },
       {
         "id": 2,
@@ -3746,6 +4228,135 @@
         "batchYear": "2026",
         "photoUrl": "/src/assets/images/leadership_principal_1794512597061.jpg",
         "quote": "Hands-on CAD/FEA training in our Centre of Excellence prepared me thoroughly for core R&D technical interviews.",
+        "sortOrder": 2,
+        "entryType": "Campus Placement",
+        "headline": "Atlas Copco India — ₹12.0 LPA",
+        "roleOrAward": "Selected Scholar",
+        "isFeatured": true
+      }
+    ],
+    "brochureUrl": "/quick-links?q=Placement",
+    "brochureLabel": "Download T&P Information Brochure & Recruiter Kit",
+    "upcomingDrives": [
+      {
+        "id": 1,
+        "company": "Persistent Systems",
+        "roleTitle": "Software Engineer (Full Stack & Cloud)",
+        "packageLpa": "₹7.5 – ₹11.0 LPA",
+        "driveDate": "2026-12-08",
+        "eligibleBranches": "B.Tech CSE, E&TC, Electrical (CGPA >= 7.0)",
+        "applyUrl": "/placements",
+        "status": "open",
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "company": "Bharat Forge & Atlas Copco Joint Pool Drive",
+        "roleTitle": "Graduate Engineer Trainee (R&D / Design)",
+        "packageLpa": "₹6.5 – ₹9.2 LPA",
+        "driveDate": "2026-12-14",
+        "eligibleBranches": "B.Tech Mechanical, Civil, Electrical",
+        "applyUrl": "/placements",
+        "status": "upcoming",
+        "sortOrder": 2
+      }
+    ],
+    "notices": [
+      {
+        "id": 1,
+        "title": "Pre-Placement Talk & Technical Test Schedule — Persistent Systems (2026 Batch)",
+        "noticeDate": "2026-12-02",
+        "category": "Campus Drive Notice",
+        "summary": "Eligible students from CSE, E&TC, and Electrical with >= 7.0 CGPA and zero active backlogs must carry two printed resumes and college ID cards by 09:00 AM at Seminar Hall A.",
+        "attachmentUrl": "/quick-links",
+        "linkLabel": "View Preparation Kit",
+        "isPinned": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "title": "Mandatory Final-Year Resume Verification & T&P Portal Profile Audit",
+        "noticeDate": "2026-11-28",
+        "category": "Student Circular",
+        "summary": "All B.Tech & MBA 2026 graduating students must upload verified Semester VI mark sheets and AICTE/NPTEL certificates in the departmental T&P coordinator office.",
+        "attachmentUrl": "",
+        "linkLabel": "",
+        "isPinned": false,
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "title": "JLPT N5 / N4 Japanese Technical Language & Global Internship Batch Enrolment",
+        "noticeDate": "2026-11-24",
+        "category": "Training Schedule",
+        "summary": "Registrations open for Third-Year Mechanical, CSE, and E&TC students opting for Indo-Japan industrial internship tracks and campus interviews.",
+        "attachmentUrl": "/contact",
+        "linkLabel": "Contact T&P Office",
+        "isPinned": false,
+        "sortOrder": 3
+      }
+    ],
+    "customSections": [
+      {
+        "id": 1,
+        "title": "Four-Year Employability & Career Readiness Roadmap",
+        "subtitle": "Structured technical aptitude, communication, coding, and industry certification calendar",
+        "sectionType": "table",
+        "tableHeaders": [
+          "Academic Year",
+          "Focus Track",
+          "Key Modules & Certifications",
+          "Minimum Hours"
+        ],
+        "tableRows": [
+          [
+            "Second Year (SY)",
+            "Foundation & Communication",
+            "Soft Skills, Technical Writing, C/Python Lab, GitHub Portfolio",
+            "60 Hours / Sem"
+          ],
+          [
+            "Third Year (TY)",
+            "Aptitude, DSA & Core Domain",
+            "Quantitative Aptitude, Data Structures, CAD/FEA & VLSI Tools, Mock Tests",
+            "90 Hours / Sem"
+          ],
+          [
+            "Final Year (B.Tech)",
+            "Company-Specific Finishing School",
+            "Full-Stack Projects, GD/PI Panels, 6-Month Industry Internship",
+            "120 Hours / Sem"
+          ]
+        ],
+        "isPublished": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "title": "Industry Collaboration, Internships & Assessment Infrastructure",
+        "subtitle": "Dedicated facilities inside the Training & Placement Block",
+        "sectionType": "cards",
+        "cards": [
+          {
+            "title": "180-Seat Online Assessment Lab",
+            "subtitle": "High-Speed LAN & Proctored Terminals",
+            "badge": "Infrastructure",
+            "description": "Conducts AMCAT, TCS NQT, CoCubes, and coding rounds simultaneously with UPS backup."
+          },
+          {
+            "title": "6 Dedicated Interview & GD Suites",
+            "subtitle": "Corporate Hospitality Wing",
+            "badge": "Recruitment",
+            "description": "Sound-insulated technical interview cabins, boardroom, and remote video conferencing facility."
+          },
+          {
+            "title": "Japanese & Foreign Language Cell",
+            "subtitle": "JLPT N5 / N4 Training Partner",
+            "badge": "Global Careers",
+            "description": "Prepares engineering students for Japanese core manufacturing and IT placements."
+          }
+        ],
+        "isPublished": true,
         "sortOrder": 2
       }
     ]
@@ -3768,6 +4379,1122 @@
       "updatedAt": "2026-11-04"
     }
   ],
+  "seo": {
+    "defaultTitle": "SVERI's College of Engineering, Pandharpur (Autonomous)",
+    "titleSuffix": "SVCOER Pandharpur (Autonomous)",
+    "defaultDescription": "Official institutional portal of SVERI's College of Engineering, Pandharpur (Autonomous). Explore B.Tech/M.Tech programs, Placements, R&D Conferences, Alumni Network, and UGC Disclosures.",
+    "defaultKeywords": "SVCOER Pandharpur, SVERI Engineering College, Autonomous Engineering College Maharashtra, Solapur University, B.Tech Pandharpur, Placements, NBA Accredited, NAAC",
+    "canonicalBaseUrl": "https://coe.sveri.ac.in",
+    "ogImageUrl": "/src/assets/images/hero_campus_aerial_1794512596442.jpg",
+    "schemaOrgType": "CollegeOrUniversity",
+    "enableJsonLd": true,
+    "allowIndexing": true,
+    "googleVerificationCode": "",
+    "bingVerificationCode": "",
+    "robotsTxtCustom": "",
+    "showHitCounterInFooter": true,
+    "hitCounterStartOffset": 12450,
+    "pageOverrides": [
+      {
+        "id": "seo-home",
+        "routePattern": "/",
+        "title": "SVERI's College of Engineering, Pandharpur (Autonomous) | Official Portal",
+        "description": "Empowered Autonomous Engineering Institute affiliated to PAH Solapur University with NBA/NAAC accreditation, 250+ campus recruiters, and UGC Self-Disclosure compliance.",
+        "keywords": "SVERI Pandharpur, Autonomous Engineering College, Admissions, Placements, UGC NEP 2020"
+      },
+      {
+        "id": "seo-placements",
+        "routePattern": "/placements",
+        "title": "Training & Placement Cell (T&P) | Campus Drives & Statistics",
+        "description": "Explore SVERI Pandharpur branch-wise placement statistics, upcoming campus drives, student notices, and achiever offers across IT and Core Engineering.",
+        "keywords": "SVERI Placements, Campus Drives, Training and Placement Cell, Engineering Packages"
+      },
+      {
+        "id": "seo-conferences",
+        "routePattern": "/conferences",
+        "title": "International Conferences, Workshops & Research Conclaves | SVCOER",
+        "description": "Submit peer-reviewed research papers, explore technical tracks, register as delegates, and attend IEEE/Scopus aligned conferences at SVERI Pandharpur.",
+        "keywords": "Engineering Conference Pandharpur, Call for Papers, R&D Workshops, IEEE Conference"
+      },
+      {
+        "id": "seo-alumni",
+        "routePattern": "/alumni",
+        "title": "SVERI Alumni Association | Directory, Mentorship & Career Portal",
+        "description": "Connect with global SVCOER engineering alumni chapters, explore alumni job referrals, post discussions, and support student scholarships.",
+        "keywords": "SVERI Alumni, Alumni Job Portal, Engineering Alumni Association Pandharpur"
+      }
+    ]
+  },
+  "hitCounter": {
+    "totalHits": 12493,
+    "todayHits": 2,
+    "todayDate": "2026-11-18",
+    "uniqueVisitors": 4122,
+    "uniqueTodayHashes": [
+      "f74f42b0dcc6acf0"
+    ],
+    "lastHitAt": "2026-11-18 08:51:32"
+  },
+  "visitorLogs": [
+    {
+      "id": 29,
+      "timestamp": "2026-11-18 09:05:42",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "node",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in"
+    },
+    {
+      "id": 28,
+      "timestamp": "2026-11-18 09:05:41",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "node",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 27,
+      "timestamp": "2026-11-18 09:05:12",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "node",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "temp.rbac.verify@svcoer.edu.in"
+    },
+    {
+      "id": 26,
+      "timestamp": "2026-11-18 09:05:12",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "node",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 25,
+      "timestamp": "2026-11-18 09:04:55",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "node",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 24,
+      "timestamp": "2026-11-18 09:04:32",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "node",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 23,
+      "timestamp": "2026-11-18 08:51:32",
+      "ipAddress": "2409:40f2:40:60ce:f4bf:bcf6:f855:f506",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Solapur (University Road) (ISP Subnet)",
+      "method": "GET",
+      "path": "/",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "referrer": "https://aistudio.google.com/",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36",
+      "responseTimeMs": 9,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 22,
+      "timestamp": "2026-11-18 08:46:22",
+      "ipAddress": "2409:40f2:40:60ce:f4bf:bcf6:f855:f506",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Solapur (University Road) (ISP Subnet)",
+      "method": "GET",
+      "path": "/conferences",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "referrer": "https://aistudio.google.com/",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36",
+      "responseTimeMs": 9,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 21,
+      "timestamp": "2026-11-17 12:40:10",
+      "ipAddress": "198.51.100.77",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pune (Metro Area) (ISP Subnet)",
+      "method": "GET",
+      "path": "/api/public/bootstrap",
+      "statusCode": 403,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 0,
+      "severity": "critical",
+      "eventType": "security_block",
+      "threatCategory": "IP Blocklist Enforced (Smoke Test Ban)"
+    },
+    {
+      "id": 20,
+      "timestamp": "2026-11-17 12:40:10",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 19,
+      "timestamp": "2026-11-17 12:40:01",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 18,
+      "timestamp": "2026-11-17 12:39:45",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 17,
+      "timestamp": "2026-11-17 12:39:33",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 16,
+      "timestamp": "2026-11-17 12:39:18",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 15,
+      "timestamp": "2026-11-17 12:38:57",
+      "ipAddress": "127.0.0.1",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Campus LAN / Local Gateway)",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 1,
+      "severity": "info",
+      "eventType": "admin_login",
+      "actorEmail": "admin@svcoer.edu.in"
+    },
+    {
+      "id": 14,
+      "timestamp": "2026-11-17 12:38:32",
+      "ipAddress": "203.0.113.55",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Tamil Nadu",
+      "area": "Chennai (Guindy / OMR) (ISP Subnet)",
+      "method": "GET",
+      "path": "/.env",
+      "statusCode": 403,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 1,
+      "severity": "critical",
+      "eventType": "security_block",
+      "threatCategory": "IP Blocklist Enforced (Auto-blocked: SQL Injection Attempt)"
+    },
+    {
+      "id": 13,
+      "timestamp": "2026-11-17 12:38:32",
+      "ipAddress": "203.0.113.55",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Tamil Nadu",
+      "area": "Chennai (Guindy / OMR) (ISP Subnet)",
+      "method": "GET",
+      "path": "/api/search?q=%27%20UNION%20SELECT%20%2A%20FROM%20users--",
+      "statusCode": 403,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "Direct",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 3,
+      "severity": "critical",
+      "eventType": "security_block",
+      "threatCategory": "SQL Injection Attempt"
+    },
+    {
+      "id": 12,
+      "timestamp": "2026-11-17 12:38:32",
+      "ipAddress": "49.36.90.44",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pune (Metro Area)",
+      "method": "GET",
+      "path": "/placements",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "https://google.com/",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 8,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 11,
+      "timestamp": "2026-11-17 12:38:21",
+      "ipAddress": "49.36.90.44",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pune (Metro Area)",
+      "method": "GET",
+      "path": "/placements",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "https://google.com/",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 8,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 10,
+      "timestamp": "2026-11-17 12:37:51",
+      "ipAddress": "49.36.90.44",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pune (Metro Area)",
+      "method": "GET",
+      "path": "/",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Other",
+      "os": "Other",
+      "referrer": "https://google.com/",
+      "userAgent": "Python-urllib/3.10",
+      "responseTimeMs": 8,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 1,
+      "timestamp": "2026-11-17 09:42:18",
+      "ipAddress": "103.21.124.18",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pandharpur (Solapur District)",
+      "method": "GET",
+      "path": "/",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Chrome",
+      "os": "Windows",
+      "referrer": "https://www.google.com/",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0",
+      "responseTimeMs": 14,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 2,
+      "timestamp": "2026-11-17 09:51:04",
+      "ipAddress": "49.36.90.44",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Pune (Hinjewadi IT Park)",
+      "method": "GET",
+      "path": "/placements",
+      "statusCode": 200,
+      "deviceType": "Mobile",
+      "browser": "Chrome Mobile",
+      "os": "Android",
+      "referrer": "https://www.linkedin.com/",
+      "userAgent": "Mozilla/5.0 (Linux; Android 14) Chrome/125.0 Mobile",
+      "responseTimeMs": 19,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 3,
+      "timestamp": "2026-11-17 10:05:37",
+      "ipAddress": "103.54.18.92",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Mumbai (BKC / Andheri)",
+      "method": "GET",
+      "path": "/department/computer-science",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Edge",
+      "os": "Windows",
+      "referrer": "Direct",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0) Edg/126.0",
+      "responseTimeMs": 12,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 4,
+      "timestamp": "2026-11-17 10:18:22",
+      "ipAddress": "106.51.72.14",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Karnataka",
+      "area": "Bengaluru (Electronic City)",
+      "method": "GET",
+      "path": "/alumni",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Safari",
+      "os": "macOS",
+      "referrer": "https://coe.sveri.ac.in/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15",
+      "responseTimeMs": 16,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 5,
+      "timestamp": "2026-11-17 10:29:11",
+      "ipAddress": "14.139.120.5",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Maharashtra",
+      "area": "Solapur (University Road)",
+      "method": "GET",
+      "path": "/conferences",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Firefox",
+      "os": "Linux",
+      "referrer": "https://scholar.google.com/",
+      "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) Firefox/127.0",
+      "responseTimeMs": 11,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 6,
+      "timestamp": "2026-11-17 10:44:02",
+      "ipAddress": "104.28.42.19",
+      "country": "United States",
+      "countryCode": "US",
+      "state": "California",
+      "area": "Santa Clara (Silicon Valley)",
+      "method": "GET",
+      "path": "/conference/icaest-2026",
+      "statusCode": 200,
+      "deviceType": "Desktop",
+      "browser": "Chrome",
+      "os": "macOS",
+      "referrer": "https://ieeexplore.ieee.org/",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X) Chrome/126.0",
+      "responseTimeMs": 22,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 7,
+      "timestamp": "2026-11-17 10:52:49",
+      "ipAddress": "185.220.101.4",
+      "country": "Germany",
+      "countryCode": "DE",
+      "state": "Bavaria",
+      "area": "Munich",
+      "method": "GET",
+      "path": "/.env?cmd=cat+/etc/passwd",
+      "statusCode": 403,
+      "deviceType": "Bot",
+      "browser": "Automated Scanner",
+      "os": "Linux",
+      "referrer": "Direct",
+      "userAgent": "zgrab/0.x",
+      "responseTimeMs": 2,
+      "severity": "critical",
+      "eventType": "security_block",
+      "threatCategory": "Sensitive File & Path Traversal Probe"
+    },
+    {
+      "id": 8,
+      "timestamp": "2026-11-17 11:03:15",
+      "ipAddress": "122.172.81.66",
+      "country": "India",
+      "countryCode": "IN",
+      "state": "Telangana",
+      "area": "Hyderabad (HITEC City)",
+      "method": "GET",
+      "path": "/quick-links",
+      "statusCode": 200,
+      "deviceType": "Mobile",
+      "browser": "Safari Mobile",
+      "os": "iOS",
+      "referrer": "https://www.google.com/",
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5) Safari/604.1",
+      "responseTimeMs": 15,
+      "severity": "info",
+      "eventType": "page_view"
+    },
+    {
+      "id": 9,
+      "timestamp": "2026-11-17 11:12:40",
+      "ipAddress": "45.142.212.10",
+      "country": "Singapore",
+      "countryCode": "SG",
+      "state": "Central Region",
+      "area": "Singapore (Marina Bay)",
+      "method": "GET",
+      "path": "/api/public/search?q=%27%20UNION%20SELECT%20password_hash%20FROM%20users--",
+      "statusCode": 403,
+      "deviceType": "Bot",
+      "browser": "sqlmap",
+      "os": "Linux",
+      "referrer": "Direct",
+      "userAgent": "sqlmap/1.8.2",
+      "responseTimeMs": 1,
+      "severity": "critical",
+      "eventType": "security_block",
+      "threatCategory": "SQL Injection Attempt"
+    }
+  ],
+  "blockedIps": [],
+  "securityConfig": {
+    "wafEnabled": true,
+    "rateLimitEnabled": true,
+    "autoBlockAttackers": true,
+    "maxRequestsPerMinute": 120,
+    "maxFailedLogins": 5,
+    "lockoutMinutes": 15,
+    "blockScannerProbes": true,
+    "maskExportedIps": false
+  },
+  "sports": {
+    "config": {
+      "heroBadge": "Student Life · Gymkhana & Athletics",
+      "heroTitle": "Sports, Athletics & Campus Recreation Complex",
+      "heroSubtitle": "Showcasing indoor and outdoor sporting infrastructure, intercollegiate tournaments, PAHSUS university zonal trials, student medals, and fitness schedules at Pandharpur campus.",
+      "directorName": "Prof. V. B. Shinde",
+      "directorTitle": "Director of Physical Education & Gymkhana Coordinator",
+      "directorEmail": "sports@coe.sveri.ac.in",
+      "directorPhone": "+91-02186-216068",
+      "gymkhanaTimings": "Morning 06:00 AM – 08:30 AM | Evening 04:30 PM – 07:30 PM",
+      "annualFlagshipName": "SVERI Champions Trophy & Annual Sports Meet",
+      "customFields": [
+        {
+          "label": "Total Playfield Area",
+          "value": "8.5 Acres Dedicated Athletics & Court Zone"
+        },
+        {
+          "label": "University Affiliation",
+          "value": "Punyashlok Ahilyadevi Holkar Solapur University (PAHSUS)"
+        },
+        {
+          "label": "Scholarship & TA/DA",
+          "value": "100% Kit, Tracksuit & Travel Allowance for Zonal/National Players"
+        }
+      ]
+    },
+    "facilities": [
+      {
+        "id": 1,
+        "name": "400m Standard Athletics Track & Cricket Turf Ground",
+        "facilityType": "Outdoor Ground / Track",
+        "dimensionsOrCapacity": "400m 8-Lane Track · Floodlit Pavilion (600 Spectators)",
+        "timings": "06:00 AM – 08:30 AM & 04:30 PM – 07:00 PM",
+        "inchargeName": "Prof. V. B. Shinde",
+        "description": "Lush green campus athletics arena with standard 400m track markings, central turf cricket wicket, long-jump pits, and practice nets for intercollegiate tournaments.",
+        "imageUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "customFields": [
+          {
+            "label": "Surface",
+            "value": "Rolled Red Clay Track & Natural Bermuda Turf"
+          },
+          {
+            "label": "Lighting",
+            "value": "High-Mast LED Floodlights for Evening Practice"
+          }
+        ],
+        "isPublished": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "name": "Indoor Badminton, Table Tennis & Chess Arena",
+        "facilityType": "Indoor Court / Hall",
+        "dimensionsOrCapacity": "4 Wooden Synthetic Badminton Courts · 6 ITTF TT Tables",
+        "timings": "06:30 AM – 09:00 AM & 04:00 PM – 08:00 PM",
+        "inchargeName": "Coach S. M. Pawar",
+        "description": "All-weather acoustic indoor sports hall featuring anti-skid badminton courts, championship table tennis tables, carrom, and digital chess clocks for university selection trials.",
+        "imageUrl": "/src/assets/images/campus_facilities_1794991331724.jpg",
+        "customFields": [
+          {
+            "label": "Flooring",
+            "value": "BWF-Grade Cushioned Maple & PVC Mat"
+          },
+          {
+            "label": "Ventilation",
+            "value": "High-Volume Louvered Daylight Hall"
+          }
+        ],
+        "isPublished": true,
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "name": "Synthetic Basketball, Volleyball & Kabaddi Floodlit Courts",
+        "facilityType": "Outdoor Ground / Track",
+        "dimensionsOrCapacity": "2 Acrylic Basketball Courts · 2 Clay Kabaddi Arenas",
+        "timings": "04:30 PM – 08:00 PM Daily",
+        "inchargeName": "Prof. R. G. Salunkhe",
+        "description": "Regulation-size synthetic basketball and volleyball courts alongside dedicated kabaddi and kho-kho grounds hosting annual inter-departmental and zonal championships.",
+        "imageUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "customFields": [
+          {
+            "label": "Safety Kit",
+            "value": "First-Aid Station & Physiotherapist On-Call"
+          }
+        ],
+        "isPublished": true,
+        "sortOrder": 3
+      },
+      {
+        "id": 4,
+        "name": "Modern Gymnasium, Weight-Training & Yoga Studio",
+        "facilityType": "Fitness & Gymnasium",
+        "dimensionsOrCapacity": "2,800 Sq.Ft. · Separate Timing Slots for Boys & Girls",
+        "timings": "06:00 AM – 09:00 AM & 04:30 PM – 08:30 PM",
+        "inchargeName": "Trainer A. D. Jadhav",
+        "description": "Equipped with multi-gym stations, Olympic barbells, treadmills, ellipticals, and an adjoining yoga studio supporting holistic student fitness and wellness.",
+        "imageUrl": "/src/assets/images/campus_facilities_1794991331724.jpg",
+        "customFields": [
+          {
+            "label": "Access",
+            "value": "Biometric Student ID Card Entry (Free for Hostellers & Day Scholars)"
+          }
+        ],
+        "isPublished": true,
+        "sortOrder": 4
+      }
+    ],
+    "events": [
+      {
+        "id": 1,
+        "title": "PAHSUS Intercollegiate Kabaddi & Volleyball Zonal Championship",
+        "eventType": "Intercollegiate Tournament",
+        "discipline": "Kabaddi & Volleyball",
+        "eventDate": "2026-12-08",
+        "venue": "SVCOER Main Floodlit Sports Arena, Pandharpur",
+        "organizer": "Gymkhana Committee & PAHSUS Sports Board",
+        "status": "Registrations Open",
+        "registrationUrl": "/contact",
+        "description": "24 affiliated engineering and degree college teams competing over three days in knockout league fixtures.",
+        "bannerUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "isPublished": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "title": "SVERI Champions Trophy 2027 — Annual Inter-Departmental Meet",
+        "eventType": "Annual Sports Meet",
+        "discipline": "Cricket, Athletics, Badminton, Chess & Football",
+        "eventDate": "2027-01-22",
+        "venue": "All Campus Playfields & Indoor Hall",
+        "organizer": "Student Council & Physical Education Dept.",
+        "status": "Upcoming",
+        "registrationUrl": "",
+        "description": "Week-long institutional sports festival culminating in General Championship Rolling Trophy award ceremony.",
+        "bannerUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "isPublished": true,
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "title": "Pandharpur Fit-Engineer 5K Unity Run & Yoga Shivir",
+        "eventType": "Fitness & Marathon Drive",
+        "discipline": "Road Running & Yoga",
+        "eventDate": "2026-10-15",
+        "venue": "Campus Main Gate to Gopalpur Circuit",
+        "organizer": "NSS Unit & Gymkhana",
+        "status": "Completed",
+        "registrationUrl": "",
+        "description": "Over 650 students and faculty members completed the morning 5K unity run and guided pranayama workshop.",
+        "bannerUrl": "/src/assets/images/hero_campus_aerial_1794512596442.jpg",
+        "isPublished": true,
+        "sortOrder": 3
+      }
+    ],
+    "achievements": [
+      {
+        "id": 1,
+        "studentOrTeamName": "Omkar Patil & SVCOER Mens Kabaddi Squad",
+        "departmentCode": "MECH",
+        "batchYear": "2026",
+        "sportName": "Kabaddi",
+        "level": "National",
+        "medalOrRank": "Gold Medal & West Zone Runner-Up",
+        "eventName": "All-India Inter-University West Zone Kabaddi Championship",
+        "eventDate": "2026-10-20",
+        "photoUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "highlights": "Selected to represent PAHSUS University squad at Khelo India University Games.",
+        "isFeatured": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "studentOrTeamName": "Shraddha Deshmukh",
+        "departmentCode": "CSE",
+        "batchYear": "2027",
+        "sportName": "Badminton (Women Singles)",
+        "level": "State",
+        "medalOrRank": "Silver Medal",
+        "eventName": "Maharashtra State Krida Mahotsav (Ashwamedh)",
+        "eventDate": "2026-09-18",
+        "photoUrl": "/src/assets/images/campus_convocation_1794512597749.jpg",
+        "highlights": "Unbeaten through Solapur District and Pune Division qualifiers.",
+        "isFeatured": true,
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "studentOrTeamName": "Prathamesh Kulkarni",
+        "departmentCode": "ENTC",
+        "batchYear": "2026",
+        "sportName": "400m Hurdles & Relay",
+        "level": "University",
+        "medalOrRank": "Double Gold & Meet Record (52.4s)",
+        "eventName": "PAHSUS Annual Athletics Meet 2026",
+        "eventDate": "2026-08-29",
+        "photoUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "highlights": "Broke the 9-year-old university intercollegiate 400m track record.",
+        "isFeatured": true,
+        "sortOrder": 3
+      }
+    ],
+    "gallery": [
+      {
+        "id": 1,
+        "title": "Floodlit Basketball & Athletics Opening Ceremony",
+        "mediaType": "Photo",
+        "category": "Annual Sports Meet",
+        "mediaUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "eventDate": "2026-10-15",
+        "caption": "Students marching past the main sports pavilion during the institutional sports inaugural.",
+        "isPublished": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "title": "PAHSUS Athletics Meet Highlights & Track Finals",
+        "mediaType": "Video",
+        "category": "University Tournaments",
+        "mediaUrl": "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+        "thumbnailUrl": "/src/assets/images/sports_complex_1794991330591.jpg",
+        "eventDate": "2026-09-22",
+        "caption": "Highlight reel covering 4x100m relay finals and prize distribution.",
+        "isPublished": true,
+        "sortOrder": 2
+      }
+    ],
+    "notices": [
+      {
+        "id": 1,
+        "title": "PAHSUS University Cricket & Badminton Selection Trials — Schedule",
+        "noticeDate": "2026-11-18",
+        "category": "Trials & Selection",
+        "summary": "All bonafide UG/PG students wishing to represent the college team must report at 04:15 PM at Gymkhana Pavilion with college ID card and sports kit.",
+        "attachmentUrl": "",
+        "registrationLink": "/contact",
+        "isPinned": true,
+        "isPublished": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "title": "Winter Gymnasium Membership & Morning Yoga Batch Timing Update",
+        "noticeDate": "2026-11-10",
+        "category": "Fitness Schedule",
+        "summary": "Morning Yoga & Functional Fitness sessions start at 06:15 AM from Monday to Saturday at the Indoor Wellness Hall.",
+        "attachmentUrl": "",
+        "registrationLink": "",
+        "isPinned": false,
+        "isPublished": true,
+        "sortOrder": 2
+      }
+    ]
+  },
+  "facilities": {
+    "config": {
+      "heroBadge": "Campus Infrastructure & Resources",
+      "heroTitle": "Institutional Facilities & Smart Campus Infrastructure",
+      "heroSubtitle": "Explore AICTE-compliant academic blocks, 10 Gbps IT & Cloud data centre, 24x7 central library, AICTE IDEA Lab, green solar microgrid, hostels, health centre, and barrier-free student amenities.",
+      "customFieldPresets": [
+        "Floor Area",
+        "Equipment Highlight",
+        "Access Policy",
+        "Power Backup",
+        "Network Speed"
+      ]
+    },
+    "items": [
+      {
+        "id": 1,
+        "title": "Smart Classrooms & Central Auditorium Complex",
+        "category": "Infrastructural Facilities",
+        "shortSummary": "42 ICT-enabled lecture theatres with interactive smart boards and a 750-seat acoustically treated Central Auditorium.",
+        "descriptionHtml": "<p>Every engineering department features tiered lecture halls equipped with dual 4K laser projectors, lecture-capture recording systems, collar microphones, and high-lumen ergonomic seating.</p><p>The <strong>Central Auditorium</strong> hosts international conferences, convocations, and corporate recruitment drives with Dolby array audio and live streaming uplink.</p>",
+        "locationBlock": "Main Academic Block & Auditorium Wing",
+        "capacity": "750-Seat Auditorium + 42 ICT Classrooms (60 Seats each)",
+        "timings": "08:00 AM – 06:30 PM (Monday – Saturday)",
+        "inchargeName": "Prof. S. D. Jadhav (Estate Officer)",
+        "inchargeEmail": "estate@coe.sveri.ac.in",
+        "inchargePhone": "+91-02186-216063",
+        "imageUrl": "/src/assets/images/campus_facilities_1794991331724.jpg",
+        "brochureUrl": "/quick-links",
+        "customFields": [
+          {
+            "label": "Floor Area",
+            "value": "68,000 Sq.Ft. Built-up Instructional Space"
+          },
+          {
+            "label": "AV & Recording",
+            "value": "Interactive Touch Panels & Lecture Capture Cameras"
+          },
+          {
+            "label": "Accessibility",
+            "value": "Ramps, Lifts & Tactile Path Guidance"
+          }
+        ],
+        "isFeatured": true,
+        "isPublished": true,
+        "sortOrder": 1
+      },
+      {
+        "id": 2,
+        "title": "Central Data Centre, High-Speed Wi-Fi & 1,150+ Computing Nodes",
+        "category": "IT & Computing Facilities",
+        "shortSummary": "10 Gbps NKN/leased-line dual-ISP backbone, Wi-Fi 6 campus mesh, NVIDIA GPU AI cluster, and ERP/LMS portal.",
+        "descriptionHtml": "<p>The Central Computing Centre manages over 1,150 networked workstations running licensed MATLAB, Ansys, SolidWorks, Cadence VLSI, and JetBrains/Microsoft Azure Dev Tools.</p><p>Seamless roaming Wi-Fi 6 blankets all academic blocks, library reading halls, hostels, and outdoor plazas behind next-generation firewall protection.</p>",
+        "locationBlock": "IT Block — Ground & First Floor",
+        "capacity": "1,150+ Workstations · 10 Gbps Redundant Leased Line",
+        "timings": "08:30 AM – 09:00 PM (Extended Exam Hours)",
+        "inchargeName": "Mr. R. K. Pawar (System Administrator)",
+        "inchargeEmail": "itadmin@coe.sveri.ac.in",
+        "inchargePhone": "+91-02186-216072",
+        "imageUrl": "/src/assets/images/hero_robotics_lab_1794512596365.jpg",
+        "brochureUrl": "",
+        "customFields": [
+          {
+            "label": "AI Compute Node",
+            "value": "Dual NVIDIA A100/RTX Workstation Cluster for Deep Learning"
+          },
+          {
+            "label": "LMS & ERP",
+            "value": "Integrated Outcome-Based Education (OBE) & Attendance ERP"
+          },
+          {
+            "label": "Power Redundancy",
+            "value": "240 kVA Online UPS + 500 kVA Auto-Synchronized DG"
+          }
+        ],
+        "isFeatured": true,
+        "isPublished": true,
+        "sortOrder": 2
+      },
+      {
+        "id": 3,
+        "title": "Boys & Girls Hostels, Hygienic Mess & 24x7 Medical Centre",
+        "category": "Student Facilities",
+        "shortSummary": "On-campus residential hostels for 1,400+ students with solar hot water, RO drinking water, reading rooms, and campus ambulance.",
+        "descriptionHtml": "<p>Separate gated residential complexes for boys and girls ensure a safe, studious environment with 24x7 CCTV surveillance, resident rectors, Wi-Fi connectivity, indoor games, and multi-cuisine hygienic dining halls.</p><p>An on-campus Primary Health Centre staffed by a medical officer and nursing staff operates alongside a dedicated campus ambulance for emergency hospital transfers.</p>",
+        "locationBlock": "East & West Residential Campus Enclave",
+        "capacity": "1,400+ Hostel Beds · 10-Bed Medical Clinic",
+        "timings": "24x7 Residential Support & Security",
+        "inchargeName": "Dr. M. S. Kulkarni (Chief Rector)",
+        "inchargeEmail": "hostel@coe.sveri.ac.in",
+        "inchargePhone": "+91-02186-216075",
+        "imageUrl": "/src/assets/images/hero_campus_aerial_1794512596442.jpg",
+        "brochureUrl": "",
+        "customFields": [
+          {
+            "label": "Security & Safety",
+            "value": "Biometric Hostel Gate, 24x7 Warden & Women Guard Desk"
+          },
+          {
+            "label": "Banking & Stationery",
+            "value": "On-Campus SBI ATM, Co-operative Store & Reprography"
+          },
+          {
+            "label": "Campus Transport",
+            "value": "18 Dedicated Buses Covering Pandharpur, Sangola & Solapur"
+          }
+        ],
+        "isFeatured": true,
+        "isPublished": true,
+        "sortOrder": 3
+      },
+      {
+        "id": 4,
+        "title": "Central Knowledge Resource Centre & Digital E-Library",
+        "category": "Library & Digital Resources",
+        "shortSummary": "92,000+ engineering volumes, IEEE/Springer/ScienceDirect e-journals, NPTEL local server, and 350-seat quiet reading hall.",
+        "descriptionHtml": "<p>Automated via KOHA Open-Source ILMS with RFID book check-out kiosks and remote Shibboleth/KNIMBUS access for students and faculty.</p>",
+        "locationBlock": "Knowledge Atrium — Central Library Wing",
+        "capacity": "92,400+ Books · 350 Reading Seats · 40 Digital Terminals",
+        "timings": "08:00 AM – 11:00 PM (Extended till Midnight during Exams)",
+        "inchargeName": "Mrs. S. P. Joshi (Chief Librarian)",
+        "inchargeEmail": "library@coe.sveri.ac.in",
+        "inchargePhone": "+91-02186-216069",
+        "imageUrl": "/src/assets/images/hero_library_atrium_1794512596890.jpg",
+        "brochureUrl": "/page/central-library",
+        "customFields": [
+          {
+            "label": "E-Resources",
+            "value": "IEEE ASPP, SpringerLink, Delnet, NDLI Club & Turnitin Access"
+          },
+          {
+            "label": "Book Bank",
+            "value": "Full-Set Semester Book Bank Facility for SC/ST & Merit Scholars"
+          }
+        ],
+        "isFeatured": false,
+        "isPublished": true,
+        "sortOrder": 4
+      },
+      {
+        "id": 5,
+        "title": "AICTE IDEA Lab & Interdisciplinary Prototyping FabLab",
+        "category": "Research & Central Labs",
+        "shortSummary": "24x7 multidisciplinary maker space with 5-axis CNC router, CO2 laser cutter, SLA/FDM 3D printers, PCB milling, and welding bays.",
+        "descriptionHtml": "<p>Supports student startup prototypes, Smart India Hackathon hardware builds, MSME consultancy, and patent proof-of-concept fabrication.</p>",
+        "locationBlock": "R&D and Innovation Annex",
+        "capacity": "85 Simultaneous Makers & Startup Pods",
+        "timings": "09:00 AM – 09:00 PM (24x7 with Mentor Approval)",
+        "inchargeName": "Dr. A. K. Kulkarni (IDEA Lab Coordinator)",
+        "inchargeEmail": "idealab@coe.sveri.ac.in",
+        "inchargePhone": "+91-02186-216080",
+        "imageUrl": "/src/assets/images/hero_robotics_lab_1794512596365.jpg",
+        "brochureUrl": "",
+        "customFields": [
+          {
+            "label": "Key Machines",
+            "value": "Stratasys 3D Printers, LPKF PCB Protomat, Universal Testing Frame"
+          },
+          {
+            "label": "Funding Support",
+            "value": "Seed Micro-Grants up to ₹50,000 per Student Prototype"
+          }
+        ],
+        "isFeatured": true,
+        "isPublished": true,
+        "sortOrder": 5
+      },
+      {
+        "id": 6,
+        "title": "520 kWp Solar Microgrid, Rainwater Harvesting & Divyangjan Access",
+        "category": "Green & Barrier-Free Campus",
+        "shortSummary": "Rooftop grid-tied solar generation, 120 KLD sewage treatment plant for garden irrigation, EV charging bays, and step-free lifts.",
+        "descriptionHtml": "<p>Aligned with NEP 2020 and UGC Green Campus Charter, over 65% of daytime campus electricity is met via clean rooftop solar photovoltaic arrays alongside barrier-free elevators and accessible restrooms in every block.</p>",
+        "locationBlock": "Campus-Wide Sustainability Grid",
+        "capacity": "520 kWp Solar Plant · 40 Lakh Litre Rainwater Percolation",
+        "timings": "Continuous Campus Operation",
+        "inchargeName": "Prof. V. M. Jadhav (Green Audit Coordinator)",
+        "inchargeEmail": "greenaudit@coe.sveri.ac.in",
+        "inchargePhone": "+91-02186-216063",
+        "imageUrl": "/src/assets/images/campus_facilities_1794991331724.jpg",
+        "brochureUrl": "",
+        "customFields": [
+          {
+            "label": "Carbon Offset",
+            "value": "620+ Metric Tons CO2 Avoided Annually"
+          },
+          {
+            "label": "Divyangjan Support",
+            "value": "Wheelchairs, Brailled Signage & 6 Passenger Elevators"
+          }
+        ],
+        "isFeatured": false,
+        "isPublished": true,
+        "sortOrder": 6
+      }
+    ]
+  },
   "backups": [
     {
       "id": "site-1794750953492-35b2",

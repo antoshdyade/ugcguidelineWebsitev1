@@ -87,6 +87,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $peopleJson     = $decodeJsonArr('people_json');
         $scheduleJson   = $decodeJsonArr('schedule_json');
         $feesJson       = $decodeJsonArr('fee_tiers_json');
+        $posterItemsJson = $decodeJsonArr('poster_items_json');
+        $enablePoster   = !empty($_POST['enable_poster_presentation']) ? 1 : 0;
+        $posterDim      = trim((string)($_POST['poster_dimensions'] ?? 'A0 Portrait (841 x 1189 mm)'));
+        $posterPrizes   = trim((string)($_POST['poster_prizes_text'] ?? ''));
+        $posterTplUrl   = trim((string)($_POST['poster_template_url'] ?? ''));
+        $posterGuideHtml = (string)($_POST['poster_guidelines_html'] ?? '');
 
         if ($title === '' || $shortName === '') {
             $err = 'Event Title and Short Name / Acronym are required.';
@@ -95,12 +101,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($err === '') {
             if ($editId > 0) {
                 $pdo->prepare(
-                    'UPDATE conferences SET slug=?, title=?, short_name=?, scope=?, theme=?, start_date=?, end_date=?, venue=?, mode=?, organizing_department=?, indexing_partners_json=?, contact_email=?, contact_phone=?, banner_url=?, hero_slides_json=?, overview_html=?, cfp_html=?, tracks_json=?, important_dates_json=?, people_json=?, schedule_json=?, fee_tiers_json=?, submission_mode=?, external_submission_url=?, external_submission_label=?, submission_instructions_html=?, is_published=?, is_featured=? WHERE id=?'
+                    'UPDATE conferences SET slug=?, title=?, short_name=?, scope=?, theme=?, start_date=?, end_date=?, venue=?, mode=?, organizing_department=?, indexing_partners_json=?, contact_email=?, contact_phone=?, banner_url=?, hero_slides_json=?, overview_html=?, cfp_html=?, tracks_json=?, important_dates_json=?, people_json=?, schedule_json=?, fee_tiers_json=?, submission_mode=?, external_submission_url=?, external_submission_label=?, submission_instructions_html=?, enable_poster_presentation=?, poster_dimensions=?, poster_guidelines_html=?, poster_template_url=?, poster_prizes_text=?, poster_items_json=?, is_published=?, is_featured=? WHERE id=?'
                 )->execute([
                     $slug, $title, $shortName, $scope, $theme, $startDate, $endDate, $venue, $mode, $orgDept,
                     json_encode($partners, JSON_UNESCAPED_UNICODE), $contactEmail, $contactPhone, $bannerUrl,
                     $heroSlidesJson, $overviewHtml, $cfpHtml, $tracksJson, $datesJson, $peopleJson, $scheduleJson, $feesJson,
                     $submissionMode, $extSubUrl !== '' ? $extSubUrl : null, $extSubLabel !== '' ? $extSubLabel : null, $subInstructions,
+                    $enablePoster, $posterDim, $posterGuideHtml, $posterTplUrl, $posterPrizes, $posterItemsJson,
                     $isPublished, $isFeatured, $editId,
                 ]);
                 logAudit($pdo, $user, 'UPDATE_CONFERENCE', 'Conference', $shortName . ': ' . $title);
@@ -108,12 +115,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $nextOrder = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM conferences')->fetchColumn()) + 1;
                 $pdo->prepare(
-                    'INSERT INTO conferences (slug, title, short_name, scope, theme, start_date, end_date, venue, mode, organizing_department, indexing_partners_json, contact_email, contact_phone, banner_url, hero_slides_json, overview_html, cfp_html, tracks_json, important_dates_json, people_json, schedule_json, fee_tiers_json, submission_mode, external_submission_url, external_submission_label, submission_instructions_html, is_published, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                    'INSERT INTO conferences (slug, title, short_name, scope, theme, start_date, end_date, venue, mode, organizing_department, indexing_partners_json, contact_email, contact_phone, banner_url, hero_slides_json, overview_html, cfp_html, tracks_json, important_dates_json, people_json, schedule_json, fee_tiers_json, submission_mode, external_submission_url, external_submission_label, submission_instructions_html, enable_poster_presentation, poster_dimensions, poster_guidelines_html, poster_template_url, poster_prizes_text, poster_items_json, is_published, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 )->execute([
                     $slug, $title, $shortName, $scope, $theme, $startDate, $endDate, $venue, $mode, $orgDept,
                     json_encode($partners, JSON_UNESCAPED_UNICODE), $contactEmail, $contactPhone, $bannerUrl,
                     $heroSlidesJson, $overviewHtml, $cfpHtml, $tracksJson, $datesJson, $peopleJson, $scheduleJson, $feesJson,
                     $submissionMode, $extSubUrl !== '' ? $extSubUrl : null, $extSubLabel !== '' ? $extSubLabel : null, $subInstructions,
+                    $enablePoster, $posterDim, $posterGuideHtml, $posterTplUrl, $posterPrizes, $posterItemsJson,
                     $isPublished, $isFeatured, $nextOrder,
                 ]);
                 logAudit($pdo, $user, 'ADD_CONFERENCE', 'Conference', $shortName . ': ' . $title);
@@ -243,6 +251,7 @@ $initSchedule = $editingConf ? (json_decode((string)$editingConf['schedule_json'
 $initFees = $editingConf ? (json_decode((string)$editingConf['fee_tiers_json'], true) ?: []) : [
     ['category' => 'Student / Research Scholar', 'earlyBirdFee' => 'INR 500', 'regularFee' => 'INR 800', 'notes' => 'Includes certificate & kit'],
 ];
+$initPosters = $editingConf ? (json_decode((string)($editingConf['poster_items_json'] ?? '[]'), true) ?: []) : [];
 $initPartnersCsv = $editingConf ? implode(', ', json_decode((string)($editingConf['indexing_partners_json'] ?? '[]'), true) ?: []) : 'IEEE Proceedings, Scopus Indexed';
 
 $adminPageTitle = 'Conferences, Workshops, FDPs & Research Slider';
@@ -271,6 +280,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <input type="hidden" name="people_json" id="inp_people_json">
       <input type="hidden" name="schedule_json" id="inp_schedule_json">
       <input type="hidden" name="fee_tiers_json" id="inp_fee_tiers_json">
+      <input type="hidden" name="poster_items_json" id="inp_poster_items_json">
 
       <div class="grid-3" style="margin-bottom:0.65rem;">
         <label style="font-size:0.82rem;font-weight:600;">Event / Conference Full Title *
@@ -430,6 +440,39 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         </div>
       </div>
 
+      <!-- Poster Presentation & Expo Track Configuration -->
+      <div class="card" style="background:#FAFAF9;margin-bottom:1rem;">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
+          <div>
+            <strong style="font-size:0.92rem;color:#0F294A;">Poster Presentation &amp; Technical Expo Track</strong>
+            <div style="font-size:0.78rem;color:#57534E;">Configure A0/A1 dimensions, prizes, template PDF, guidelines, and showcase accepted posters.</div>
+          </div>
+          <label style="font-size:0.84rem;font-weight:600;">
+            <input type="checkbox" name="enable_poster_presentation" value="1" <?= (!isset($editingConf['enable_poster_presentation']) || !empty($editingConf['enable_poster_presentation'])) ? 'checked' : '' ?>> Enable Poster Track
+          </label>
+        </div>
+        <div class="grid-3" style="margin-bottom:0.65rem;">
+          <label style="font-size:0.82rem;font-weight:600;">Poster Dimensions
+            <input type="text" name="poster_dimensions" value="<?= e((string)($editingConf['poster_dimensions'] ?? 'A0 Portrait (841 x 1189 mm)')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.82rem;font-weight:600;">Best Poster Prizes / Awards
+            <input type="text" name="poster_prizes_text" value="<?= e((string)($editingConf['poster_prizes_text'] ?? 'Best Poster Awards + Certificates per Track')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.82rem;font-weight:600;">Poster Template URL (PPTX/PDF)
+            <input type="text" name="poster_template_url" value="<?= e((string)($editingConf['poster_template_url'] ?? '')) ?>" placeholder="uploads/... or https://..." style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <strong style="display:block;font-size:0.82rem;margin-bottom:0.3rem;">Poster Presentation Guidelines (HTML)</strong>
+          <textarea name="poster_guidelines_html" rows="3" style="width:100%;padding:0.45rem;"><?= e((string)($editingConf['poster_guidelines_html'] ?? '<p>Prepare an A0 vertical poster (841 x 1189 mm) summarizing research methodology and experimental findings.</p>')) ?></textarea>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.45rem;">
+          <strong style="font-size:0.84rem;">Accepted Poster Showcase Cards</strong>
+          <button type="button" class="btn-outline btn-sm" onclick="addConfPosterRow()">+ Add Poster Exhibit</button>
+        </div>
+        <div id="conf-posters-list" style="display:flex;flex-direction:column;gap:0.45rem;"></div>
+      </div>
+
       <div style="display:flex;gap:0.6rem;">
         <button type="submit" class="btn-primary"><?= $editingConf ? 'Update Conference / Event' : 'Save & Publish Conference / Event' ?></button>
         <?php if ($editingConf): ?><a href="manage_conferences.php" class="btn-outline">Cancel Editing</a><?php endif; ?>
@@ -477,6 +520,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       var people = <?= json_encode($initPeople, JSON_UNESCAPED_SLASHES) ?>;
       var sched  = <?= json_encode($initSchedule, JSON_UNESCAPED_SLASHES) ?>;
       var fees   = <?= json_encode($initFees, JSON_UNESCAPED_SLASHES) ?>;
+      var posters = <?= json_encode($initPosters, JSON_UNESCAPED_SLASHES) ?>;
 
       function esc(v) { return String(v || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
@@ -558,6 +602,21 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             '<button type="button" class="btn-danger btn-sm" onclick="window._confFees.splice(' + i + ',1);window.renderConfSubLists()">&times;</button>' +
             '</div>';
         }).join('');
+
+        var poBox = document.getElementById('conf-posters-list');
+        if (poBox) {
+          poBox.innerHTML = posters.map(function (po, i) {
+            return '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr auto auto;gap:5px;background:#fff;padding:5px;border:1px solid #E7E5E4;border-radius:6px;align-items:center;">' +
+              '<input type="text" placeholder="Code" value="' + esc(po.posterCode) + '" oninput="window._confPosters[' + i + '].posterCode=this.value" style="padding:4px;border:1px solid #D6D3D1;border-radius:5px;">' +
+              '<input type="text" placeholder="Poster Title" value="' + esc(po.title) + '" oninput="window._confPosters[' + i + '].title=this.value" style="padding:4px;border:1px solid #D6D3D1;border-radius:5px;">' +
+              '<input type="text" placeholder="Authors" value="' + esc(po.authors) + '" oninput="window._confPosters[' + i + '].authors=this.value" style="padding:4px;border:1px solid #D6D3D1;border-radius:5px;">' +
+              '<input type="text" placeholder="Track / Award" value="' + esc(po.awardNote || po.track) + '" oninput="window._confPosters[' + i + '].awardNote=this.value" style="padding:4px;border:1px solid #D6D3D1;border-radius:5px;">' +
+              '<input type="text" placeholder="Preview Image URL" value="' + esc(po.imageUrl) + '" oninput="window._confPosters[' + i + '].imageUrl=this.value" style="padding:4px;border:1px solid #D6D3D1;border-radius:5px;">' +
+              '<label class="btn-outline btn-sm" style="cursor:pointer;">16:9 Photo<input type="file" accept="image/*" style="display:none;" onchange="window._uploadPosterPhoto(this,' + i + ')"></label>' +
+              '<button type="button" class="btn-danger btn-sm" onclick="window._confPosters.splice(' + i + ',1);window.renderConfSubLists()">&times;</button>' +
+              '</div>';
+          }).join('');
+        }
       };
 
       window._confSlides = slides;
@@ -566,12 +625,16 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       window._confPeople = people;
       window._confSched  = sched;
       window._confFees   = fees;
+      window._confPosters = posters;
 
       window._uploadSlidePhoto = function (inp, idx) {
         uploadInlineImage(inp, '16:9', function (url) { slides[idx].imageUrl = url; window.renderConfSubLists(); });
       };
       window._uploadPersonPhoto = function (inp, idx) {
         uploadInlineImage(inp, '1:1', function (url) { people[idx].photoUrl = url; window.renderConfSubLists(); });
+      };
+      window._uploadPosterPhoto = function (inp, idx) {
+        uploadInlineImage(inp, '16:9', function (url) { posters[idx].imageUrl = url; window.renderConfSubLists(); });
       };
 
       window.addConfSlideRow  = function () { slides.push({ title: 'Highlight Slide', caption: '', imageUrl: 'assets/images/hero_campus.jpg', ctaLabel: '', ctaLink: '' }); window.renderConfSubLists(); };
@@ -580,6 +643,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       window.addConfDateRow   = function () { dates.push({ label: 'Submission Cutoff', dateText: '2026-12-01', isHighlight: true }); window.renderConfSubLists(); };
       window.addConfSchedRow  = function () { sched.push({ day: 'Day 1', timeSlot: '10:00 – 11:30', sessionTitle: 'Technical Session', speaker: '', hall: 'Hall A' }); window.renderConfSubLists(); };
       window.addConfFeeRow    = function () { fees.push({ category: 'Industry Delegate', earlyBirdFee: 'INR 2,000', regularFee: 'INR 2,500', notes: '' }); window.renderConfSubLists(); };
+      window.addConfPosterRow = function () { posters.push({ id: 'pst-' + (posters.length + 1), posterCode: 'PST-10' + (posters.length + 1), title: 'Research Poster Title', authors: 'Student Authors', affiliation: 'SVCOER Pandharpur', track: 'Engineering Innovation', awardNote: '', abstract: '', imageUrl: 'assets/images/poster_session.jpg', posterPdfUrl: '' }); window.renderConfSubLists(); };
 
       window.renderConfSubLists();
 
@@ -590,6 +654,8 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         document.getElementById('inp_people_json').value = JSON.stringify(people);
         document.getElementById('inp_schedule_json').value = JSON.stringify(sched);
         document.getElementById('inp_fee_tiers_json').value = JSON.stringify(fees);
+        var poInp = document.getElementById('inp_poster_items_json');
+        if (poInp) poInp.value = JSON.stringify(posters);
       });
     })();
   </script>
@@ -662,12 +728,12 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
   <div class="card" style="margin-bottom:1.25rem;">
     <h2 style="margin-top:0;">Submitted Conference Papers &amp; Abstracts (<?= count($submissions) ?>)</h2>
     <table class="data-table">
-      <thead><tr><th>Tracking ID</th><th>Event</th><th>Paper Title &amp; Author</th><th>Manuscript</th><th>Decision</th></tr></thead>
+      <thead><tr><th>Tracking ID</th><th>Event &amp; Mode</th><th>Paper Title &amp; Author</th><th>Manuscript</th><th>Decision</th></tr></thead>
       <tbody>
         <?php foreach ($submissions as $sb): ?>
           <tr>
             <td><strong><?= e($sb['tracking_code']) ?></strong><br><small><?= e($sb['submitted_at']) ?></small></td>
-            <td><?= e((string)$sb['conf_short']) ?></td>
+            <td><?= e((string)$sb['conf_short']) ?><br><small style="color:#0369A1;font-weight:700;"><?= e((string)($sb['presentation_type'] ?? 'Oral Paper Presentation')) ?></small></td>
             <td><strong><?= e($sb['paper_title']) ?></strong><br><small><?= e($sb['author_name']) ?> (<?= e($sb['affiliation']) ?>)</small></td>
             <td><?php if (!empty($sb['manuscript_url'])): ?><a href="<?= e(baseUrl($sb['manuscript_url'])) ?>" target="_blank" class="btn-outline btn-sm">Open File</a><?php else: ?>—<?php endif; ?></td>
             <td>

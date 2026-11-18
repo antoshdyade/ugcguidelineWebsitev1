@@ -18,6 +18,9 @@ $confPublishedCount = 0;
 $openGrievanceCount = 0;
 $urgentGrievanceCount = 0;
 $placementCount = 0;
+$hitTotalCount = 0;
+$blockedIpCount = 0;
+$threatEventCount = 0;
 try {
     $pendingAlumniCount = (int)$pdo->query("SELECT COUNT(*) FROM alumni_profiles WHERE status = 'pending'")->fetchColumn();
     $pendingJobsCount = (int)$pdo->query("SELECT COUNT(*) FROM alumni_jobs WHERE status = 'pending'")->fetchColumn();
@@ -26,7 +29,17 @@ try {
     $urgentGrievanceCount = (int)$pdo->query("SELECT COUNT(*) FROM grievances WHERE urgency = 'Urgent' AND status IN ('Open','Under Review','Escalated')")->fetchColumn();
     $placementCount = (int)$pdo->query('SELECT COUNT(*) FROM placement_stats')->fetchColumn()
         + (int)$pdo->query('SELECT COUNT(*) FROM placement_stories')->fetchColumn();
+    $hitStatsDash = function_exists('getHitCounterStats') ? getHitCounterStats($pdo) : ['totalHits' => 0];
+    $hitTotalCount = (int)($hitStatsDash['totalHits'] ?? 0);
+    $blockedIpCount = (int)$pdo->query('SELECT COUNT(*) FROM security_blocked_ips')->fetchColumn();
+    $threatEventCount = (int)$pdo->query("SELECT COUNT(*) FROM visitor_logs WHERE severity IN ('warning','critical')")->fetchColumn();
+    $sportsCount = (int)$pdo->query('SELECT COUNT(*) FROM sports_facilities')->fetchColumn()
+        + (int)$pdo->query('SELECT COUNT(*) FROM sports_events')->fetchColumn()
+        + (int)$pdo->query('SELECT COUNT(*) FROM sports_achievements')->fetchColumn();
+    $facilityCount = (int)$pdo->query('SELECT COUNT(*) FROM facilities')->fetchColumn();
 } catch (Throwable $ignoredStats) {
+    $sportsCount = $sportsCount ?? 0;
+    $facilityCount = $facilityCount ?? 0;
 }
 
 $auditCats = $pdo->query(
@@ -114,6 +127,18 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <p style="font-size:0.82rem;color:#57534E;margin:0;">Student notices, Congratulations Desk photos, branch statistics, drives &amp; custom T&amp;P data (<?= $placementCount ?> records).</p>
     </a>
   <?php endif; ?>
+  <?php if (canAccessResource($user, 'sports')): ?>
+    <a href="<?= e(baseUrl('admin/manage_sports.php')) ?>" class="admin-stat-card">
+      <h3 style="margin:0 0 0.3rem;">Sports &amp; Gymkhana</h3>
+      <p style="font-size:0.82rem;color:#57534E;margin:0;">Sports grounds, indoor courts, tournaments, medalists, video/photo gallery &amp; notices (<?= (int)$sportsCount ?> records).</p>
+    </a>
+  <?php endif; ?>
+  <?php if (canAccessResource($user, 'facilities')): ?>
+    <a href="<?= e(baseUrl('admin/manage_facilities.php')) ?>" class="admin-stat-card">
+      <h3 style="margin:0 0 0.3rem;">Campus Facilities</h3>
+      <p style="font-size:0.82rem;color:#57534E;margin:0;">Infrastructure, IT/network, student amenities, library &amp; custom specifications (<?= (int)$facilityCount ?> items).</p>
+    </a>
+  <?php endif; ?>
   <?php if (canAccessResource($user, 'grievances')): ?>
     <a href="<?= e(baseUrl('admin/manage_portals.php?tab=grievances')) ?>" class="admin-stat-card">
       <h3 style="margin:0 0 0.3rem;">Grievance Redressal (SGRC)</h3>
@@ -178,6 +203,18 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <a href="<?= e(baseUrl('admin/manage_backups.php')) ?>" class="admin-stat-card">
       <h3 style="margin:0 0 0.3rem;">Backup, Export &amp; Restore</h3>
       <p style="font-size:0.82rem;color:#57534E;margin:0;">Full &amp; incremental snapshots with media/credentials, SCP/Google Drive push &amp; recovery.</p>
+    </a>
+  <?php endif; ?>
+  <?php if (canAccessResource($user, 'seo')): ?>
+    <a href="<?= e(baseUrl('admin/manage_seo.php')) ?>" class="admin-stat-card">
+      <h3 style="margin:0 0 0.3rem;">SEO Studio &amp; Hit Counter</h3>
+      <p style="font-size:0.82rem;color:#57534E;margin:0;">Meta/OG/Schema.org JSON-LD, XML Sitemap, Robots.txt &amp; footer visit counter (<strong style="font-variant-numeric:tabular-nums;"><?= number_format($hitTotalCount) ?></strong> hits).</p>
+    </a>
+  <?php endif; ?>
+  <?php if (canAccessResource($user, 'analytics')): ?>
+    <a href="<?= e(baseUrl('admin/manage_logs_security.php')) ?>" class="admin-stat-card">
+      <h3 style="margin:0 0 0.3rem;">Log Analyzer &amp; Security Shield</h3>
+      <p style="font-size:0.82rem;color:#57534E;margin:0;">Country/State/Area hit logs, CSV/.LOG export, WAF firewall (<strong style="font-variant-numeric:tabular-nums;"><?= $blockedIpCount ?> blocked IPs · <?= $threatEventCount ?> alerts</strong>).</p>
     </a>
   <?php endif; ?>
   <?php if (canAccessResource($user, 'settings')): ?>

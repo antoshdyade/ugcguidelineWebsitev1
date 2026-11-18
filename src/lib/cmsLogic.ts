@@ -171,7 +171,11 @@ export type AdminResource =
   | 'alumni'
   | 'conferences'
   | 'placements'
-  | 'grievances';
+  | 'sports'
+  | 'facilities'
+  | 'grievances'
+  | 'seo'
+  | 'analytics';
 
 export interface RbacModuleOption {
   id: AdminResource;
@@ -185,13 +189,17 @@ export const ALL_RBAC_MODULE_OPTIONS: RbacModuleOption[] = [
   { id: 'departments', label: 'Departments & Microsites', description: 'Department profiles, faculty, labs & sub-pages' },
   { id: 'sliders_events', label: 'Homepage, Sliders, Ticker & Events', description: 'Hero banners, news marquee & campus events' },
   { id: 'leadership', label: 'Leadership & Governance Committees', description: 'Statutory officers, BoG, Academic Council, ICC' },
-  { id: 'conferences', label: 'Conferences (Nat\'l / Int\'l)', description: 'Call for papers, tracks, speakers, submissions & reg' },
-  { id: 'placements', label: 'Training & Placement Hub', description: 'Branch placement stats, recruiters & stories' },
+  { id: 'conferences', label: 'Conferences (Nat\'l / Int\'l)', description: 'Call for papers, posters, tracks, speakers & reg' },
+  { id: 'placements', label: 'Training & Placement Hub', description: 'Branch placement stats, notices & congratulations desk' },
+  { id: 'sports', label: 'Student Life — Sports Portal', description: 'Facilities, events, student medals, gallery & notices' },
+  { id: 'facilities', label: 'Campus Facilities & Infrastructure', description: 'Infrastructural, IT, student facilities & custom fields' },
   { id: 'grievances', label: 'Grievance & Anti-Ragging Helpdesk', description: 'Review tickets & post resolution responses' },
   { id: 'alumni', label: 'Alumni Network, Jobs & Forum', description: 'Profiles, jobs, achievers, discussions & pledges' },
   { id: 'gallery', label: 'Picture Gallery', description: 'Campus photo albums & event pictures' },
   { id: 'documents', label: 'Document Repository & Quick Links', description: 'PDFs, circulars, fees & approvals' },
   { id: 'directory', label: 'Telephone Directory', description: 'Campus extensions & office contacts' },
+  { id: 'seo', label: 'SEO, Sitemap & Meta Studio', description: 'Meta titles, OpenGraph, Schema.org JSON-LD & hit counter' },
+  { id: 'analytics', label: 'Log Analyzer & Security Shield', description: 'Country/State/Area traffic logs, WAF & IP blocking' },
   { id: 'settings', label: 'Site Settings, Theme & Design', description: 'Colors, fonts, layout & upload size controls' },
   { id: 'users', label: 'Users, RBAC & Website Backup', description: 'Account roles, permissions & .zip migration' },
   { id: 'audit_logs', label: 'Security Audit Logs', description: 'View administrative change history' },
@@ -215,13 +223,11 @@ export function canUserAccessResource(
 ): boolean {
   if (!user || !user.isActive) return false;
   const role: UserRole = user.role;
-
   if (role === 'super_admin') return true;
 
   const explicitModules = Array.isArray(user.allowedModules) ? user.allowedModules : [];
   const hasExplicitModules = explicitModules.length > 0;
   const explicitDepts = Array.isArray(user.allowedDepartmentIds) ? user.allowedDepartmentIds : [];
-
   const hasExplicitPageScope =
     (user.allowedCategories?.length ?? 0) > 0 ||
     (user.allowedPageIds?.length ?? 0) > 0;
@@ -263,6 +269,8 @@ export function canUserAccessResource(
     case 'alumni':
     case 'conferences':
     case 'placements':
+    case 'sports':
+    case 'facilities':
     case 'grievances':
       return role === 'content_editor' || role === 'iqac_officer';
     case 'pages':
@@ -399,7 +407,7 @@ export function filterDocuments(
 
 export function searchCmsContent(
   query: string,
-  db: Pick<CmsDatabase, 'pages' | 'departments' | 'documents' | 'events' | 'conferences'>,
+  db: Pick<CmsDatabase, 'pages' | 'departments' | 'documents' | 'events' | 'conferences' | 'sports' | 'facilities'>,
 ): SearchResultItem[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
@@ -431,7 +439,8 @@ export function searchCmsContent(
       conf.title.toLowerCase().includes(q) ||
       conf.shortName.toLowerCase().includes(q) ||
       conf.theme.toLowerCase().includes(q) ||
-      conf.scope.toLowerCase().includes(q)
+      conf.scope.toLowerCase().includes(q) ||
+      (conf.posterItems || []).some((pi) => pi.title.toLowerCase().includes(q) || pi.authors.toLowerCase().includes(q))
     ) {
       results.push({
         id: `conf-${conf.id}`,
@@ -440,6 +449,85 @@ export function searchCmsContent(
         subtitle: `${conf.scope} · ${conf.startDate} to ${conf.endDate}`,
         url: `/conference/${conf.slug}`,
         meta: `${conf.organizingDepartment} · ${conf.mode}`,
+      });
+    }
+  }
+
+  for (const fac of db.facilities?.items || []) {
+    if (!fac.isPublished) continue;
+    const plain = fac.descriptionHtml.replace(/<[^>]+>/g, ' ').toLowerCase();
+    const cfMatch = (fac.customFields || []).some(
+      (f) => f.label.toLowerCase().includes(q) || f.value.toLowerCase().includes(q),
+    );
+    if (
+      fac.title.toLowerCase().includes(q) ||
+      fac.category.toLowerCase().includes(q) ||
+      fac.shortSummary.toLowerCase().includes(q) ||
+      fac.locationBlock.toLowerCase().includes(q) ||
+      plain.includes(q) ||
+      cfMatch
+    ) {
+      results.push({
+        id: `facility-${fac.id}`,
+        type: 'facility',
+        title: fac.title,
+        subtitle: fac.shortSummary || `${fac.category} · ${fac.locationBlock}`,
+        url: `/facilities?cat=${encodeURIComponent(fac.category)}`,
+        meta: `${fac.category} · ${fac.capacity || fac.timings}`,
+      });
+    }
+  }
+
+  for (const sf of db.sports?.facilities || []) {
+    if (!sf.isPublished) continue;
+    if (
+      sf.name.toLowerCase().includes(q) ||
+      sf.facilityType.toLowerCase().includes(q) ||
+      sf.description.toLowerCase().includes(q)
+    ) {
+      results.push({
+        id: `sports-fac-${sf.id}`,
+        type: 'sports',
+        title: sf.name,
+        subtitle: `${sf.facilityType} · ${sf.dimensionsOrCapacity}`,
+        url: '/sports?tab=facilities',
+        meta: `Student Life · Sports Infrastructure`,
+      });
+    }
+  }
+
+  for (const se of db.sports?.events || []) {
+    if (!se.isPublished) continue;
+    if (
+      se.title.toLowerCase().includes(q) ||
+      se.discipline.toLowerCase().includes(q) ||
+      se.eventType.toLowerCase().includes(q)
+    ) {
+      results.push({
+        id: `sports-ev-${se.id}`,
+        type: 'sports',
+        title: se.title,
+        subtitle: `${se.eventType} · ${se.discipline} · ${se.eventDate}`,
+        url: '/sports?tab=events',
+        meta: `Sports Event · ${se.venue}`,
+      });
+    }
+  }
+
+  for (const sa of db.sports?.achievements || []) {
+    if (
+      sa.studentOrTeamName.toLowerCase().includes(q) ||
+      sa.sportName.toLowerCase().includes(q) ||
+      sa.eventName.toLowerCase().includes(q) ||
+      sa.level.toLowerCase().includes(q)
+    ) {
+      results.push({
+        id: `sports-ach-${sa.id}`,
+        type: 'sports',
+        title: `${sa.studentOrTeamName} — ${sa.medalOrRank}`,
+        subtitle: `${sa.sportName} · ${sa.eventName}`,
+        url: '/sports?tab=achievements',
+        meta: `${sa.level} Achievement · ${sa.departmentCode}`,
       });
     }
   }

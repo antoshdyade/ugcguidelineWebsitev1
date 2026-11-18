@@ -1,5 +1,6 @@
 import type {
   AlumniEndowmentPledge,
+  BlockedIpEntry,
   CmsCategory,
   CmsDatabase,
   Conference,
@@ -8,14 +9,26 @@ import type {
   GrievancePortalConfig,
   GrievanceTicket,
   HeaderPortalMenuItem,
+  HitCounterStats,
   PlacementsData,
   PlacementNotice,
   PlacementStory,
   PlacementYearStat,
   SanctionedIntakeProgram,
+  SecurityConfig,
+  SeoSettings,
+  SportsData,
+  FacilitiesData,
+  VisitorLogEntry,
 } from '../types/cms';
+import {
+  DEFAULT_SECURITY_CONFIG,
+  DEFAULT_SEO_SETTINGS,
+  createSeedHitCounter,
+  createSeedVisitorLogs,
+} from './securityAndSeoLogic';
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 export const PLACEMENT_NOTICE_CATEGORY_PRESETS = [
   'Campus Drive Notice',
@@ -46,12 +59,13 @@ export const CONFERENCE_SUBMISSION_PLATFORM_PRESETS = [
 
 export const DEFAULT_PORTAL_MENU_ITEMS: HeaderPortalMenuItem[] = [
   { id: 1, label: 'Conferences', url: '/conferences', menuLocation: 'main', sortOrder: 1 },
-  { id: 2, label: 'Placements', url: '/placements', menuLocation: 'main', sortOrder: 2 },
-  { id: 3, label: 'Grievance & Anti-Ragging', url: '/grievance', menuLocation: 'main', sortOrder: 3 },
-  { id: 4, label: 'Alumni', url: '/alumni', menuLocation: 'main', sortOrder: 4 },
-  { id: 5, label: 'Gallery', url: '/gallery', menuLocation: 'more', sortOrder: 5 },
-  { id: 6, label: 'Contact Us', url: '/contact', menuLocation: 'more', sortOrder: 6 },
-  { id: 7, label: 'Quick Links & Disclosures', url: '/quick-links', menuLocation: 'more', sortOrder: 7 },
+  { id: 8, label: 'Facilities', url: '/facilities', menuLocation: 'main', sortOrder: 2 },
+  { id: 2, label: 'Placements', url: '/placements', menuLocation: 'main', sortOrder: 3 },
+  { id: 3, label: 'Grievance & Anti-Ragging', url: '/grievance', menuLocation: 'main', sortOrder: 4 },
+  { id: 4, label: 'Alumni', url: '/alumni', menuLocation: 'main', sortOrder: 5 },
+  { id: 5, label: 'Gallery', url: '/gallery', menuLocation: 'more', sortOrder: 6 },
+  { id: 6, label: 'Contact Us', url: '/contact', menuLocation: 'more', sortOrder: 7 },
+  { id: 7, label: 'Quick Links & Disclosures', url: '/quick-links', menuLocation: 'more', sortOrder: 8 },
 ];
 
 export const DEFAULT_GRIEVANCE_PORTAL_CONFIG: GrievancePortalConfig = {
@@ -206,7 +220,56 @@ export const CONFERENCE_SCOPE_PRESETS = [
   'Technical Event / Symposium',
   'Faculty Development Program (FDP)',
   'Short-Term Training Program (STTP)',
+  'Poster Presentation',
+  'Poster Presentation & Technical Expo',
   'Patent & IPR Clinic',
+] as const;
+
+export const CONFERENCE_PRESENTATION_TYPE_PRESETS = [
+  'Oral Paper Presentation',
+  'Poster Presentation',
+  'Hardware / Prototype Demo',
+] as const;
+
+export const SPORTS_FACILITY_TYPE_PRESETS = [
+  'Outdoor Ground / Track',
+  'Indoor Court / Hall',
+  'Fitness & Gymnasium',
+  'Aquatic / Synthetic Court',
+  'Yoga & Wellness Studio',
+] as const;
+
+export const SPORTS_EVENT_TYPE_PRESETS = [
+  'Annual Sports Meet',
+  'Intercollegiate Tournament',
+  'University Zonal Trials',
+  'Fitness & Marathon Drive',
+  'Coaching Camp / Clinic',
+] as const;
+
+export const SPORTS_ACHIEVEMENT_LEVEL_PRESETS = [
+  'University',
+  'State',
+  'National',
+  'International',
+  'Zonal / Intercollegiate',
+] as const;
+
+export const SPORTS_NOTICE_CATEGORY_PRESETS = [
+  'Trials & Selection',
+  'Tournament Schedule',
+  'Fitness Schedule',
+  'Gymkhana Circular',
+  'Achievement Announcement',
+] as const;
+
+export const FACILITY_CATEGORY_PRESETS = [
+  'Infrastructural Facilities',
+  'IT & Computing Facilities',
+  'Student Facilities',
+  'Research & Central Labs',
+  'Library & Digital Resources',
+  'Green & Barrier-Free Campus',
 ] as const;
 
 export const CONFERENCE_MODE_PRESETS = [
@@ -537,26 +600,50 @@ export function migrateDatabaseInPlace(
     : ((upgraded = true), structuredClone(seed.conferences || []));
 
   const conferences: Conference[] = rawConferences.map((conf) => {
-    if (Array.isArray(conf.heroSlides) && conf.heroSlides.length > 0) {
-      return conf;
-    }
     const seedMatch = (seed.conferences || []).find((sc) => sc.id === conf.id || sc.slug === conf.slug);
-    upgraded = true;
-    return {
-      ...conf,
-      heroSlides: seedMatch?.heroSlides
-        ? structuredClone(seedMatch.heroSlides)
-        : [
-            {
-              id: 1,
-              title: `${conf.shortName}: ${conf.title}`,
-              caption: conf.theme || `${conf.scope} · ${conf.venue}`,
-              imageUrl: conf.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
-              ctaLabel: 'Explore Tracks & Submit Paper',
-              ctaLink: `/conference/${conf.slug}`,
-            },
-          ],
-    };
+    let nextConf = conf;
+    if (!Array.isArray(conf.heroSlides) || conf.heroSlides.length === 0) {
+      upgraded = true;
+      nextConf = {
+        ...nextConf,
+        heroSlides: seedMatch?.heroSlides
+          ? structuredClone(seedMatch.heroSlides)
+          : [
+              {
+                id: 1,
+                title: `${conf.shortName}: ${conf.title}`,
+                caption: conf.theme || `${conf.scope} · ${conf.venue}`,
+                imageUrl: conf.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg',
+                ctaLabel: 'Explore Tracks & Submit Paper',
+                ctaLink: `/conference/${conf.slug}`,
+              },
+            ],
+      };
+    }
+    if (
+      nextConf.enablePosterPresentation === undefined ||
+      (!Array.isArray(nextConf.posterItems) && seedMatch?.posterItems)
+    ) {
+      upgraded = true;
+      nextConf = {
+        ...nextConf,
+        enablePosterPresentation: nextConf.enablePosterPresentation ?? seedMatch?.enablePosterPresentation ?? true,
+        posterDimensions: nextConf.posterDimensions || seedMatch?.posterDimensions || 'A0 Portrait (841 x 1189 mm)',
+        posterGuidelinesHtml:
+          nextConf.posterGuidelinesHtml ??
+          seedMatch?.posterGuidelinesHtml ??
+          '<p>Authors presenting in the Poster Presentation track should prepare an A0 vertical poster (841 &times; 1189 mm) covering problem statement, methodology, experimental results, and key takeaways.</p>',
+        posterTemplateUrl: nextConf.posterTemplateUrl ?? seedMatch?.posterTemplateUrl ?? '',
+        posterPrizesText:
+          nextConf.posterPrizesText ??
+          seedMatch?.posterPrizesText ??
+          'Best Poster Awards & Certificates per Track',
+        posterItems: Array.isArray(nextConf.posterItems)
+          ? nextConf.posterItems
+          : structuredClone(seedMatch?.posterItems || []),
+      };
+    }
+    return nextConf;
   });
 
   const conferenceSubmissions: ConferenceSubmission[] = Array.isArray(existing.conferenceSubmissions)
@@ -599,10 +686,18 @@ export function migrateDatabaseInPlace(
       (cat.showInMenu === false ? 'hidden' : idx < 6 ? 'main' : 'more'),
   }));
 
-  const mergedPortalMenuItems =
+  const basePortalItems =
     Array.isArray(existing.settings?.portalMenuItems) && existing.settings.portalMenuItems.length > 0
-      ? existing.settings.portalMenuItems
+      ? [...existing.settings.portalMenuItems]
       : structuredClone(seed.settings.portalMenuItems || DEFAULT_PORTAL_MENU_ITEMS);
+  const existingPortalUrls = new Set(basePortalItems.map((p) => (p.url || '').trim().toLowerCase()));
+  for (const defItem of DEFAULT_PORTAL_MENU_ITEMS) {
+    if (!existingPortalUrls.has(defItem.url.trim().toLowerCase())) {
+      basePortalItems.push(structuredClone(defItem));
+      upgraded = true;
+    }
+  }
+  const mergedPortalMenuItems = basePortalItems;
 
   const mergedGrievancePortal: GrievancePortalConfig = {
     ...DEFAULT_GRIEVANCE_PORTAL_CONFIG,
@@ -690,6 +785,62 @@ export function migrateDatabaseInPlace(
       existing.settings?.customHomeComponents ?? seed.settings.customHomeComponents ?? [],
   };
 
+  const mergedSeo: SeoSettings = {
+    ...DEFAULT_SEO_SETTINGS,
+    ...(seed.seo || {}),
+    ...(existing.seo || {}),
+    pageOverrides: Array.isArray(existing.seo?.pageOverrides)
+      ? existing.seo.pageOverrides
+      : structuredClone(seed.seo?.pageOverrides || DEFAULT_SEO_SETTINGS.pageOverrides),
+  };
+  if (!existing.seo) upgraded = true;
+
+  const mergedHitCounter: HitCounterStats =
+    existing.hitCounter && typeof existing.hitCounter.totalHits === 'number'
+      ? {
+          ...createSeedHitCounter(),
+          ...existing.hitCounter,
+          uniqueTodayHashes: Array.isArray(existing.hitCounter.uniqueTodayHashes)
+            ? existing.hitCounter.uniqueTodayHashes
+            : [],
+        }
+      : ((upgraded = true), structuredClone(seed.hitCounter || createSeedHitCounter()));
+
+  const visitorLogs: VisitorLogEntry[] = Array.isArray(existing.visitorLogs)
+    ? existing.visitorLogs
+    : ((upgraded = true), structuredClone(seed.visitorLogs || createSeedVisitorLogs()));
+
+  const blockedIps: BlockedIpEntry[] = Array.isArray(existing.blockedIps)
+    ? existing.blockedIps
+    : ((upgraded = true), structuredClone(seed.blockedIps || []));
+
+  const mergedSecurityConfig: SecurityConfig = {
+    ...DEFAULT_SECURITY_CONFIG,
+    ...(seed.securityConfig || {}),
+    ...(existing.securityConfig || {}),
+  };
+  if (!existing.securityConfig) upgraded = true;
+
+  const mergedSports: SportsData =
+    existing.sports && Array.isArray(existing.sports.facilities)
+      ? {
+          config: existing.sports.config || structuredClone(seed.sports!.config),
+          facilities: existing.sports.facilities,
+          events: Array.isArray(existing.sports.events) ? existing.sports.events : [],
+          achievements: Array.isArray(existing.sports.achievements) ? existing.sports.achievements : [],
+          gallery: Array.isArray(existing.sports.gallery) ? existing.sports.gallery : [],
+          notices: Array.isArray(existing.sports.notices) ? existing.sports.notices : [],
+        }
+      : ((upgraded = true), structuredClone(seed.sports!));
+
+  const mergedFacilities: FacilitiesData =
+    existing.facilities && Array.isArray(existing.facilities.items)
+      ? {
+          config: existing.facilities.config || structuredClone(seed.facilities!.config),
+          items: existing.facilities.items,
+        }
+      : ((upgraded = true), structuredClone(seed.facilities!));
+
   const mergedDb: CmsDatabase = {
     ...seed,
     ...existing,
@@ -699,6 +850,8 @@ export function migrateDatabaseInPlace(
     conferenceSubmissions,
     conferenceRegistrations,
     placements: mergedPlacements,
+    sports: mergedSports,
+    facilities: mergedFacilities,
     grievances,
     alumni: existingAlumni
       ? {
@@ -708,6 +861,11 @@ export function migrateDatabaseInPlace(
         }
       : seed.alumni,
     settings: mergedSettings,
+    seo: mergedSeo,
+    hitCounter: mergedHitCounter,
+    visitorLogs,
+    blockedIps,
+    securityConfig: mergedSecurityConfig,
   };
 
   return { db: mergedDb, upgraded };

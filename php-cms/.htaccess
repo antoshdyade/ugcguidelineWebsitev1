@@ -1,5 +1,6 @@
 # SVCOER UGC CMS — Apache Configuration (Ubuntu Webmin & Windows XAMPP Compatible)
 DirectoryIndex index.php index.html
+Options -Indexes
 
 <IfModule mod_mime.c>
   AddDefaultCharset UTF-8
@@ -13,4 +14,27 @@ DirectoryIndex index.php index.html
 
 <IfModule mod_headers.c>
   Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Header set X-XSS-Protection "1; mode=block"
 </IfModule>
+
+# Block direct HTTP access to SQL dumps, logs, env files, config files, and backups
+<FilesMatch "\.(sql|log|env|ini|sh|bak|md)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(config|includes|backups)/ - [F,L]
+  RewriteRule ^sitemap\.xml$ sitemap.php [L,QSA]
+  RewriteRule ^robots\.txt$ robots.php [L,QSA]
+</IfModule>
+

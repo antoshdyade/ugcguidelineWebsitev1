@@ -27,6 +27,39 @@ if (mb_strlen($q) >= 2) {
     foreach ($dStmt->fetchAll() as $r) {
         $results[] = ['type' => 'Document · ' . $r['category'], 'title' => $r['title'], 'url' => $r['file_url']];
     }
+
+    try {
+        $facStmt = $pdo->prepare('SELECT title, category FROM facilities WHERE is_published = 1 AND (title LIKE ? OR category LIKE ? OR short_summary LIKE ? OR custom_fields_json LIKE ?) LIMIT 6');
+        $facStmt->execute([$like, $like, $like, $like]);
+        foreach ($facStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Campus Facility · ' . $r['category'], 'title' => $r['title'], 'url' => 'facilities.php?cat=' . urlencode($r['category'])];
+        }
+
+        $sfStmt = $pdo->prepare('SELECT name, facility_type FROM sports_facilities WHERE is_published = 1 AND (name LIKE ? OR facility_type LIKE ? OR description LIKE ?) LIMIT 5');
+        $sfStmt->execute([$like, $like, $like]);
+        foreach ($sfStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Sports Facility · ' . $r['facility_type'], 'title' => $r['name'], 'url' => 'sports.php?tab=facilities'];
+        }
+
+        $seStmt = $pdo->prepare('SELECT title, event_type FROM sports_events WHERE is_published = 1 AND (title LIKE ? OR discipline LIKE ? OR description LIKE ?) LIMIT 5');
+        $seStmt->execute([$like, $like, $like]);
+        foreach ($seStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Sports Event · ' . $r['event_type'], 'title' => $r['title'], 'url' => 'sports.php?tab=events'];
+        }
+
+        $saStmt = $pdo->prepare('SELECT student_or_team_name, sport_name, level FROM sports_achievements WHERE student_or_team_name LIKE ? OR sport_name LIKE ? OR event_name LIKE ? LIMIT 5');
+        $saStmt->execute([$like, $like, $like]);
+        foreach ($saStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Sports Achievement · ' . $r['level'], 'title' => $r['student_or_team_name'] . ' (' . $r['sport_name'] . ')', 'url' => 'sports.php?tab=achievements'];
+        }
+
+        $cfStmt = $pdo->prepare('SELECT slug, short_name, title, scope FROM conferences WHERE is_published = 1 AND (title LIKE ? OR short_name LIKE ? OR poster_guidelines_html LIKE ? OR poster_items_json LIKE ?) LIMIT 5');
+        $cfStmt->execute([$like, $like, $like, $like]);
+        foreach ($cfStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Conference · ' . $r['scope'], 'title' => $r['short_name'] . ' — ' . $r['title'], 'url' => 'conference.php?slug=' . urlencode($r['slug'])];
+        }
+    } catch (Throwable $ignoredSearch) {
+    }
 }
 
 if (isset($_GET['ajax'])) {

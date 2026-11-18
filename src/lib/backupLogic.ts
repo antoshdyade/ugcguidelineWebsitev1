@@ -22,10 +22,17 @@ export const BACKUP_DATA_KEYS = [
   'conferenceSubmissions',
   'conferenceRegistrations',
   'placements',
+  'sports',
+  'facilities',
   'grievances',
   'users',
   'auditLogs',
   'settings',
+  'seo',
+  'hitCounter',
+  'visitorLogs',
+  'blockedIps',
+  'securityConfig',
 ] as const;
 
 export type BackupDataKey = (typeof BACKUP_DATA_KEYS)[number];
@@ -50,10 +57,17 @@ export function extractSnapshotData(
     conferenceSubmissions: db.conferenceSubmissions,
     conferenceRegistrations: db.conferenceRegistrations,
     placements: db.placements,
+    sports: db.sports,
+    facilities: db.facilities,
     grievances: db.grievances,
     users: db.users,
     auditLogs: db.auditLogs,
     settings: db.settings,
+    seo: db.seo,
+    hitCounter: db.hitCounter,
+    visitorLogs: db.visitorLogs,
+    blockedIps: db.blockedIps,
+    securityConfig: db.securityConfig,
   };
 }
 
@@ -72,6 +86,11 @@ export function countDatabaseEntities(
       } else if (key === 'placements' && 'stats' in val && Array.isArray((val as { stats?: unknown[] }).stats)) {
         const pl = val as { stats: unknown[]; stories?: unknown[] };
         counts[key] = pl.stats.length + (pl.stories?.length ?? 0);
+      } else if (key === 'sports' && 'facilities' in val) {
+        const sp = val as { facilities?: unknown[]; events?: unknown[]; achievements?: unknown[]; gallery?: unknown[]; notices?: unknown[] };
+        counts[key] = (sp.facilities?.length ?? 0) + (sp.events?.length ?? 0) + (sp.achievements?.length ?? 0) + (sp.gallery?.length ?? 0) + (sp.notices?.length ?? 0);
+      } else if (key === 'facilities' && 'items' in val && Array.isArray((val as { items?: unknown[] }).items)) {
+        counts[key] = (val as { items: unknown[] }).items.length;
       } else {
         counts[key] = 1;
       }

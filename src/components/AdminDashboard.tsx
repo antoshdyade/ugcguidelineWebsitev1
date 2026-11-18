@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Activity,
   Archive,
   ArrowDown,
   ArrowLeft,
@@ -13,16 +14,19 @@ import {
   Globe2,
   GraduationCap,
   Image as ImageIcon,
+  Landmark,
   Layers,
   LayoutGrid,
   LogOut,
   Phone,
   Plus,
+  Search,
   Settings,
   Shield,
   ShieldAlert,
   Trash2,
   TrendingUp,
+  Trophy,
   Upload,
   UserCheck,
   Users,
@@ -60,9 +64,13 @@ import { CaptchaWidget } from './CaptchaWidget';
 import { ConferenceAdminPanel } from './ConferenceAdminPanel';
 import { CustomSelectInput } from './CustomSelectInput';
 import { EngineeringPortalsAdmin } from './EngineeringPortalsAdmin';
+import { FacilitiesAdminPanel } from './FacilitiesAdminPanel';
 import { ImageUploader } from './ImageUploader';
+import { LogSecurityAdminPanel } from './LogSecurityAdminPanel';
 import { PerPageRbacSelector } from './PerPageRbacSelector';
 import { RichTextEditor } from './RichTextEditor';
+import { SeoAdminPanel } from './SeoAdminPanel';
+import { SportsAdminPanel } from './SportsAdminPanel';
 import type {
   AdminModuleKey,
   AlumniData,
@@ -82,17 +90,22 @@ import type {
   DepartmentSubPagePhoto,
   DepartmentSubPageType,
   DocumentCategory,
+  FacilitiesData,
   FacultyCustomField,
   FacultyMember,
   GalleryAlbum,
   GrievanceTicket,
   HeaderPortalMenuItem,
   HeroSlide,
+  HitCounterStats,
   HomeComponentPlacement,
   LeadershipProfile,
   MenuPlacementLocation,
   PlacementsData,
+  SecurityConfig,
+  SeoSettings,
   SiteSettings,
+  SportsData,
   TelephoneEntry,
   TickerItem,
   UgcCategorySlug,
@@ -116,7 +129,13 @@ interface AdminStatePayload {
   conferenceRegistrations?: ConferenceRegistration[];
   placements?: PlacementsData;
   grievances?: GrievanceTicket[];
+  sports?: SportsData;
+  facilities?: FacilitiesData;
   settings: SiteSettings;
+  seo?: SeoSettings;
+  hitCounter?: HitCounterStats;
+  securityConfig?: SecurityConfig;
+  blockedIpCount?: number;
   users: CmsUser[];
   auditLogs: AuditLogEntry[];
 }
@@ -130,14 +149,55 @@ type AdminTab =
   | 'leadership'
   | 'conferences'
   | 'placements'
+  | 'sports'
+  | 'facilities'
   | 'grievances'
   | 'alumni'
   | 'gallery'
   | 'documents'
   | 'directory'
+  | 'seo'
+  | 'analytics'
   | 'settings'
   | 'users'
   | 'backups';
+
+function resolveInitialAdminTab(u: CmsUser): AdminTab {
+  if (u.role === 'super_admin') return 'overview';
+  if (u.assignedDepartmentId) return 'departments';
+  if (
+    u.role === 'exam_controller' ||
+    u.role === 'specific_page_editor' ||
+    (Array.isArray(u.allowedPageIds) && u.allowedPageIds.length > 0) ||
+    (Array.isArray(u.allowedCategories) && u.allowedCategories.length > 0)
+  ) {
+    return 'pages';
+  }
+  const orderedResources: [AdminModuleKey, AdminTab][] = [
+    ['categories', 'categories'],
+    ['pages', 'pages'],
+    ['departments', 'departments'],
+    ['sliders_events', 'homepage'],
+    ['leadership', 'leadership'],
+    ['conferences', 'conferences'],
+    ['placements', 'placements'],
+    ['sports', 'sports'],
+    ['facilities', 'facilities'],
+    ['grievances', 'grievances'],
+    ['alumni', 'alumni'],
+    ['gallery', 'gallery'],
+    ['documents', 'documents'],
+    ['directory', 'directory'],
+    ['seo', 'seo'],
+    ['analytics', 'analytics'],
+    ['settings', 'settings'],
+    ['users', 'users'],
+  ];
+  for (const [resource, tab] of orderedResources) {
+    if (canUserAccessResource(u, resource)) return tab;
+  }
+  return 'overview';
+}
 
 function LinkTargetPicker({
   value,
@@ -156,6 +216,8 @@ function LinkTargetPicker({
 }) {
   const builtinTargets = [
     { label: 'Home Page (/)', url: '/' },
+    { label: 'Campus Facilities Showcase (/facilities)', url: '/facilities' },
+    { label: 'Sports, Athletics & Gymkhana (/sports)', url: '/sports' },
     { label: 'Research Conferences, Workshops & Events (/conferences)', url: '/conferences' },
     { label: 'Training & Placement (T&P) Hub (/placements)', url: '/placements' },
     { label: 'Online Grievance & Anti-Ragging Helpdesk (/grievance)', url: '/grievance' },
@@ -537,16 +599,8 @@ export function AdminDashboard({
             if (storedToken) setSessionToken(storedToken);
             if (data.user.assignedDepartmentId) {
               setSelectedDeptId(data.user.assignedDepartmentId);
-              setActiveTab('departments');
-            } else if (
-              data.user.role === 'exam_controller' ||
-              data.user.role === 'specific_page_editor' ||
-              (data.user.role !== 'super_admin' &&
-                ((Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) ||
-                  (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0)))
-            ) {
-              setActiveTab('pages');
             }
+            setActiveTab(resolveInitialAdminTab(data.user));
             if (Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) {
               setPageFilterCat('all');
             } else if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
@@ -587,18 +641,8 @@ export function AdminDashboard({
       setCaptchaAnswer('');
       if (data.user.assignedDepartmentId) {
         setSelectedDeptId(data.user.assignedDepartmentId);
-        setActiveTab('departments');
-      } else if (
-        data.user.role === 'exam_controller' ||
-        data.user.role === 'specific_page_editor' ||
-        (data.user.role !== 'super_admin' &&
-          ((Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) ||
-            (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0)))
-      ) {
-        setActiveTab('pages');
-      } else {
-        setActiveTab('overview');
       }
+      setActiveTab(resolveInitialAdminTab(data.user));
       if (Array.isArray(data.user.allowedPageIds) && data.user.allowedPageIds.length > 0) {
         setPageFilterCat('all');
       } else if (Array.isArray(data.user.allowedCategories) && data.user.allowedCategories.length > 0) {
@@ -850,11 +894,15 @@ export function AdminDashboard({
   const canLeadership = canUserAccessResource(user, 'leadership');
   const canConferences = canUserAccessResource(user, 'conferences');
   const canPlacements = canUserAccessResource(user, 'placements');
+  const canSports = canUserAccessResource(user, 'sports');
+  const canFacilities = canUserAccessResource(user, 'facilities');
   const canGrievances = canUserAccessResource(user, 'grievances');
   const canAlumni = canUserAccessResource(user, 'alumni');
   const canGallery = canUserAccessResource(user, 'gallery');
   const canDocs = canUserAccessResource(user, 'documents');
   const canDirectory = canUserAccessResource(user, 'directory');
+  const canSeo = canUserAccessResource(user, 'seo');
+  const canAnalytics = canUserAccessResource(user, 'analytics');
   const canUsers = canUserAccessResource(user, 'users');
   const canSettings = canUserAccessResource(user, 'settings');
 
@@ -867,11 +915,15 @@ export function AdminDashboard({
     { id: 'leadership', label: 'Leadership & Governance', icon: <UserCheck className="w-4 h-4" />, allowed: canLeadership },
     { id: 'conferences', label: 'Research: Conferences & Events', icon: <Globe2 className="w-4 h-4" />, allowed: canConferences },
     { id: 'placements', label: 'Training & Placements', icon: <TrendingUp className="w-4 h-4" />, allowed: canPlacements },
+    { id: 'sports', label: 'Sports & Gymkhana', icon: <Trophy className="w-4 h-4" />, allowed: canSports },
+    { id: 'facilities', label: 'Campus Facilities', icon: <Landmark className="w-4 h-4" />, allowed: canFacilities },
     { id: 'grievances', label: 'Grievance & Anti-Ragging', icon: <ShieldAlert className="w-4 h-4" />, allowed: canGrievances },
     { id: 'alumni', label: 'Alumni Network & Jobs', icon: <GraduationCap className="w-4 h-4" />, allowed: canAlumni },
     { id: 'gallery', label: 'Picture Gallery', icon: <ImageIcon className="w-4 h-4" />, allowed: canGallery },
     { id: 'documents', label: 'Document Repository', icon: <FolderOpen className="w-4 h-4" />, allowed: canDocs },
     { id: 'directory', label: 'Telephone Directory', icon: <Phone className="w-4 h-4" />, allowed: canDirectory },
+    { id: 'seo', label: 'SEO Studio & Hit Counter', icon: <Search className="w-4 h-4" />, allowed: canSeo },
+    { id: 'analytics', label: 'Log Analyzer & Security Shield', icon: <Activity className="w-4 h-4" />, allowed: canAnalytics },
     { id: 'settings', label: 'Site Settings, Vision & Design', icon: <Settings className="w-4 h-4" />, allowed: canSettings },
     { id: 'users', label: 'Users, RBAC & Audit', icon: <Users className="w-4 h-4" />, allowed: canUsers },
     { id: 'backups', label: 'Backup, Export & Restore', icon: <Archive className="w-4 h-4" />, allowed: canUsers },
@@ -1025,12 +1077,14 @@ export function AdminDashboard({
         {/* 1. OVERVIEW TAB */}
         {activeTab === 'overview' && state && (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
               {[
                 { label: 'Published UGC Pages', val: state.pages.filter((p) => p.isPublished).length, tab: 'pages' as AdminTab },
                 { label: 'Department Microsites', val: state.departments.length, tab: 'departments' as AdminTab },
                 { label: 'Repository Documents', val: state.documents.length, tab: 'documents' as AdminTab },
                 { label: 'Gallery Albums', val: state.gallery.length, tab: 'gallery' as AdminTab },
+                { label: 'Website Visits Counter', val: Number(state.hitCounter?.totalHits || 0).toLocaleString(), tab: 'seo' as AdminTab },
+                { label: 'Blocked Attack IPs', val: state.blockedIpCount ?? 0, tab: 'analytics' as AdminTab },
               ].map((stat) => (
                 <button
                   key={stat.label}
@@ -6544,6 +6598,28 @@ export function AdminDashboard({
           />
         )}
 
+        {/* 10B2. SPORTS & GYMKHANA PORTAL ADMIN */}
+        {activeTab === 'sports' && canSports && state && state.sports && (
+          <SportsAdminPanel
+            sports={state.sports}
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
+        {/* 10B3. CAMPUS FACILITIES PORTAL ADMIN */}
+        {activeTab === 'facilities' && canFacilities && state && state.facilities && (
+          <FacilitiesAdminPanel
+            facilities={state.facilities}
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
         {/* 10C. GRIEVANCE & ANTI-RAGGING HELPDESK ADMIN */}
         {activeTab === 'grievances' && canGrievances && state && (
           <EngineeringPortalsAdmin
@@ -6576,6 +6652,25 @@ export function AdminDashboard({
             settings={state.settings}
             adminFetch={adminFetch}
             uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
+        {/* 10E. SEO STUDIO & FOOTER HIT COUNTER */}
+        {activeTab === 'seo' && canSeo && state && (
+          <SeoAdminPanel
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
+        {/* 10F. LOG ANALYZER (COUNTRY / STATE / AREA) & HACKPROOF SECURITY SHIELD */}
+        {activeTab === 'analytics' && canAnalytics && state && (
+          <LogSecurityAdminPanel
+            adminFetch={adminFetch}
+            sessionToken={sessionToken || getStoredToken()}
             notify={notify}
           />
         )}

@@ -11,49 +11,79 @@ if (currentUser()) {
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    verifyCsrfToken($_POST['csrf_token'] ?? null);
-    $email = trim((string)($_POST['email'] ?? ''));
+    $submittedCsrf = (string)($_POST['csrf_token'] ?? '');
+    $sessionCsrf = (string)($_SESSION['csrf_token'] ?? '');
+    $email = strtolower(trim((string)($_POST['email'] ?? '')));
     $pass  = (string)($_POST['password'] ?? '');
     $captchaAnswer = (string)($_POST['captcha_answer'] ?? '');
+    $captchaToken  = (string)($_POST['captcha_token'] ?? '');
 
-    if (!verifyCaptchaAnswer($captchaAnswer, 'admin_login')) {
-        $error = 'Incorrect or expired security CAPTCHA code. Please try again.';
+    if ($submittedCsrf === '' || $sessionCsrf === '' || !hash_equals($sessionCsrf, $submittedCsrf)) {
+        $error = 'Your login security session expired or cookies were blocked. A fresh security token has been issued — please re-enter the CAPTCHA code and sign in again.';
+    } elseif (!verifyCaptchaAnswer($captchaAnswer, 'admin_login', $captchaToken)) {
+        $error = 'Incorrect or expired security CAPTCHA code. Please verify the 5-character code and try again.';
+    } elseif ($email === '' || $pass === '') {
+        $error = 'Please enter both your institutional email and password.';
     } else {
         $pdo = getDB();
+        $user = null;
         try {
             ensureCmsSchemaUpgraded($pdo);
-            $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
-            $stmt->execute([$email]);
-            $user = $stmt->fetch();
+            $waitMins = isPhpLoginRateLimited($pdo, normalizePhpClientIp(), 'admin');
+            if ($waitMins !== null) {
+                $error = "Too many failed login attempts. Try again in {$waitMins} minute(s).";
+            } else {
+                $stmt = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1');
+                $stmt->execute([$email]);
+                $user = $stmt->fetch();
+            }
         } catch (PDOException $ex) {
             $user = null;
             $error = 'Database tables not found. Please import database.sql and run setup.php first.';
         }
 
-        if ($user && password_verify($pass, $user['password_hash'])) {
-            session_regenerate_id(true);
-            $allowedCats = !empty($user['allowed_categories_json']) ? json_decode((string)$user['allowed_categories_json'], true) : null;
-            $allowedPages = !empty($user['allowed_page_ids_json']) ? json_decode((string)$user['allowed_page_ids_json'], true) : null;
-            $allowedModules = !empty($user['allowed_modules_json']) ? json_decode((string)$user['allowed_modules_json'], true) : null;
-            $allowedDepts = !empty($user['allowed_department_ids_json']) ? json_decode((string)$user['allowed_department_ids_json'], true) : null;
-            $_SESSION['cms_user'] = [
-                'id'                     => (int)$user['id'],
-                'full_name'              => $user['full_name'],
-                'email'                  => $user['email'],
-                'role'                   => $user['role'],
-                'assigned_department_id' => $user['assigned_department_id'] ? (int)$user['assigned_department_id'] : null,
-                'allowed_categories'     => is_array($allowedCats) ? $allowedCats : null,
-                'allowed_page_ids'       => is_array($allowedPages) ? array_map('intval', $allowedPages) : null,
-                'allowed_modules'        => is_array($allowedModules) ? $allowedModules : null,
-                'allowed_department_ids' => is_array($allowedDepts) ? array_map('intval', $allowedDepts) : null,
-            ];
-            $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
-            logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', $user['email']);
-            header('Location: dashboard.php');
-            exit;
-        }
-        if (!$error) {
-            $error = 'Invalid credentials or inactive account. If deploying for the first time, run setup.php to verify DB & passwords.';
+        if (!$error && $user) {
+            if (empty($user['is_active'])) {
+                $error = 'This staff account is currently deactivated. Please ask a Super Administrator to re-enable it.';
+            } elseif (password_verify($pass, (string)$user['password_hash'])) {
+                clearPhpLoginFailures($pdo, normalizePhpClientIp(), 'admin');
+                session_regenerate_id(true);
+                $allowedCats = !empty($user['allowed_categories_json']) ? json_decode((string)$user['allowed_categories_json'], true) : null;
+                $allowedPages = !empty($user['allowed_page_ids_json']) ? json_decode((string)$user['allowed_page_ids_json'], true) : null;
+                $allowedModules = !empty($user['allowed_modules_json']) ? json_decode((string)$user['allowed_modules_json'], true) : null;
+                $allowedDepts = !empty($user['allowed_department_ids_json']) ? json_decode((string)$user['allowed_department_ids_json'], true) : null;
+                $_SESSION['cms_user'] = [
+                    'id'                     => (int)$user['id'],
+                    'full_name'              => $user['full_name'],
+                    'email'                  => $user['email'],
+                    'role'                   => $user['role'],
+                    'assigned_department_id' => $user['assigned_department_id'] ? (int)$user['assigned_department_id'] : null,
+                    'allowed_categories'     => is_array($allowedCats) ? $allowedCats : null,
+                    'allowed_page_ids'       => is_array($allowedPages) ? array_map('intval', $allowedPages) : null,
+                    'allowed_modules'        => is_array($allowedModules) ? $allowedModules : null,
+                    'allowed_department_ids' => is_array($allowedDepts) ? array_map('intval', $allowedDepts) : null,
+                ];
+                $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([$user['id']]);
+                logAudit($pdo, $_SESSION['cms_user'], 'LOGIN', 'Session', $user['email']);
+                logPhpVisitorEvent($pdo, [
+                    'method'      => 'POST',
+                    'path'        => 'admin/login.php',
+                    'status_code' => 200,
+                    'event_type'  => 'admin_login',
+                    'severity'    => 'info',
+                    'actor_email' => $user['email'],
+                    'note'        => 'Admin RBAC Login Success (' . $user['role'] . ')',
+                ]);
+                session_write_close();
+                header('Location: dashboard.php');
+                exit;
+            } else {
+                recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'admin', $email);
+                $error = 'Invalid institutional email or password. Use setup.php if deploying for the first time.';
+            }
+        } elseif (!$error) {
+            recordPhpLoginFailure($pdo, normalizePhpClientIp(), 'admin', $email);
+            $error = 'No staff account found for this email address. Verify spelling or ask a Super Administrator.';
         }
     }
 }
@@ -120,7 +150,7 @@ $demoAccounts = [
         <span class="login-label">Password</span>
         <input id="login-password" class="login-input" type="password" name="password" required placeholder="••••••••">
       </label>
-      <?= renderCaptchaWidget('admin_login', baseUrl('includes/captcha.php'), 'Security CAPTCHA Verification *') ?>
+      <?= renderCaptchaWidget('admin_login', baseUrl('captcha.php'), 'Security CAPTCHA Verification *') ?>
       <button type="submit" class="login-submit">Sign In to Dashboard</button>
     </form>
 

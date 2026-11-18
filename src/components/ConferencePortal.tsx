@@ -19,7 +19,11 @@ import {
   UserCheck,
 } from 'lucide-react';
 import type { Conference, ConferenceSlide, SiteSettings } from '../types/cms';
-import { CONFERENCE_MODE_PRESETS, isExternalPaperSubmissionActive } from '../lib/collegeFeaturesLogic';
+import {
+  CONFERENCE_MODE_PRESETS,
+  CONFERENCE_PRESENTATION_TYPE_PRESETS,
+  isExternalPaperSubmissionActive,
+} from '../lib/collegeFeaturesLogic';
 import { formatBytes, sortByOrder } from '../lib/cmsLogic';
 import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
 import { CaptchaWidget } from './CaptchaWidget';
@@ -43,6 +47,7 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
   // Paper submission form
   const [paperTitle, setPaperTitle] = useState('');
   const [trackTitle, setTrackTitle] = useState('');
+  const [presentationType, setPresentationType] = useState<string>(CONFERENCE_PRESENTATION_TYPE_PRESETS[0]);
   const [authorName, setAuthorName] = useState('');
   const [authorEmail, setAuthorEmail] = useState('');
   const [authorPhone, setAuthorPhone] = useState('');
@@ -123,6 +128,11 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
     setConfSlideIdx(0);
     if (selectedConf) {
       setTrackTitle(selectedConf.tracks[0]?.title || '');
+      setPresentationType(
+        (selectedConf.scope || '').toLowerCase().includes('poster')
+          ? 'Poster Presentation'
+          : CONFERENCE_PRESENTATION_TYPE_PRESETS[0],
+      );
       setFeeCategory(selectedConf.feeTiers[0]?.categoryLabel || 'Academician / Faculty Member');
       setParticipationMode(selectedConf.mode || 'Hybrid (On-Campus + Online)');
     }
@@ -181,6 +191,7 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
           conferenceId: selectedConf.id,
           paperTitle,
           trackTitle,
+          presentationType,
           authorName,
           authorEmail,
           authorPhone,
@@ -677,6 +688,144 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
               </section>
             )}
 
+            {/* Poster Presentation & Expo Track */}
+            {selectedConf.enablePosterPresentation !== false &&
+              (selectedConf.posterGuidelinesHtml ||
+                selectedConf.posterDimensions ||
+                (selectedConf.posterItems && selectedConf.posterItems.length > 0)) && (
+                <section className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                        Research Showcase &amp; Visual Session
+                      </span>
+                      <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white mt-0.5">
+                        Poster Presentation &amp; Technical Expo Track
+                      </h2>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedConf.posterTemplateUrl && (
+                        <a
+                          href={selectedConf.posterTemplateUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-700 text-xs font-semibold hover:bg-stone-50 dark:hover:bg-slate-800"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Poster Template
+                        </a>
+                      )}
+                      {!paperSubmissionClosed && !externalPaperActive && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPresentationType('Poster Presentation');
+                            setActiveSection('submit');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-white"
+                          style={{ backgroundColor: 'var(--primary-color)' }}
+                        >
+                          Submit Poster Abstract
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {(selectedConf.posterDimensions || selectedConf.posterPrizesText) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {selectedConf.posterDimensions && (
+                        <div className="p-3 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40">
+                          <p className="font-bold text-stone-900 dark:text-white">Recommended Poster Dimensions</p>
+                          <p className="text-stone-600 dark:text-slate-300 mt-0.5">{selectedConf.posterDimensions}</p>
+                        </div>
+                      )}
+                      {selectedConf.posterPrizesText && (
+                        <div className="p-3 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40">
+                          <p className="font-bold text-stone-900 dark:text-white">Best Poster Awards &amp; Recognition</p>
+                          <p className="text-stone-600 dark:text-slate-300 mt-0.5">{selectedConf.posterPrizesText}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedConf.posterGuidelinesHtml && (
+                    <div className="p-3.5 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-800/30">
+                      <CmsHtmlContent
+                        html={selectedConf.posterGuidelinesHtml}
+                        className="text-xs sm:text-sm text-stone-700 dark:text-slate-200"
+                        onNavigate={onNavigate}
+                      />
+                    </div>
+                  )}
+
+                  {selectedConf.posterItems && selectedConf.posterItems.length > 0 && (
+                    <div className="space-y-3 pt-1">
+                      <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                        Accepted Posters &amp; Featured Exhibits ({selectedConf.posterItems.length})
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {selectedConf.posterItems.map((poster) => (
+                          <article
+                            key={poster.id}
+                            className="rounded-xl border border-stone-200 dark:border-slate-800 overflow-hidden bg-stone-50/50 dark:bg-slate-800/30 flex flex-col"
+                          >
+                            {poster.imageUrl && (
+                              <img
+                                src={poster.imageUrl}
+                                alt={poster.title}
+                                className="w-full h-40 object-cover border-b border-stone-200 dark:border-slate-800"
+                              />
+                            )}
+                            <div className="p-4 space-y-1.5 text-xs flex-1 flex flex-col justify-between">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                  <span className="font-mono font-bold text-amber-700 dark:text-amber-400">
+                                    {poster.posterCode}
+                                  </span>
+                                  {poster.awardNote && (
+                                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                      {poster.awardNote}
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="text-sm font-bold text-stone-900 dark:text-white leading-snug">
+                                  {poster.title}
+                                </h4>
+                                <p className="text-stone-600 dark:text-slate-300 font-medium">
+                                  {poster.authors} · {poster.affiliation}
+                                </p>
+                                {poster.track && (
+                                  <p className="text-[11px] text-stone-500 dark:text-slate-400">
+                                    Track: {poster.track}
+                                  </p>
+                                )}
+                                {poster.abstract && (
+                                  <p className="text-stone-600 dark:text-slate-300 pt-1 leading-relaxed">
+                                    {poster.abstract}
+                                  </p>
+                                )}
+                              </div>
+                              {poster.posterPdfUrl && (
+                                <div className="pt-2">
+                                  <a
+                                    href={poster.posterPdfUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 font-semibold hover:underline"
+                                    style={{ color: 'var(--secondary-color)' }}
+                                  >
+                                    <Download className="w-3.5 h-3.5" /> View Poster PDF
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+
             {/* Keynote Speakers & Organizing Committee with 1:1 Photographs & Contact Particulars */}
             {(keynotes.length > 0 || committee.length > 0) && (
               <section className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5">
@@ -1022,7 +1171,7 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
                       className="w-full px-3 py-2 text-xs sm:text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
                     />
                   </div>
-                  <div className="sm:col-span-2">
+                  <div>
                     <CustomSelectInput
                       label="Technical Track"
                       required
@@ -1030,6 +1179,16 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
                       onChange={setTrackTitle}
                       options={trackOptions.length > 0 ? trackOptions : ['General Engineering Track']}
                       customPlaceholder="Enter custom technical track..."
+                    />
+                  </div>
+                  <div>
+                    <CustomSelectInput
+                      label="Presentation Mode"
+                      required
+                      value={presentationType}
+                      onChange={setPresentationType}
+                      options={[...CONFERENCE_PRESENTATION_TYPE_PRESETS]}
+                      customPlaceholder="Enter custom presentation format..."
                     />
                   </div>
                   <div>
