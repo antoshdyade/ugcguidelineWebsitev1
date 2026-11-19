@@ -18,38 +18,77 @@ $sectionPresets = [
     'Conference & R&D Cell',
 ];
 
+$err = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
+    $isSuper = cmsIsSuperAdmin($user);
     if ($action === 'add' || $action === 'update') {
-        $params = [
-            trim($_POST['section']),
-            trim($_POST['officer_name']),
-            trim($_POST['designation']),
-            trim($_POST['extension']),
-            trim($_POST['direct_phone']),
-            trim($_POST['email']),
+        $section = trim((string)($_POST['section'] ?? ''));
+        $officer = trim((string)($_POST['officer_name'] ?? ''));
+        $desig = trim((string)($_POST['designation'] ?? ''));
+        $ext = trim((string)($_POST['extension'] ?? ''));
+        $phone = trim((string)($_POST['direct_phone'] ?? ''));
+        $email = trim((string)($_POST['email'] ?? ''));
+        $payload = [
+            'section' => $section,
+            'officer_name' => $officer,
+            'designation' => $desig,
+            'extension' => $ext,
+            'direct_phone' => $phone,
+            'email' => $email,
         ];
         if ($action === 'update' && !empty($_POST['id'])) {
-            $params[] = (int)$_POST['id'];
-            $pdo->prepare('UPDATE telephone_directory SET section = ?, officer_name = ?, designation = ?, extension = ?, direct_phone = ?, email = ? WHERE id = ?')
-                ->execute($params);
-            logAudit($pdo, $user, 'UPDATE_DIRECTORY', 'Directory', $_POST['officer_name'] . ' (' . $_POST['section'] . ')');
-            $msg = 'Contact entry updated.';
+            $dirId = (int)$_POST['id'];
+            $currStmt = $pdo->prepare('SELECT * FROM telephone_directory WHERE id = ? LIMIT 1');
+            $currStmt->execute([$dirId]);
+            $curr = $currStmt->fetch();
+            if (!$curr) {
+                $err = 'Directory entry not found.';
+            } elseif ($isSuper) {
+                $pdo->prepare('UPDATE telephone_directory SET section = ?, officer_name = ?, designation = ?, extension = ?, direct_phone = ?, email = ?, status = ? WHERE id = ?')
+                    ->execute([$section, $officer, $desig, $ext, $phone, $email, 'published', $dirId]);
+                logAudit($pdo, $user, 'UPDATE_DIRECTORY', 'Directory', $officer . ' (' . $section . ')');
+                $msg = 'Contact entry updated and published.';
+            } else {
+                cmsQueuePendingUpdate($pdo, $user, 'telephone_directory', $dirId, $officer . ' (' . $section . ')', $curr, $payload);
+                $msg = 'Update to contact "' . $officer . '" submitted for Super Admin approval. Live entry remains unchanged.';
+            }
         } else {
-            $pdo->prepare('INSERT INTO telephone_directory (section, officer_name, designation, extension, direct_phone, email) VALUES (?, ?, ?, ?, ?, ?)')
-                ->execute($params);
-            logAudit($pdo, $user, 'ADD_DIRECTORY', 'Directory', $_POST['section']);
-            $msg = 'Contact entry added.';
+            $insStatus = $isSuper ? 'published' : 'pending_approval';
+            $pdo->prepare('INSERT INTO telephone_directory (section, officer_name, designation, extension, direct_phone, email, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                ->execute([$section, $officer, $desig, $ext, $phone, $email, $insStatus]);
+            $newId = (int)$pdo->lastInsertId();
+            if ($isSuper) {
+                logAudit($pdo, $user, 'ADD_DIRECTORY', 'Directory', $section);
+                $msg = 'Contact entry added and published.';
+            } else {
+                $payload['status'] = 'pending_approval';
+                cmsQueuePendingCreate($pdo, $user, 'telephone_directory', $newId, $officer . ' (' . $section . ')', $payload);
+                $msg = 'New contact "' . $officer . '" submitted for Super Admin approval before appearing in directory.';
+            }
         }
     } elseif ($action === 'move' && !empty($_POST['id'])) {
         $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
         if (swapSortOrder($pdo, 'telephone_directory', (int)$_POST['id'], $dir, null, null, 'id ASC')) {
             $msg = 'Directory order updated.';
         }
-    } elseif ($action === 'delete') {
-        $pdo->prepare('DELETE FROM telephone_directory WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Contact entry removed.';
+    } elseif ($action === 'delete' && !empty($_POST['id'])) {
+        $delId = (int)$_POST['id'];
+        $currStmt = $pdo->prepare('SELECT * FROM telephone_directory WHERE id = ? LIMIT 1');
+        $currStmt->execute([$delId]);
+        $curr = $currStmt->fetch();
+        if (!$curr) {
+            $err = 'Directory entry not found.';
+        } elseif ($isSuper) {
+            $pdo->prepare('DELETE FROM telephone_directory WHERE id = ?')->execute([$delId]);
+            logAudit($pdo, $user, 'DELETE_DIRECTORY', 'Directory', (string)($curr['officer_name'] ?? '#' . $delId));
+            $msg = 'Contact entry removed.';
+        } else {
+            cmsQueuePendingDelete($pdo, $user, 'telephone_directory', $delId, (string)($curr['officer_name'] ?? 'Directory #' . $delId), $curr);
+            $msg = 'Delete request for "' . ($curr['officer_name'] ?? '#' . $delId) . '" submitted for Super Admin approval.';
+        }
     }
 }
 
@@ -98,7 +137,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
               <span style="margin-left:4px;font-size:0.8rem;">#<?= (int)($r['sort_order'] ?? 1) ?></span>
             </td>
             <td><?= e($r['section']) ?></td>
-            <td><?= e($r['officer_name']) ?> (<?= e($r['designation']) ?>)</td>
+            <td>
+              <?= e($r['officer_name']) ?> (<?= e($r['designation']) ?>)
+              <div style="margin-top:3px;"><?= cmsModerationStatusBadge((string)($r['status'] ?? 'published')) ?></div>
+            </td>
             <td><?= e($r['direct_phone']) ?> · Ext <?= e($r['extension']) ?></td>
             <td><?= e($r['email']) ?></td>
             <td style="white-space:nowrap;">

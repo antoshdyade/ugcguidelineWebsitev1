@@ -35,11 +35,11 @@ $config = array_merge([
     'customFields'       => [],
 ], $configRow);
 
-$facilities = $pdo->query('SELECT * FROM sports_facilities WHERE is_published = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
-$events     = $pdo->query('SELECT * FROM sports_events WHERE is_published = 1 ORDER BY sort_order ASC, id DESC')->fetchAll();
-$achievs    = $pdo->query('SELECT * FROM sports_achievements ORDER BY sort_order ASC, id DESC')->fetchAll();
-$gallery    = $pdo->query('SELECT * FROM sports_gallery WHERE is_published = 1 ORDER BY sort_order ASC, id DESC')->fetchAll();
-$notices    = $pdo->query('SELECT * FROM sports_notices WHERE is_published = 1 ORDER BY is_pinned DESC, sort_order ASC, id DESC')->fetchAll();
+$facilities = $pdo->query("SELECT * FROM sports_facilities WHERE is_published = 1 AND status = 'published' ORDER BY sort_order ASC, id ASC")->fetchAll();
+$events     = $pdo->query("SELECT * FROM sports_events WHERE is_published = 1 AND moderation_status = 'published' ORDER BY sort_order ASC, id DESC")->fetchAll();
+$achievs    = $pdo->query("SELECT * FROM sports_achievements WHERE status = 'published' ORDER BY sort_order ASC, id DESC")->fetchAll();
+$gallery    = $pdo->query("SELECT * FROM sports_gallery WHERE is_published = 1 AND status = 'published' ORDER BY sort_order ASC, id DESC")->fetchAll();
+$notices    = $pdo->query("SELECT * FROM sports_notices WHERE is_published = 1 AND status = 'published' ORDER BY is_pinned DESC, sort_order ASC, id DESC")->fetchAll();
 
 $levels = ['All'];
 foreach ($achievs as $a) {
@@ -170,7 +170,7 @@ require_once __DIR__ . '/includes/header.php';
     <?php else: ?>
       <div class="grid-2">
         <?php foreach ($events as $ev): ?>
-          <article class="card" style="display:flex;gap:1rem;align-items:flex-start;">
+          <article id="sports-event-<?= (int)$ev['id'] ?>" class="card" style="display:flex;gap:1rem;align-items:flex-start;">
             <img src="<?= e(mediaUrl((string)$ev['banner_url'], 'assets/images/sports_complex.jpg')) ?>" alt="<?= e($ev['title']) ?>" style="width:120px;height:86px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--border-color);">
             <div style="min-width:0;flex:1;">
               <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0.4rem;font-size:0.75rem;margin-bottom:0.2rem;">
@@ -186,6 +186,9 @@ require_once __DIR__ . '/includes/header.php';
               <?php endif; ?>
               <?php if (!empty($ev['registration_url'])): ?>
                 <a href="<?= e(mediaUrl((string)$ev['registration_url'])) ?>" target="_blank" rel="noopener noreferrer" class="btn-primary btn-sm" style="text-decoration:none;">Team / Player Registration &rarr;</a>
+              <?php endif; ?>
+              <?php if (!isset($ev['is_shareable']) || !empty($ev['is_shareable'])): ?>
+                <?= renderPhpSocialShareBar($pdo, (string)$ev['title'], (string)($ev['description'] ?? ''), baseUrl('sports.php?tab=events#sports-event-' . (int)$ev['id']), 'portal', true, true) ?>
               <?php endif; ?>
             </div>
           </article>

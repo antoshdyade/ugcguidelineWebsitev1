@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { THEME_PALETTES } from '../lib/cmsLogic';
-import { partitionHeaderMenus } from '../lib/collegeFeaturesLogic';
+import { isRecordPublished, partitionHeaderMenus } from '../lib/collegeFeaturesLogic';
 import { useThemeAccessibility, type SupportedLang } from '../context/ThemeAccessibilityContext';
 import { SocialIconLinks } from './SocialMediaWidgets';
 import type { CmsCategory, CmsPage, Department, SearchResultItem, SiteSettings } from '../types/cms';
@@ -100,8 +100,11 @@ export function PublicHeader({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  const publishedDepartments = departments.filter((d) => isRecordPublished(d));
   const getCategoryPages = (slug: string) =>
-    pages.filter((p) => p.categorySlug === slug).sort((a, b) => a.sortOrder - b.sortOrder);
+    pages
+      .filter((p) => p.categorySlug === slug && p.isPublished !== false && isRecordPublished(p))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
 
   const visibleMenuCategories = [...categories]
     .filter((c) => c.showInMenu !== false && c.menuLocation !== 'hidden')
@@ -610,12 +613,12 @@ export function PublicHeader({
                               View {cat.name} overview
                             </li>
                           )}
-                          {cat.slug === 'academics' && departments.length > 0 && (
+                          {cat.slug === 'academics' && publishedDepartments.length > 0 && (
                             <>
                               <li className="pt-2 pb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 border-t border-stone-100 dark:border-slate-800 mt-1">
-                                Department Microsites ({departments.length})
+                                Department Microsites ({publishedDepartments.length})
                               </li>
-                              {departments.map((dept) => (
+                              {publishedDepartments.map((dept) => (
                                 <li key={dept.id}>
                                   <button
                                     type="button"
@@ -895,7 +898,7 @@ export function PublicHeader({
                       </button>
                     ))}
                     {cat.slug === 'academics' &&
-                      departments.map((d) => (
+                      publishedDepartments.map((d) => (
                         <button
                           key={d.id}
                           type="button"

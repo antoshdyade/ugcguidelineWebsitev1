@@ -3,11 +3,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 
 $cat = trim($_GET['cat'] ?? 'All');
 $q   = trim($_GET['q'] ?? '');
 
-$sql = 'SELECT * FROM documents WHERE 1=1';
+$sql = "SELECT * FROM documents WHERE status = 'published'";
 $params = [];
 if ($cat !== 'All' && $cat !== '') {
     $sql .= ' AND category = ?';

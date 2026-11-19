@@ -41,7 +41,7 @@ DirectoryIndex index.php index.html
   RewriteRule ^robots\.txt$ robots.php [L,QSA]
 
   # Preserve relative assets/ and uploads/ references when clean multi-segment URLs are active
-  RewriteRule ^(?:research|page|category|department|conference)/(assets|uploads)/(.*)$ $1/$2 [L,NC]
+  RewriteRule ^(?:research|page|category|department|conference)/(?:.+/)?(assets|uploads)/(.*)$ $1/$2 [L,NC]
 
   # Serve existing physical files and directories directly
   RewriteCond %{REQUEST_FILENAME} -f [OR]

@@ -48,12 +48,39 @@ $auditCats = $pdo->query(
     . 'GROUP BY c.id, c.name, c.slug, c.ugc_code ORDER BY c.sort_order ASC, c.id ASC'
 )->fetchAll();
 
+$pendingRevisionCount = cmsCountPendingApprovals($pdo);
+$myPendingRevisionsCount = 0;
+if (!cmsIsSuperAdmin($user)) {
+    try {
+        $stMyRev = $pdo->prepare("SELECT COUNT(*) FROM content_pending_revisions WHERE submitted_by_email = ? AND status = 'pending_approval'");
+        $stMyRev->execute([(string)($user['email'] ?? '')]);
+        $myPendingRevisionsCount = (int)$stMyRev->fetchColumn();
+    } catch (Throwable $ignoredMyRev) {
+    }
+}
+
 $adminPageTitle = 'Overview & UGC Audit';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
 <?php if (file_exists(__DIR__ . '/../setup.php')): ?>
   <div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:0.75rem 1rem;border-radius:10px;margin-bottom:1.25rem;font-size:0.85rem;">
     <strong>Security Reminder:</strong> Verify diagnostics via <a href="<?= e(baseUrl('setup.php')) ?>" style="color:#92400e;font-weight:700;">setup.php</a> if needed, then delete <code>setup.php</code> once deployment checks pass.
+  </div>
+<?php endif; ?>
+
+<?php if (cmsIsSuperAdmin($user) && $pendingRevisionCount > 0): ?>
+  <div style="background:#FFFBEB;border:1px solid #F59E0B;color:#92400E;padding:0.85rem 1rem;border-radius:10px;margin-bottom:1.25rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.75rem;font-size:0.86rem;">
+    <div>
+      <strong>Super Admin Review Queue:</strong> <?= $pendingRevisionCount ?> <?= $pendingRevisionCount === 1 ? 'content change is' : 'content changes are' ?> awaiting your approval before going live.
+    </div>
+    <a href="<?= e(baseUrl('admin/pending_approvals.php')) ?>" class="btn btn-primary" style="font-size:0.78rem;padding:0.4rem 0.85rem;">Review Pending Approvals &rarr;</a>
+  </div>
+<?php elseif (!cmsIsSuperAdmin($user)): ?>
+  <div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;padding:0.85rem 1rem;border-radius:10px;margin-bottom:1.25rem;font-size:0.85rem;">
+    <strong>Editorial Moderation Workflow:</strong> Any new items, edits, or deletions you submit are queued for Super Admin approval. Existing live public content stays unchanged until approved.
+    <?php if ($myPendingRevisionsCount > 0): ?>
+      <span style="display:inline-block;margin-left:0.5rem;font-weight:700;">(You currently have <?= $myPendingRevisionsCount ?> pending submission<?= $myPendingRevisionsCount === 1 ? '' : 's' ?>.)</span>
+    <?php endif; ?>
   </div>
 <?php endif; ?>
 
@@ -97,6 +124,15 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 </div>
 
 <div class="grid-3">
+  <?php if (cmsIsSuperAdmin($user)): ?>
+    <a href="<?= e(baseUrl('admin/pending_approvals.php')) ?>" class="admin-stat-card" style="<?= $pendingRevisionCount > 0 ? 'border-color:#F59E0B;background:#FFFBEB;' : '' ?>">
+      <h3 style="margin:0 0 0.3rem;">Pending Approvals</h3>
+      <p style="font-size:0.82rem;color:#57534E;margin:0;">
+        Review staff creates, updates &amp; deletes with Live vs. Proposed diff before publishing.
+        <?php if ($pendingRevisionCount > 0): ?><strong style="color:#B45309;">(<?= $pendingRevisionCount ?> pending)</strong><?php endif; ?>
+      </p>
+    </a>
+  <?php endif; ?>
   <?php if (canAccessResource($user, 'categories')): ?>
     <a href="<?= e(baseUrl('admin/manage_categories.php')) ?>" class="admin-stat-card">
       <h3 style="margin:0 0 0.3rem;">Categories &amp; Menus</h3>

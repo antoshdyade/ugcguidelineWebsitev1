@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { SiteSettings, SportsData } from '../types/cms';
 import { sortByOrder } from '../lib/cmsLogic';
+import { isEntityShareable, isRecordPublished } from '../lib/collegeFeaturesLogic';
 import { SocialShareBar } from './SocialMediaWidgets';
 
 interface SportsPortalProps {
@@ -60,13 +61,31 @@ export function SportsPortal({ sports, settings, initialTab, onNavigate }: Sport
     if (initialTab) setActiveTab(normalizeTab(initialTab));
   }, [initialTab]);
 
-  const facilities = useMemo(() => sortByOrder(sports.facilities.filter((f) => f.isPublished)), [sports.facilities]);
-  const events = useMemo(() => sortByOrder(sports.events.filter((e) => e.isPublished)), [sports.events]);
-  const achievements = useMemo(() => sortByOrder(sports.achievements), [sports.achievements]);
-  const gallery = useMemo(() => sortByOrder(sports.gallery.filter((g) => g.isPublished)), [sports.gallery]);
+  const facilities = useMemo(
+    () =>
+      sortByOrder(
+        sports.facilities.filter((f) => f.isPublished && isRecordPublished(f, 'moderationStatus')),
+      ),
+    [sports.facilities],
+  );
+  const events = useMemo(
+    () =>
+      sortByOrder(
+        sports.events.filter((e) => e.isPublished && isRecordPublished(e, 'moderationStatus')),
+      ),
+    [sports.events],
+  );
+  const achievements = useMemo(
+    () => sortByOrder(sports.achievements.filter((a) => isRecordPublished(a))),
+    [sports.achievements],
+  );
+  const gallery = useMemo(
+    () => sortByOrder(sports.gallery.filter((g) => g.isPublished && isRecordPublished(g))),
+    [sports.gallery],
+  );
   const notices = useMemo(
     () =>
-      [...sports.notices.filter((n) => n.isPublished)].sort((a, b) => {
+      [...sports.notices.filter((n) => n.isPublished && isRecordPublished(n))].sort((a, b) => {
         const pinDiff = Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned));
         if (pinDiff !== 0) return pinDiff;
         return (a.sortOrder ?? 999) - (b.sortOrder ?? 999);
@@ -361,6 +380,14 @@ export function SportsPortal({ sports, settings, initialTab, onNavigate }: Sport
                         <ExternalLink className="w-3 h-3" />
                       </button>
                     )}
+                    <SocialShareBar
+                      compact
+                      isShareable={isEntityShareable(ev)}
+                      title={ev.title}
+                      summary={`${ev.eventType} · ${ev.discipline} · ${ev.eventDate}`}
+                      settings={settings}
+                      location="portal"
+                    />
                   </div>
                 </div>
               </article>

@@ -8,19 +8,19 @@ $pdo = getDB();
 ensureCmsSchemaUpgraded($pdo);
 
 $slug = trim((string)($_GET['slug'] ?? ''));
-$stmt = $pdo->prepare('SELECT * FROM conferences WHERE slug = ? AND is_published = 1 LIMIT 1');
+$stmt = $pdo->prepare("SELECT * FROM conferences WHERE slug = ? AND is_published = 1 AND status = 'published' LIMIT 1");
 $stmt->execute([$slug]);
 $conf = $stmt->fetch();
 
 if (!$conf) {
-    $fallback = $pdo->query('SELECT * FROM conferences WHERE is_published = 1 ORDER BY sort_order ASC, id ASC LIMIT 1')->fetch();
+    $fallback = $pdo->query("SELECT * FROM conferences WHERE is_published = 1 AND status = 'published' ORDER BY sort_order ASC, id ASC LIMIT 1")->fetch();
     if ($fallback && $slug === '') {
         $conf = $fallback;
     } else {
         http_response_code(404);
         $pageTitle = 'Event / Conference Not Found';
         require_once __DIR__ . '/includes/header.php';
-        echo '<section class="card" style="margin:2rem 0;"><h1>Conference / Workshop Not Found</h1><p>The requested event is unpublished or unavailable.</p><a href="' . e(baseUrl('conferences.php')) . '" class="btn-primary">Back to Conferences Portal</a></section>';
+        echo '<section class="card" style="margin:2rem 0;"><h1>Conference / Workshop Not Found</h1><p>The requested event is unpublished, pending approval, or unavailable.</p><a href="' . e(baseUrl('conferences.php')) . '" class="btn-primary">Back to Conferences Portal</a></section>';
         require_once __DIR__ . '/includes/footer.php';
         exit;
     }
@@ -29,6 +29,7 @@ if (!$conf) {
 $confId = (int)$conf['id'];
 $msg = '';
 $err = '';
+$initialTab = 'overview';
 $submissionMode = (string)($conf['submission_mode'] ?? 'internal');
 $isExternalSubmission = isExternalConferenceSubmission($conf);
 $isSubmissionsClosed = ($submissionMode === 'closed');
@@ -40,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $formAction = (string)($_POST['form_action'] ?? '');
 
     if ($formAction === 'submit_paper') {
+        $initialTab = 'submit';
         if ($isExternalSubmission) {
             http_response_code(403);
             $err = 'Local manuscript submission is disabled for this event because papers are managed via the external portal (' . $externalLabel . ').';
@@ -88,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($formAction === 'register_delegate') {
+        $initialTab = 'register';
         if (!verifyCaptchaAnswer($_POST['captcha_answer'] ?? null, 'conf_reg')) {
             $err = 'Invalid CAPTCHA verification code for delegate registration. Please try again.';
         } else {
@@ -134,6 +137,7 @@ $schedule = json_decode((string)($conf['schedule_json'] ?? '[]'), true) ?: [];
 $fees        = json_decode((string)($conf['fee_tiers_json'] ?? '[]'), true) ?: [];
 $posterItems = json_decode((string)($conf['poster_items_json'] ?? '[]'), true) ?: [];
 $hasPosterTrack = !isset($conf['enable_poster_presentation']) || !empty($conf['enable_poster_presentation']) || !empty($posterItems);
+$confIsShareable = !isset($conf['is_shareable']) || !empty($conf['is_shareable']);
 
 $pageTitle = $conf['short_name'] . ' — ' . $conf['title'];
 $pageDesc  = trim((string)($conf['theme'] ?: extractPlainTextExcerpt((string)($conf['overview_html'] ?? ''), 160)));
@@ -147,64 +151,86 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 
 <div style="margin-bottom:0.85rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
-  <a href="<?= e(baseUrl('conferences.php')) ?>" class="btn-outline btn-sm">&larr; All Conferences, Workshops &amp; Events</a>
+  <a href="<?= e(baseUrl('conferences.php')) ?>" class="btn-outline btn-sm">&larr; All Institutional Conferences</a>
   <div style="display:flex;gap:0.45rem;flex-wrap:wrap;">
     <?php if ($isExternalSubmission): ?>
       <a href="<?= e($externalUrl) ?>" target="_blank" rel="noopener noreferrer" class="btn-primary btn-sm">Submit Paper on <?= e($externalLabel) ?> &#8599;</a>
     <?php elseif ($isSubmissionsClosed): ?>
       <span class="badge badge-warn">Paper Submissions Closed</span>
     <?php else: ?>
-      <a href="#submit-paper" class="btn-primary btn-sm">Submit Abstract / Paper</a>
+      <a href="#submit-paper" data-conf-jump="submit" class="btn-primary btn-sm">Submit Abstract / Paper</a>
     <?php endif; ?>
-    <a href="#register" class="btn-secondary btn-sm">Delegate Registration</a>
+    <a href="#register" data-conf-jump="register" class="btn-secondary btn-sm">Delegate Registration</a>
   </div>
 </div>
 
 <?php if ($msg): ?><div class="alert-ok"><?= e($msg) ?></div><?php endif; ?>
 <?php if ($err): ?><div class="alert-err"><?= e($err) ?></div><?php endif; ?>
 
-<section style="margin-bottom:1.35rem;" aria-label="Event Hero Slider">
-  <?= renderCustomSliderBlock($heroSlides, 380, 5) ?>
-</section>
-
-<section class="card" style="margin-bottom:1.25rem;border-left:4px solid var(--secondary-color);">
-  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;">
-    <div style="flex:1 1 420px;">
-      <span class="alumni-pill"><?= e($conf['scope']) ?> · <?= e($conf['mode']) ?></span>
-      <h1 style="margin:0.45rem 0 0.3rem;font-family:'Playfair Display',serif;font-size:1.55rem;color:var(--primary-color);"><?= e($conf['title']) ?></h1>
-      <?php if (!empty($conf['theme'])): ?>
-        <p style="margin:0 0 0.55rem;font-weight:600;color:var(--secondary-color);">Theme: <?= e($conf['theme']) ?></p>
+<header class="conf-hero-banner" aria-label="<?= e($conf['title']) ?>">
+  <?php $primaryBanner = mediaUrl($heroSlides[0]['imageUrl'] ?? $conf['banner_url'] ?? '', 'assets/images/hero_campus.jpg'); ?>
+  <img id="confHeroImg" class="conf-hero-img" src="<?= e($primaryBanner) ?>" alt="<?= e($conf['title']) ?>">
+  <div class="conf-hero-overlay">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.75rem;">
+      <div class="conf-hero-badges">
+        <span class="conf-badge-amber"><?= e($conf['scope']) ?></span>
+        <span class="conf-badge-glass"><?= e($conf['short_name']) ?></span>
+        <span class="conf-badge-emerald"><?= e($conf['mode']) ?></span>
+      </div>
+      <?php if (count($heroSlides) > 1): ?>
+        <div style="display:inline-flex;align-items:center;gap:0.35rem;">
+          <button type="button" id="confSlidePrev" class="hero-ctrl-btn" style="padding:0.25rem 0.6rem;font-size:0.78rem;" aria-label="Previous slide">&#8249;</button>
+          <span id="confSlideCount" class="hero-counter">1/<?= count($heroSlides) ?></span>
+          <button type="button" id="confSlideNext" class="hero-ctrl-btn" style="padding:0.25rem 0.6rem;font-size:0.78rem;" aria-label="Next slide">&#8250;</button>
+        </div>
       <?php endif; ?>
-      <div style="display:flex;flex-wrap:wrap;gap:0.45rem 1.25rem;font-size:0.84rem;color:var(--text-muted);">
-        <span><strong>Dates:</strong> <?= e($conf['start_date']) ?><?= $conf['end_date'] !== $conf['start_date'] ? ' – ' . e($conf['end_date']) : '' ?></span>
+    </div>
+
+    <div>
+      <h1 class="conf-hero-title"><?= e($conf['title']) ?></h1>
+      <?php if (!empty($conf['theme'])): ?>
+        <p id="confHeroCaption" class="conf-hero-theme"><?= e($conf['theme']) ?></p>
+      <?php endif; ?>
+      <div class="conf-hero-meta">
+        <span><strong>Dates:</strong> <?= e($conf['start_date']) ?><?= $conf['end_date'] !== $conf['start_date'] ? ' to ' . e($conf['end_date']) : '' ?></span>
         <span><strong>Venue:</strong> <?= e($conf['venue']) ?></span>
-        <span><strong>Organizer:</strong> <?= e($conf['organizing_department']) ?></span>
+        <span><strong>Hosted by:</strong> <?= e($conf['organizing_department']) ?></span>
         <?php if (!empty($conf['contact_email'])): ?><span><strong>Email:</strong> <?= e($conf['contact_email']) ?></span><?php endif; ?>
         <?php if (!empty($conf['contact_phone'])): ?><span><strong>Phone:</strong> <?= e($conf['contact_phone']) ?></span><?php endif; ?>
       </div>
     </div>
-    <?php if (!empty($partners)): ?>
-      <div style="display:flex;flex-direction:column;gap:0.35rem;min-width:200px;">
-        <small style="font-weight:700;text-transform:uppercase;color:var(--text-muted);">Indexing &amp; Proceedings Partners</small>
-        <div style="display:flex;flex-wrap:wrap;gap:0.35rem;">
-          <?php foreach ($partners as $p): ?><span class="badge badge-ok"><?= e((string)$p) ?></span><?php endforeach; ?>
-        </div>
-      </div>
-    <?php endif; ?>
-  </div>
-</section>
 
-<div class="layout-sidebar" style="margin-bottom:1.5rem;">
+    <div class="conf-tab-bar">
+      <div class="conf-tab-btns" role="tablist" aria-label="Conference Sections">
+        <button type="button" role="tab" class="conf-tab-btn <?= $initialTab === 'overview' ? 'is-active' : '' ?>" data-conf-tab="overview">Program, Tracks &amp; Committee</button>
+        <button type="button" role="tab" class="conf-tab-btn is-submit <?= $initialTab === 'submit' ? 'is-active' : '' ?>" data-conf-tab="submit">
+          <?= $isExternalSubmission ? ('Submit via ' . e($externalLabel) . ' ↗') : ($isSubmissionsClosed ? 'Paper Submissions Closed' : 'Submit Paper / Abstract') ?>
+        </button>
+        <button type="button" role="tab" class="conf-tab-btn is-register <?= $initialTab === 'register' ? 'is-active' : '' ?>" data-conf-tab="register">Delegate Registration</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div id="conf-panel-overview" class="conf-tab-panel <?= $initialTab === 'overview' ? 'is-active' : '' ?>">
+<div class="layout-sidebar-right" style="margin-bottom:1.5rem;">
   <div style="display:flex;flex-direction:column;gap:1.25rem;">
     <section class="card">
-      <h2 style="margin-top:0;color:var(--primary-color);">About &amp; Call for Papers</h2>
+      <h2 style="margin-top:0;color:var(--primary-color);">About <?= e($conf['short_name']) ?> &amp; Call for Papers</h2>
       <div class="cms-prose">
         <?= (string)($conf['overview_html'] ?? '') ?>
         <?php if (!empty($conf['cfp_html'])): ?>
-          <hr style="border:none;border-top:1px solid var(--border-color);margin:1rem 0;">
-          <?= (string)$conf['cfp_html'] ?>
+          <div style="margin-top:1rem;padding:1rem;border-radius:10px;background:#FFFBEB;border:1px solid #FDE68A;">
+            <div style="font-size:0.74rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#92400E;margin-bottom:0.35rem;">Call for Original Research Papers</div>
+            <?= (string)$conf['cfp_html'] ?>
+          </div>
         <?php endif; ?>
       </div>
+      <?php if (!empty($partners)): ?>
+        <div class="conf-chip-row" aria-label="Indexing and Proceedings Partners">
+          <?php foreach ($partners as $p): ?><span class="conf-chip-emerald">&#10022; <?= e((string)$p) ?></span><?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     </section>
 
     <?php if (!empty($tracks)): ?>
@@ -359,10 +385,11 @@ require_once __DIR__ . '/includes/header.php';
     <?php endif; ?>
   </aside>
 </div>
+</div>
 
-<section class="grid-2" style="margin-bottom:2rem;align-items:start;">
+<div id="conf-panel-submit" class="conf-tab-panel <?= $initialTab === 'submit' ? 'is-active' : '' ?>" style="margin-bottom:2rem;">
   <?php if ($isExternalSubmission): ?>
-    <div id="submit-paper" class="card" style="border-top:4px solid var(--primary-color);background:#F8FAFC;">
+    <div id="submit-paper" class="card" style="border-top:4px solid var(--primary-color);background:#F8FAFC;max-width:860px;">
       <span class="badge badge-ok" style="margin-bottom:0.5rem;">Third-Party Paper Submission Portal Active</span>
       <h2 style="margin:0.2rem 0 0.5rem;color:var(--primary-color);">Submit Paper via <?= e($externalLabel) ?></h2>
       <p style="font-size:0.86rem;color:var(--text-muted);margin-bottom:0.85rem;">
@@ -381,79 +408,81 @@ require_once __DIR__ . '/includes/header.php';
       </div>
     </div>
   <?php elseif ($isSubmissionsClosed): ?>
-    <div id="submit-paper" class="card" style="border-top:4px solid #B45309;background:#FFFBEB;">
+    <div id="submit-paper" class="card" style="border-top:4px solid #B45309;background:#FFFBEB;max-width:860px;">
       <span class="badge badge-warn" style="margin-bottom:0.5rem;">Paper Submissions Closed</span>
       <h2 style="margin:0.2rem 0 0.5rem;color:#78350F;">Manuscript Submissions Currently Closed</h2>
       <p style="font-size:0.86rem;color:#78350F;margin-bottom:0.75rem;">
-        The paper submission window for <?= e($conf['short_name']) ?> is closed. Please contact the conference organizing chair (<?= e((string)$conf['contact_email']) ?>) or complete attendee delegate registration alongside.
+        The paper submission window for <?= e($conf['short_name']) ?> is closed. Please contact the conference organizing chair (<?= e((string)$conf['contact_email']) ?>) or complete attendee delegate registration.
       </p>
       <?php if (!empty($conf['submission_instructions_html'])): ?>
         <div class="cms-prose" style="font-size:0.84rem;"><?= (string)$conf['submission_instructions_html'] ?></div>
       <?php endif; ?>
     </div>
   <?php else: ?>
-  <form id="submit-paper" method="post" enctype="multipart/form-data" class="card">
-    <h2 style="margin-top:0;color:var(--primary-color);">Submit Paper / Research Abstract</h2>
-    <?php if (!empty($conf['submission_instructions_html'])): ?>
-      <div class="cms-prose" style="margin-bottom:0.75rem;font-size:0.84rem;"><?= (string)$conf['submission_instructions_html'] ?></div>
-    <?php endif; ?>
-    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-    <input type="hidden" name="form_action" value="submit_paper">
+    <form id="submit-paper" method="post" enctype="multipart/form-data" class="card" style="max-width:860px;">
+      <h2 style="margin-top:0;color:var(--primary-color);">Submit Paper / Research Abstract</h2>
+      <?php if (!empty($conf['submission_instructions_html'])): ?>
+        <div class="cms-prose" style="margin-bottom:0.75rem;font-size:0.84rem;"><?= (string)$conf['submission_instructions_html'] ?></div>
+      <?php endif; ?>
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="form_action" value="submit_paper">
 
-    <label class="login-field"><span class="login-label">Paper / Abstract Title *</span>
-      <input type="text" name="paper_title" required class="login-input" placeholder="Full manuscript title">
-    </label>
-    <label class="login-field"><span class="login-label">Select Track / Module *</span>
-      <select name="track_title" class="login-input">
-        <?php if (empty($tracks)): ?>
-          <option value="General Track">General Track</option>
-        <?php else: ?>
-          <?php foreach ($tracks as $tr): ?>
-            <option value="<?= e((string)($tr['code'] . ': ' . $tr['title'])) ?>"><?= e((string)($tr['code'] . ': ' . $tr['title'])) ?></option>
+      <label class="login-field"><span class="login-label">Paper / Abstract Title *</span>
+        <input type="text" name="paper_title" required class="login-input" placeholder="Full manuscript title">
+      </label>
+      <label class="login-field"><span class="login-label">Select Track / Module *</span>
+        <select name="track_title" class="login-input">
+          <?php if (empty($tracks)): ?>
+            <option value="General Track">General Track</option>
+          <?php else: ?>
+            <?php foreach ($tracks as $tr): ?>
+              <option value="<?= e((string)($tr['code'] . ': ' . $tr['title'])) ?>"><?= e((string)($tr['code'] . ': ' . $tr['title'])) ?></option>
+            <?php endforeach; ?>
+          <?php endif; ?>
+        </select>
+      </label>
+      <label class="login-field"><span class="login-label">Presentation Mode / Category *</span>
+        <select name="presentation_type" class="login-input" onchange="var c=this.parentNode.querySelector('.custom-opt-inp');if(c){c.style.display=this.value==='__custom__'?'block':'none';c.required=this.value==='__custom__';}">
+          <?php foreach (conferencePresentationTypePresets() as $pt): ?>
+            <option value="<?= e($pt) ?>"><?= e($pt) ?></option>
           <?php endforeach; ?>
-        <?php endif; ?>
-      </select>
-    </label>
-    <label class="login-field"><span class="login-label">Presentation Mode / Category *</span>
-      <select name="presentation_type" class="login-input" onchange="var c=this.parentNode.querySelector('.custom-opt-inp');if(c){c.style.display=this.value==='__custom__'?'block':'none';c.required=this.value==='__custom__';}">
-        <?php foreach (conferencePresentationTypePresets() as $pt): ?>
-          <option value="<?= e($pt) ?>"><?= e($pt) ?></option>
-        <?php endforeach; ?>
-        <option value="__custom__">+ Custom Presentation Format...</option>
-      </select>
-      <input type="text" name="presentation_type_custom" class="custom-opt-inp login-input" placeholder="Enter custom presentation format..." style="display:none;margin-top:4px;">
-    </label>
-    <div class="grid-2">
-      <label class="login-field"><span class="login-label">Corresponding Author *</span>
-        <input type="text" name="author_name" required class="login-input">
+          <option value="__custom__">+ Custom Presentation Format...</option>
+        </select>
+        <input type="text" name="presentation_type_custom" class="custom-opt-inp login-input" placeholder="Enter custom presentation format..." style="display:none;margin-top:4px;">
       </label>
-      <label class="login-field"><span class="login-label">Author Email *</span>
-        <input type="email" name="author_email" required class="login-input">
+      <div class="grid-2">
+        <label class="login-field"><span class="login-label">Corresponding Author *</span>
+          <input type="text" name="author_name" required class="login-input">
+        </label>
+        <label class="login-field"><span class="login-label">Author Email *</span>
+          <input type="email" name="author_email" required class="login-input">
+        </label>
+      </div>
+      <div class="grid-2">
+        <label class="login-field"><span class="login-label">Mobile / Phone</span>
+          <input type="text" name="author_phone" class="login-input">
+        </label>
+        <label class="login-field"><span class="login-label">Affiliation / Institution *</span>
+          <input type="text" name="affiliation" required class="login-input">
+        </label>
+      </div>
+      <label class="login-field"><span class="login-label">Co-Authors (comma-separated)</span>
+        <input type="text" name="co_authors" class="login-input">
       </label>
-    </div>
-    <div class="grid-2">
-      <label class="login-field"><span class="login-label">Mobile / Phone</span>
-        <input type="text" name="author_phone" class="login-input">
+      <label class="login-field"><span class="login-label">Abstract Summary *</span>
+        <textarea name="abstract_text" rows="3" required class="login-input"></textarea>
       </label>
-      <label class="login-field"><span class="login-label">Affiliation / Institution *</span>
-        <input type="text" name="affiliation" required class="login-input">
+      <label class="login-field"><span class="login-label">Upload Manuscript PDF / DOCX (Optional)</span>
+        <input type="file" name="manuscript" accept=".pdf,.docx" class="login-input">
       </label>
-    </div>
-    <label class="login-field"><span class="login-label">Co-Authors (comma-separated)</span>
-      <input type="text" name="co_authors" class="login-input">
-    </label>
-    <label class="login-field"><span class="login-label">Abstract Summary *</span>
-      <textarea name="abstract_text" rows="3" required class="login-input"></textarea>
-    </label>
-    <label class="login-field"><span class="login-label">Upload Manuscript PDF / DOCX (Optional)</span>
-      <input type="file" name="manuscript" accept=".pdf,.docx" class="login-input">
-    </label>
-    <?= renderCaptchaWidget('conf_paper', baseUrl('captcha.php'), 'Paper Submission CAPTCHA *') ?>
-    <button type="submit" class="btn-primary" style="width:100%;">Submit Paper &amp; Generate Tracking ID</button>
-  </form>
+      <?= renderCaptchaWidget('conf_paper', baseUrl('captcha.php'), 'Paper Submission CAPTCHA *') ?>
+      <button type="submit" class="btn-primary" style="width:100%;">Submit Paper &amp; Generate Tracking ID</button>
+    </form>
   <?php endif; ?>
+</div>
 
-  <form id="register" method="post" class="card">
+<div id="conf-panel-register" class="conf-tab-panel <?= $initialTab === 'register' ? 'is-active' : '' ?>" style="margin-bottom:2rem;">
+  <form id="register" method="post" class="card" style="max-width:860px;">
     <h2 style="margin-top:0;color:var(--primary-color);">Delegate / Attendee Registration</h2>
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
     <input type="hidden" name="form_action" value="register_delegate">
@@ -496,8 +525,71 @@ require_once __DIR__ . '/includes/header.php';
     <?= renderCaptchaWidget('conf_reg', baseUrl('captcha.php'), 'Delegate Registration CAPTCHA *') ?>
     <button type="submit" class="btn-secondary" style="width:100%;">Complete Delegate Registration</button>
   </form>
-</section>
+</div>
 
-<?= renderPhpSocialShareBar($pdo, $conf['short_name'] . ' — ' . $conf['title'], (string)$pageDesc, baseUrl('conference.php?slug=' . urlencode((string)$conf['slug'])), 'conference', true) ?>
+<?php if ($confIsShareable): ?>
+  <?= renderPhpSocialShareBar($pdo, $conf['short_name'] . ' — ' . $conf['title'], (string)$pageDesc, baseUrl('conference.php?slug=' . urlencode((string)$conf['slug'])), 'conference', true) ?>
+<?php endif; ?>
+
+<script>
+(function () {
+  var btns = document.querySelectorAll('[data-conf-tab]');
+  var panels = {
+    overview: document.getElementById('conf-panel-overview'),
+    submit: document.getElementById('conf-panel-submit'),
+    register: document.getElementById('conf-panel-register')
+  };
+  function activateTab(tab) {
+    if (!panels[tab]) return;
+    Object.keys(panels).forEach(function (k) {
+      if (panels[k]) panels[k].classList.toggle('is-active', k === tab);
+    });
+    btns.forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-conf-tab') === tab);
+    });
+  }
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      activateTab(b.getAttribute('data-conf-tab') || 'overview');
+    });
+  });
+  document.querySelectorAll('[data-conf-jump]').forEach(function (a) {
+    a.addEventListener('click', function (ev) {
+      var target = a.getAttribute('data-conf-jump');
+      if (target && panels[target]) {
+        ev.preventDefault();
+        activateTab(target);
+        panels[target].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+  if (window.location.hash === '#submit-paper') activateTab('submit');
+  if (window.location.hash === '#register') activateTab('register');
+
+  var slides = <?= json_encode(array_map(static function ($s) {
+      return [
+          'img' => mediaUrl($s['imageUrl'] ?? '', 'assets/images/hero_campus.jpg'),
+          'caption' => (string)($s['caption'] ?? ''),
+      ];
+  }, $heroSlides), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  if (slides.length > 1) {
+    var idx = 0;
+    var heroImg = document.getElementById('confHeroImg');
+    var heroCap = document.getElementById('confHeroCaption');
+    var countEl = document.getElementById('confSlideCount');
+    function showSlide(nextIdx) {
+      idx = (nextIdx + slides.length) % slides.length;
+      if (heroImg) heroImg.src = slides[idx].img;
+      if (heroCap && slides[idx].caption) heroCap.textContent = slides[idx].caption;
+      if (countEl) countEl.textContent = (idx + 1) + '/' + slides.length;
+    }
+    var prevBtn = document.getElementById('confSlidePrev');
+    var nextBtn = document.getElementById('confSlideNext');
+    if (prevBtn) prevBtn.addEventListener('click', function () { showSlide(idx - 1); });
+    if (nextBtn) nextBtn.addEventListener('click', function () { showSlide(idx + 1); });
+    setInterval(function () { showSlide(idx + 1); }, 5500);
+  }
+})();
+</script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

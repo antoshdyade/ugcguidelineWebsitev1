@@ -30,7 +30,11 @@ $icons = [
     'landmark'   => $navSvg('<line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/>'),
     'arrowleft'  => $navSvg('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
     'logout'     => $navSvg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>'),
+    'check'      => $navSvg('<polyline points="20 6 9 17 4 12"/>'),
 ];
+$pendingApprovalsCount = (isset($pdo) && $pdo instanceof PDO && function_exists('cmsIsSuperAdmin') && cmsIsSuperAdmin($user ?? null) && function_exists('cmsCountPendingApprovals'))
+    ? cmsCountPendingApprovals($pdo)
+    : 0;
 $uploadPolicy = isset($pdo)
     ? getUploadLimits($pdo)
     : ['max_photo_mb' => 2.0, 'max_doc_mb' => 10.0, 'auto_crop_enabled' => 1];
@@ -109,6 +113,14 @@ $uploadPolicy = isset($pdo)
 
       <nav class="admin-nav" aria-label="Admin Console Navigation">
         <a href="<?= e(baseUrl('admin/dashboard.php')) ?>" class="<?= $activePage === 'dashboard.php' ? 'active' : '' ?>"><?= $icons['shield'] ?><span>Overview &amp; UGC Audit</span></a>
+        <?php if (function_exists('cmsIsSuperAdmin') && cmsIsSuperAdmin($user ?? null)): ?>
+          <a href="<?= e(baseUrl('admin/pending_approvals.php')) ?>" class="<?= $activePage === 'pending_approvals.php' ? 'active' : '' ?>" style="justify-content:space-between;">
+            <span style="display:inline-flex;align-items:center;gap:0.6rem;"><?= $icons['check'] ?><span>Pending Approvals</span></span>
+            <?php if ($pendingApprovalsCount > 0): ?>
+              <span style="background:#F59E0B;color:#020617;border-radius:999px;padding:0.08rem 0.48rem;font-size:0.68rem;font-weight:800;line-height:1.3;"><?= (int)$pendingApprovalsCount ?></span>
+            <?php endif; ?>
+          </a>
+        <?php endif; ?>
         <?php if (canAccessResource($user, 'categories')): ?>
           <a href="<?= e(baseUrl('admin/manage_categories.php')) ?>" class="<?= $activePage === 'manage_categories.php' ? 'active' : '' ?>"><?= $icons['grid'] ?><span>Categories &amp; Menus</span></a>
         <?php endif; ?>

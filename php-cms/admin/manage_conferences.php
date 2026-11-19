@@ -29,6 +29,7 @@ function saveResearchSliderSlides(PDO $pdo, array $slides): void
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = (string)($_POST['action'] ?? '');
+    $isSuper = cmsIsSuperAdmin($user);
 
     if ($action === 'save_conference') {
         $editId = (int)($_POST['edit_id'] ?? 0);
@@ -45,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $contactPhone = trim((string)($_POST['contact_phone'] ?? ''));
         $isPublished = !empty($_POST['is_published']) ? 1 : 0;
         $isFeatured = !empty($_POST['is_featured']) ? 1 : 0;
+        $isShareable = !empty($_POST['is_shareable']) ? 1 : 0;
         $overviewHtml = (string)($_POST['overview_html'] ?? '');
         $cfpHtml = (string)($_POST['cfp_html'] ?? '');
         $submissionMode = in_array($_POST['submission_mode'] ?? 'internal', ['internal', 'external', 'closed'], true)
@@ -105,33 +107,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($err === '') {
+            $partnersJson = json_encode($partners, JSON_UNESCAPED_UNICODE);
             if ($editId > 0) {
-                $pdo->prepare(
-                    'UPDATE conferences SET slug=?, title=?, short_name=?, scope=?, theme=?, start_date=?, end_date=?, venue=?, mode=?, organizing_department=?, indexing_partners_json=?, contact_email=?, contact_phone=?, banner_url=?, hero_slides_json=?, overview_html=?, cfp_html=?, tracks_json=?, important_dates_json=?, people_json=?, schedule_json=?, fee_tiers_json=?, submission_mode=?, external_submission_url=?, external_submission_label=?, submission_instructions_html=?, enable_poster_presentation=?, poster_dimensions=?, poster_guidelines_html=?, poster_template_url=?, poster_prizes_text=?, poster_items_json=?, is_published=?, is_featured=? WHERE id=?'
-                )->execute([
-                    $slug, $title, $shortName, $scope, $theme, $startDate, $endDate, $venue, $mode, $orgDept,
-                    json_encode($partners, JSON_UNESCAPED_UNICODE), $contactEmail, $contactPhone, $bannerUrl,
-                    $heroSlidesJson, $overviewHtml, $cfpHtml, $tracksJson, $datesJson, $peopleJson, $scheduleJson, $feesJson,
-                    $submissionMode, $extSubUrl !== '' ? $extSubUrl : null, $extSubLabel !== '' ? $extSubLabel : null, $subInstructions,
-                    $enablePoster, $posterDim, $posterGuideHtml, $posterTplUrl, $posterPrizes, $posterItemsJson,
-                    $isPublished, $isFeatured, $editId,
-                ]);
-                logAudit($pdo, $user, 'UPDATE_CONFERENCE', 'Conference', $shortName . ': ' . $title);
-                $msg = 'Conference / Research Event "' . $shortName . '" updated successfully.';
+                if ($isSuper) {
+                    $pdo->prepare(
+                        "UPDATE conferences SET slug=?, title=?, short_name=?, scope=?, theme=?, start_date=?, end_date=?, venue=?, mode=?, organizing_department=?, indexing_partners_json=?, contact_email=?, contact_phone=?, banner_url=?, hero_slides_json=?, overview_html=?, cfp_html=?, tracks_json=?, important_dates_json=?, people_json=?, schedule_json=?, fee_tiers_json=?, submission_mode=?, external_submission_url=?, external_submission_label=?, submission_instructions_html=?, enable_poster_presentation=?, poster_dimensions=?, poster_guidelines_html=?, poster_template_url=?, poster_prizes_text=?, poster_items_json=?, is_published=?, is_featured=?, is_shareable=?, status='published' WHERE id=?"
+                    )->execute([
+                        $slug, $title, $shortName, $scope, $theme, $startDate, $endDate, $venue, $mode, $orgDept,
+                        $partnersJson, $contactEmail, $contactPhone, $bannerUrl,
+                        $heroSlidesJson, $overviewHtml, $cfpHtml, $tracksJson, $datesJson, $peopleJson, $scheduleJson, $feesJson,
+                        $submissionMode, $extSubUrl !== '' ? $extSubUrl : null, $extSubLabel !== '' ? $extSubLabel : null, $subInstructions,
+                        $enablePoster, $posterDim, $posterGuideHtml, $posterTplUrl, $posterPrizes, $posterItemsJson,
+                        $isPublished, $isFeatured, $isShareable, $editId,
+                    ]);
+                    logAudit($pdo, $user, 'UPDATE_CONFERENCE', 'Conference', $shortName . ': ' . $title);
+                    $msg = 'Conference / Research Event "' . $shortName . '" updated successfully.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM conferences WHERE id = ? LIMIT 1');
+                    $stCur->execute([$editId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'conferences', $editId, $shortName . ' — ' . $title, $cur, [
+                        'slug' => $slug, 'title' => $title, 'short_name' => $shortName, 'scope' => $scope,
+                        'theme' => $theme, 'start_date' => $startDate, 'end_date' => $endDate, 'venue' => $venue,
+                        'mode' => $mode, 'organizing_department' => $orgDept, 'indexing_partners_json' => $partnersJson,
+                        'contact_email' => $contactEmail, 'contact_phone' => $contactPhone, 'banner_url' => $bannerUrl,
+                        'hero_slides_json' => $heroSlidesJson, 'overview_html' => $overviewHtml, 'cfp_html' => $cfpHtml,
+                        'tracks_json' => $tracksJson, 'important_dates_json' => $datesJson, 'people_json' => $peopleJson,
+                        'schedule_json' => $scheduleJson, 'fee_tiers_json' => $feesJson, 'submission_mode' => $submissionMode,
+                        'external_submission_url' => $extSubUrl !== '' ? $extSubUrl : null,
+                        'external_submission_label' => $extSubLabel !== '' ? $extSubLabel : null,
+                        'submission_instructions_html' => $subInstructions,
+                        'enable_poster_presentation' => $enablePoster, 'poster_dimensions' => $posterDim,
+                        'poster_guidelines_html' => $posterGuideHtml, 'poster_template_url' => $posterTplUrl,
+                        'poster_prizes_text' => $posterPrizes, 'poster_items_json' => $posterItemsJson,
+                        'is_published' => $isPublished, 'is_featured' => $isFeatured, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Conference updates submitted for Super Admin approval. Live conference remains unchanged.';
+                }
             } else {
                 $nextOrder = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM conferences')->fetchColumn()) + 1;
                 $pdo->prepare(
-                    'INSERT INTO conferences (slug, title, short_name, scope, theme, start_date, end_date, venue, mode, organizing_department, indexing_partners_json, contact_email, contact_phone, banner_url, hero_slides_json, overview_html, cfp_html, tracks_json, important_dates_json, people_json, schedule_json, fee_tiers_json, submission_mode, external_submission_url, external_submission_label, submission_instructions_html, enable_poster_presentation, poster_dimensions, poster_guidelines_html, poster_template_url, poster_prizes_text, poster_items_json, is_published, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                    'INSERT INTO conferences (slug, title, short_name, scope, theme, start_date, end_date, venue, mode, organizing_department, indexing_partners_json, contact_email, contact_phone, banner_url, hero_slides_json, overview_html, cfp_html, tracks_json, important_dates_json, people_json, schedule_json, fee_tiers_json, submission_mode, external_submission_url, external_submission_label, submission_instructions_html, enable_poster_presentation, poster_dimensions, poster_guidelines_html, poster_template_url, poster_prizes_text, poster_items_json, is_published, is_featured, is_shareable, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 )->execute([
                     $slug, $title, $shortName, $scope, $theme, $startDate, $endDate, $venue, $mode, $orgDept,
-                    json_encode($partners, JSON_UNESCAPED_UNICODE), $contactEmail, $contactPhone, $bannerUrl,
+                    $partnersJson, $contactEmail, $contactPhone, $bannerUrl,
                     $heroSlidesJson, $overviewHtml, $cfpHtml, $tracksJson, $datesJson, $peopleJson, $scheduleJson, $feesJson,
                     $submissionMode, $extSubUrl !== '' ? $extSubUrl : null, $extSubLabel !== '' ? $extSubLabel : null, $subInstructions,
                     $enablePoster, $posterDim, $posterGuideHtml, $posterTplUrl, $posterPrizes, $posterItemsJson,
-                    $isPublished, $isFeatured, $nextOrder,
+                    $isSuper ? $isPublished : 0, $isFeatured, $isShareable, $nextOrder, $isSuper ? 'published' : 'pending_approval',
                 ]);
-                logAudit($pdo, $user, 'ADD_CONFERENCE', 'Conference', $shortName . ': ' . $title);
-                $msg = 'Conference / Research Event "' . $shortName . '" published to portal.';
+                $newCid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'ADD_CONFERENCE', 'Conference', $shortName . ': ' . $title);
+                    $msg = 'Conference / Research Event "' . $shortName . '" published to portal.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'conferences', $newCid, $shortName . ' — ' . $title, [
+                        'slug' => $slug, 'title' => $title, 'short_name' => $shortName, 'scope' => $scope,
+                        'is_published' => $isPublished, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Conference / Event "' . $shortName . '" submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($action === 'move_conference' && !empty($_POST['id'])) {
@@ -142,11 +177,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'delete_conference' && !empty($_POST['id'])) {
         $cid = (int)$_POST['id'];
-        $pdo->prepare('DELETE FROM conference_submissions WHERE conference_id = ?')->execute([$cid]);
-        $pdo->prepare('DELETE FROM conference_registrations WHERE conference_id = ?')->execute([$cid]);
-        $pdo->prepare('DELETE FROM conferences WHERE id = ?')->execute([$cid]);
-        logAudit($pdo, $user, 'DELETE_CONFERENCE', 'Conference', 'Event #' . $cid);
-        $msg = 'Conference / Research Event and its records deleted.';
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM conference_submissions WHERE conference_id = ?')->execute([$cid]);
+            $pdo->prepare('DELETE FROM conference_registrations WHERE conference_id = ?')->execute([$cid]);
+            $pdo->prepare('DELETE FROM conferences WHERE id = ?')->execute([$cid]);
+            logAudit($pdo, $user, 'DELETE_CONFERENCE', 'Conference', 'Event #' . $cid);
+            $msg = 'Conference / Research Event and its records deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM conferences WHERE id = ? LIMIT 1');
+            $stCur->execute([$cid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'conferences', $cid, (string)($cur['short_name'] ?: $cur['title']), $cur);
+                $msg = 'Conference deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'save_research_slide') {
         $tab = 'research_slider';
         $slides = getResearchSliderSlides($pdo);
@@ -251,20 +296,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else $docUrl = $up['file_url'];
         }
         $isPub = isset($_POST['is_published']) ? 1 : 0;
+        $isShareable = isset($_POST['is_shareable']) ? 1 : 0;
         if ($err === '') {
             if ($title === '' || $agency === '' || $pi === '') {
                 $err = 'Project Title, Funding Agency, and Principal Investigator are required.';
             } elseif ($pid > 0) {
-                $pdo->prepare('UPDATE research_projects SET title=?, funding_agency=?, principal_investigator=?, co_investigator=?, department_code=?, grant_amount_lakhs=?, sanction_year=?, duration=?, status=?, project_code=?, summary=?, document_url=?, is_published=? WHERE id=?')
-                    ->execute([$title, $agency, $pi, $coPi, $dept, $amount, $year, $duration, $status, $projCode, $summary, $docUrl, $isPub, $pid]);
-                logAudit($pdo, $user, 'UPDATE_RESEARCH_PROJECT', 'Research Project', $title);
-                $msg = 'Funded research project updated.';
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE research_projects SET title=?, funding_agency=?, principal_investigator=?, co_investigator=?, department_code=?, grant_amount_lakhs=?, sanction_year=?, duration=?, status=?, project_code=?, summary=?, document_url=?, is_published=?, is_shareable=?, moderation_status='published' WHERE id=?")
+                        ->execute([$title, $agency, $pi, $coPi, $dept, $amount, $year, $duration, $status, $projCode, $summary, $docUrl, $isPub, $isShareable, $pid]);
+                    logAudit($pdo, $user, 'UPDATE_RESEARCH_PROJECT', 'Research Project', $title);
+                    $msg = 'Funded research project updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM research_projects WHERE id = ? LIMIT 1');
+                    $stCur->execute([$pid]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'research_projects', $pid, $title, $cur, [
+                        'title' => $title, 'funding_agency' => $agency, 'principal_investigator' => $pi,
+                        'co_investigator' => $coPi, 'department_code' => $dept, 'grant_amount_lakhs' => $amount,
+                        'sanction_year' => $year, 'duration' => $duration, 'status' => $status,
+                        'project_code' => $projCode, 'summary' => $summary, 'document_url' => $docUrl,
+                        'is_published' => $isPub, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Funded project edits submitted for Super Admin approval.';
+                }
             } else {
                 $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM research_projects')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO research_projects (title, funding_agency, principal_investigator, co_investigator, department_code, grant_amount_lakhs, sanction_year, duration, status, project_code, summary, document_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-                    ->execute([$title, $agency, $pi, $coPi, $dept, $amount, $year, $duration, $status, $projCode, $summary, $docUrl, $isPub, $next]);
-                logAudit($pdo, $user, 'ADD_RESEARCH_PROJECT', 'Research Project', $title);
-                $msg = 'Funded research project added.';
+                $pdo->prepare('INSERT INTO research_projects (title, funding_agency, principal_investigator, co_investigator, department_code, grant_amount_lakhs, sanction_year, duration, status, project_code, summary, document_url, is_published, is_shareable, sort_order, moderation_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$title, $agency, $pi, $coPi, $dept, $amount, $year, $duration, $status, $projCode, $summary, $docUrl, $isSuper ? $isPub : 0, $isShareable, $next, $isSuper ? 'published' : 'pending_approval']);
+                $newPid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'ADD_RESEARCH_PROJECT', 'Research Project', $title);
+                    $msg = 'Funded research project added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'research_projects', $newPid, $title, [
+                        'title' => $title, 'funding_agency' => $agency, 'principal_investigator' => $pi,
+                        'is_published' => $isPub, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Funded research project submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($action === 'move_research_project' && !empty($_POST['id'])) {
@@ -273,13 +342,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = 'Research project order updated.';
     } elseif ($action === 'toggle_research_project' && !empty($_POST['id'])) {
         $tab = 'projects';
-        $pdo->prepare('UPDATE research_projects SET is_published = 1 - is_published WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Research project visibility toggled.';
+        $pid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare("UPDATE research_projects SET is_published = 1 - is_published, moderation_status = 'published' WHERE id = ?")->execute([$pid]);
+            $msg = 'Research project visibility toggled.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM research_projects WHERE id = ? LIMIT 1');
+            $stCur->execute([$pid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingUpdate($pdo, $user, 'research_projects', $pid, (string)$cur['title'], $cur, ['is_published' => !empty($cur['is_published']) ? 0 : 1]);
+                $msg = 'Project visibility change submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'delete_research_project' && !empty($_POST['id'])) {
         $tab = 'projects';
-        $pdo->prepare('DELETE FROM research_projects WHERE id = ?')->execute([(int)$_POST['id']]);
-        logAudit($pdo, $user, 'DELETE_RESEARCH_PROJECT', 'Research Project', 'ID #' . (int)$_POST['id']);
-        $msg = 'Research project deleted.';
+        $pid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM research_projects WHERE id = ?')->execute([$pid]);
+            logAudit($pdo, $user, 'DELETE_RESEARCH_PROJECT', 'Research Project', 'ID #' . $pid);
+            $msg = 'Research project deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM research_projects WHERE id = ? LIMIT 1');
+            $stCur->execute([$pid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'research_projects', $pid, (string)$cur['title'], $cur);
+                $msg = 'Project deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'save_research_patent') {
         $tab = 'patents';
         $ipid = (int)($_POST['patent_id'] ?? 0);
@@ -294,20 +385,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $summary = trim((string)($_POST['summary'] ?? ''));
         $extUrl = trim((string)($_POST['external_url'] ?? ''));
         $isPub = isset($_POST['is_published']) ? 1 : 0;
+        $isShareable = isset($_POST['is_shareable']) ? 1 : 0;
 
         if ($title === '' || $inv === '') {
             $err = 'Title and Inventors / Authors / Lead are required.';
         } elseif ($ipid > 0) {
-            $pdo->prepare('UPDATE research_patents SET item_type=?, title=?, inventors_or_lead=?, department_code=?, reference_number=?, filing_or_grant_date=?, status=?, partner_or_agency=?, summary=?, external_url=?, is_published=? WHERE id=?')
-                ->execute([$iType, $title, $inv, $dept, $refNo, $dt, $status, $partner, $summary, $extUrl, $isPub, $ipid]);
-            logAudit($pdo, $user, 'UPDATE_RESEARCH_PATENT', 'Research IPR', $title);
-            $msg = 'Research publication / patent / IPR record updated.';
+            if ($isSuper) {
+                $pdo->prepare("UPDATE research_patents SET item_type=?, title=?, inventors_or_lead=?, department_code=?, reference_number=?, filing_or_grant_date=?, status=?, partner_or_agency=?, summary=?, external_url=?, is_published=?, is_shareable=?, moderation_status='published' WHERE id=?")
+                    ->execute([$iType, $title, $inv, $dept, $refNo, $dt, $status, $partner, $summary, $extUrl, $isPub, $isShareable, $ipid]);
+                logAudit($pdo, $user, 'UPDATE_RESEARCH_PATENT', 'Research IPR', $title);
+                $msg = 'Research publication / patent / IPR record updated.';
+            } else {
+                $stCur = $pdo->prepare('SELECT * FROM research_patents WHERE id = ? LIMIT 1');
+                $stCur->execute([$ipid]);
+                $cur = $stCur->fetch() ?: [];
+                cmsQueuePendingUpdate($pdo, $user, 'research_patents', $ipid, $title, $cur, [
+                    'item_type' => $iType, 'title' => $title, 'inventors_or_lead' => $inv,
+                    'department_code' => $dept, 'reference_number' => $refNo, 'filing_or_grant_date' => $dt,
+                    'status' => $status, 'partner_or_agency' => $partner, 'summary' => $summary,
+                    'external_url' => $extUrl, 'is_published' => $isPub, 'is_shareable' => $isShareable,
+                ]);
+                $msg = 'Research IPR / Publication edits submitted for Super Admin approval.';
+            }
         } else {
             $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM research_patents')->fetchColumn()) + 1;
-            $pdo->prepare('INSERT INTO research_patents (item_type, title, inventors_or_lead, department_code, reference_number, filing_or_grant_date, status, partner_or_agency, summary, external_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-                ->execute([$iType, $title, $inv, $dept, $refNo, $dt, $status, $partner, $summary, $extUrl, $isPub, $next]);
-            logAudit($pdo, $user, 'ADD_RESEARCH_PATENT', 'Research IPR', $title);
-            $msg = 'Research publication / patent / IPR record added.';
+            $pdo->prepare('INSERT INTO research_patents (item_type, title, inventors_or_lead, department_code, reference_number, filing_or_grant_date, status, partner_or_agency, summary, external_url, is_published, is_shareable, sort_order, moderation_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$iType, $title, $inv, $dept, $refNo, $dt, $status, $partner, $summary, $extUrl, $isSuper ? $isPub : 0, $isShareable, $next, $isSuper ? 'published' : 'pending_approval']);
+            $newIpid = (int)$pdo->lastInsertId();
+            if ($isSuper) {
+                logAudit($pdo, $user, 'ADD_RESEARCH_PATENT', 'Research IPR', $title);
+                $msg = 'Research publication / patent / IPR record added.';
+            } else {
+                cmsQueuePendingCreate($pdo, $user, 'research_patents', $newIpid, $title, [
+                    'item_type' => $iType, 'title' => $title, 'inventors_or_lead' => $inv,
+                    'is_published' => $isPub, 'is_shareable' => $isShareable,
+                ]);
+                $msg = 'Research IPR / Publication record submitted for Super Admin approval.';
+            }
         }
     } elseif ($action === 'move_research_patent' && !empty($_POST['id'])) {
         $tab = 'patents';
@@ -315,13 +429,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = 'IPR / Publication display order updated.';
     } elseif ($action === 'toggle_research_patent' && !empty($_POST['id'])) {
         $tab = 'patents';
-        $pdo->prepare('UPDATE research_patents SET is_published = 1 - is_published WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'IPR / Publication visibility toggled.';
+        $ipid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare("UPDATE research_patents SET is_published = 1 - is_published, moderation_status = 'published' WHERE id = ?")->execute([$ipid]);
+            $msg = 'IPR / Publication visibility toggled.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM research_patents WHERE id = ? LIMIT 1');
+            $stCur->execute([$ipid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingUpdate($pdo, $user, 'research_patents', $ipid, (string)$cur['title'], $cur, ['is_published' => !empty($cur['is_published']) ? 0 : 1]);
+                $msg = 'IPR visibility change submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'delete_research_patent' && !empty($_POST['id'])) {
         $tab = 'patents';
-        $pdo->prepare('DELETE FROM research_patents WHERE id = ?')->execute([(int)$_POST['id']]);
-        logAudit($pdo, $user, 'DELETE_RESEARCH_PATENT', 'Research IPR', 'ID #' . (int)$_POST['id']);
-        $msg = 'IPR / Publication record deleted.';
+        $ipid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM research_patents WHERE id = ?')->execute([$ipid]);
+            logAudit($pdo, $user, 'DELETE_RESEARCH_PATENT', 'Research IPR', 'ID #' . $ipid);
+            $msg = 'IPR / Publication record deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM research_patents WHERE id = ? LIMIT 1');
+            $stCur->execute([$ipid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'research_patents', $ipid, (string)$cur['title'], $cur);
+                $msg = 'IPR deletion submitted for Super Admin approval.';
+            }
+        }
     }
 }
 
@@ -479,9 +615,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         </label>
       </div>
 
-      <div style="display:flex;gap:1.25rem;margin-bottom:0.85rem;font-size:0.85rem;font-weight:600;">
+      <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin-bottom:0.85rem;font-size:0.85rem;font-weight:600;">
         <label><input type="checkbox" name="is_published" value="1" <?= (!isset($editingConf['is_published']) || !empty($editingConf['is_published'])) ? 'checked' : '' ?>> Published on Website</label>
         <label><input type="checkbox" name="is_featured" value="1" <?= !empty($editingConf['is_featured']) ? 'checked' : '' ?>> Highlight as Featured</label>
+        <label><input type="checkbox" name="is_shareable" value="1" <?= (!isset($editingConf['is_shareable']) || !empty($editingConf['is_shareable'])) ? 'checked' : '' ?>> Enable Social Share Buttons</label>
       </div>
 
       <?php
@@ -625,7 +762,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <div style="display:flex;align-items:center;gap:0.8rem;">
           <img src="<?= e(mediaUrl($c['banner_url'] ?? '', 'assets/images/hero_campus.jpg')) ?>" alt="" style="width:72px;height:48px;object-fit:cover;border-radius:8px;">
           <div>
-            <strong><?= e($c['short_name']) ?> — <?= e($c['title']) ?></strong>
+            <strong><?= e($c['short_name']) ?> — <?= e($c['title']) ?></strong> <?= cmsModerationStatusBadge((string)($c['status'] ?? 'published')) ?>
             <div style="font-size:0.78rem;color:#78716C;"><?= e($c['scope']) ?> · <?= e($c['start_date']) ?> · <?= e($c['mode']) ?> · <?= !empty($c['is_published']) ? 'Published' : 'Draft' ?></div>
           </div>
         </div>
@@ -961,9 +1098,14 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.55rem;">Project Scope &amp; Outcomes Summary
       <textarea name="summary" rows="2" style="width:100%;padding:0.45rem;margin-top:3px;"><?= e((string)($editingProject['summary'] ?? '')) ?></textarea>
     </label>
-    <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:600;margin-bottom:0.65rem;">
-      <input type="checkbox" name="is_published" value="1" <?= ($editingProject === null || !empty($editingProject['is_published'])) ? 'checked' : '' ?>> Visible on Research Portal
-    </label><br>
+    <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin-bottom:0.65rem;font-size:0.82rem;font-weight:600;">
+      <label style="display:inline-flex;align-items:center;gap:0.4rem;">
+        <input type="checkbox" name="is_published" value="1" <?= ($editingProject === null || !empty($editingProject['is_published'])) ? 'checked' : '' ?>> Visible on Research Portal
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:0.4rem;">
+        <input type="checkbox" name="is_shareable" value="1" <?= ($editingProject === null || !isset($editingProject['is_shareable']) || !empty($editingProject['is_shareable'])) ? 'checked' : '' ?>> Enable Social Share Buttons
+      </label>
+    </div>
     <button type="submit" class="btn-primary"><?= $editingProject ? 'Update Funded Project' : 'Add Funded Project' ?></button>
     <?php if ($editingProject): ?><a href="?tab=projects" class="btn-outline" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
   </form>
@@ -974,7 +1116,8 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <div class="admin-list-row">
         <div>
           <span style="font-size:0.72rem;font-weight:700;color:var(--secondary-color);text-transform:uppercase;"><?= e((string)$pr['funding_agency']) ?> · <?= e((string)$pr['status']) ?> · <?= e((string)$pr['department_code']) ?></span>
-          <span class="badge <?= !empty($pr['is_published']) ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:4px;"><?= !empty($pr['is_published']) ? 'Visible' : 'Hidden' ?></span><br>
+          <span class="badge <?= !empty($pr['is_published']) ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:4px;"><?= !empty($pr['is_published']) ? 'Visible' : 'Hidden' ?></span>
+          <?= cmsModerationStatusBadge((string)($pr['moderation_status'] ?? 'published')) ?><br>
           <strong><?= e((string)$pr['title']) ?></strong>
           <div style="font-size:0.78rem;color:#57534E;">PI: <?= e((string)$pr['principal_investigator']) ?> · Grant: <strong><?= e((string)$pr['grant_amount_lakhs']) ?></strong> (<?= e((string)$pr['sanction_year']) ?>)</div>
         </div>
@@ -1041,9 +1184,14 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.55rem;">Brief Impact / Technical Summary
       <textarea name="summary" rows="2" style="width:100%;padding:0.45rem;margin-top:3px;"><?= e((string)($editingPatent['summary'] ?? '')) ?></textarea>
     </label>
-    <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:600;margin-bottom:0.65rem;">
-      <input type="checkbox" name="is_published" value="1" <?= ($editingPatent === null || !empty($editingPatent['is_published'])) ? 'checked' : '' ?>> Visible on Research Portal
-    </label><br>
+    <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin-bottom:0.65rem;font-size:0.82rem;font-weight:600;">
+      <label style="display:inline-flex;align-items:center;gap:0.4rem;">
+        <input type="checkbox" name="is_published" value="1" <?= ($editingPatent === null || !empty($editingPatent['is_published'])) ? 'checked' : '' ?>> Visible on Research Portal
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:0.4rem;">
+        <input type="checkbox" name="is_shareable" value="1" <?= ($editingPatent === null || !isset($editingPatent['is_shareable']) || !empty($editingPatent['is_shareable'])) ? 'checked' : '' ?>> Enable Social Share Buttons
+      </label>
+    </div>
     <button type="submit" class="btn-primary"><?= $editingPatent ? 'Update IPR / Publication' : 'Save IPR / Publication Record' ?></button>
     <?php if ($editingPatent): ?><a href="?tab=patents" class="btn-outline" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
   </form>
@@ -1054,7 +1202,8 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <div class="admin-list-row">
         <div>
           <span style="font-size:0.72rem;font-weight:700;color:var(--secondary-color);text-transform:uppercase;"><?= e((string)$pt['item_type']) ?> · <?= e((string)$pt['department_code']) ?> · <?= e((string)$pt['filing_or_grant_date']) ?></span>
-          <span class="badge <?= !empty($pt['is_published']) ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:4px;"><?= !empty($pt['is_published']) ? 'Visible' : 'Hidden' ?></span><br>
+          <span class="badge <?= !empty($pt['is_published']) ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:4px;"><?= !empty($pt['is_published']) ? 'Visible' : 'Hidden' ?></span>
+          <?= cmsModerationStatusBadge((string)($pt['moderation_status'] ?? 'published')) ?><br>
           <strong><?= e((string)$pt['title']) ?></strong>
           <div style="font-size:0.78rem;color:#57534E;"><?= e((string)$pt['inventors_or_lead']) ?> · Ref: <code><?= e((string)$pt['reference_number']) ?></code> · <?= e((string)$pt['status']) ?></div>
         </div>

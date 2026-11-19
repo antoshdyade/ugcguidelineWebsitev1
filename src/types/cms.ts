@@ -10,6 +10,27 @@ export type UgcCategorySlug = string;
 
 export type MenuPlacementLocation = 'main' | 'more' | 'hidden';
 
+export type ContentModerationStatus = 'published' | 'pending_approval' | 'rejected' | 'draft';
+
+export interface PendingContentRevision {
+  id: number;
+  entityTable: string;
+  entityId?: number | null;
+  actionType: 'create' | 'update' | 'delete';
+  entityTitle: string;
+  currentSnapshot?: Record<string, unknown> | null;
+  proposedPayload?: Record<string, unknown> | null;
+  submittedByUserId?: number | null;
+  submittedByName: string;
+  submittedByEmail: string;
+  submittedByRole: UserRole;
+  status: 'pending_approval' | 'approved' | 'rejected';
+  reviewerEmail?: string;
+  reviewerNote?: string;
+  submittedAt: string;
+  reviewedAt?: string;
+}
+
 export interface CmsCategory {
   id: number;
   slug: UgcCategorySlug;
@@ -42,8 +63,10 @@ export interface CmsPage {
   attachedPdfUrl?: string;
   attachedPdfLabel?: string;
   showShareBar?: boolean;
+  isShareable?: boolean;
   metaDescription?: string;
   isPublished: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
   updatedAt: string;
   updatedBy: string;
@@ -59,6 +82,7 @@ export interface LeadershipProfile {
   photoUrl: string;
   bio: string;
   committeeGroup: string;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -92,6 +116,8 @@ export interface DepartmentSubPage {
   items?: DepartmentSubPageItem[];
   sortOrder: number;
   isPublished: boolean;
+  isShareable?: boolean;
+  status?: ContentModerationStatus;
   updatedAt: string;
 }
 
@@ -161,6 +187,8 @@ export interface Department {
   subPages: DepartmentSubPage[];
   faculty: FacultyMember[];
   labs: DepartmentLab[];
+  isShareable?: boolean;
+  status?: ContentModerationStatus;
 }
 
 export interface HeroSlide {
@@ -172,6 +200,7 @@ export interface HeroSlide {
   ctaLink: string;
   sortOrder: number;
   isActive: boolean;
+  status?: ContentModerationStatus;
 }
 
 export interface TickerItem {
@@ -180,6 +209,7 @@ export interface TickerItem {
   linkUrl: string;
   badgeText?: string;
   isActive: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -196,6 +226,8 @@ export interface CampusEvent {
   imageUrl?: string;
   documentUrl?: string;
   isFeatured: boolean;
+  isShareable?: boolean;
+  status?: ContentModerationStatus;
   sortOrder?: number;
 }
 
@@ -213,6 +245,7 @@ export interface CmsDocument {
   uploadedAt: string;
   uploadedBy: string;
   isQuickLink: boolean;
+  status?: ContentModerationStatus;
   sortOrder?: number;
 }
 
@@ -222,6 +255,7 @@ export interface GalleryAlbum {
   category: string;
   eventDate: string;
   coverUrl: string;
+  status?: ContentModerationStatus;
   sortOrder?: number;
   photos: {
     id: number;
@@ -239,6 +273,7 @@ export interface TelephoneEntry {
   extension: string;
   directPhone: string;
   email: string;
+  status?: ContentModerationStatus;
   sortOrder?: number;
 }
 
@@ -299,6 +334,7 @@ export interface CustomHomeComponent {
   placement: HomeComponentPlacement;
   sortOrder: number;
   isActive: boolean;
+  status?: ContentModerationStatus;
   contentHtml: string;
 }
 
@@ -753,6 +789,8 @@ export interface Conference {
   customSections?: ConferenceCustomSection[];
   isPublished: boolean;
   isFeatured: boolean;
+  isShareable?: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
   tracks: ConferenceTrack[];
   importantDates: ConferenceImportantDate[];
@@ -814,6 +852,7 @@ export interface PlacementYearStat {
   highestPackageLpa: number;
   averagePackageLpa: number;
   topRecruitersList: string;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -830,6 +869,8 @@ export interface PlacementStory {
   headline?: string;
   roleOrAward?: string;
   isFeatured?: boolean;
+  isShareable?: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -842,6 +883,8 @@ export interface PlacementNotice {
   attachmentUrl?: string;
   linkLabel?: string;
   isPinned?: boolean;
+  isShareable?: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -866,6 +909,7 @@ export interface PlacementCustomSection {
   ctaLabel?: string;
   ctaUrl?: string;
   isPublished: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1081,6 +1125,7 @@ export interface SportsFacility {
   imageUrl: string;
   customFields?: SportsCustomField[];
   isPublished: boolean;
+  moderationStatus?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1097,6 +1142,8 @@ export interface SportsEvent {
   description: string;
   bannerUrl: string;
   isPublished: boolean;
+  isShareable?: boolean;
+  moderationStatus?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1113,6 +1160,7 @@ export interface SportsAchievement {
   photoUrl: string;
   highlights: string;
   isFeatured: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1126,6 +1174,7 @@ export interface SportsGalleryItem {
   eventDate: string;
   caption: string;
   isPublished: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1139,6 +1188,7 @@ export interface SportsNotice {
   registrationLink?: string;
   isPinned: boolean;
   isPublished: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1180,6 +1230,8 @@ export interface FacilityItem {
   customFields: FacilityCustomField[];
   isFeatured: boolean;
   isPublished: boolean;
+  isShareable?: boolean;
+  status?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1205,6 +1257,8 @@ export interface ResearchProjectItem {
   summary?: string;
   documentUrl?: string;
   isPublished: boolean;
+  isShareable?: boolean;
+  moderationStatus?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1231,6 +1285,8 @@ export interface ResearchPatentItem {
   summary?: string;
   externalUrl?: string;
   isPublished: boolean;
+  isShareable?: boolean;
+  moderationStatus?: ContentModerationStatus;
   sortOrder: number;
 }
 
@@ -1364,6 +1420,7 @@ export interface CmsDatabase {
   securityConfig?: SecurityConfig;
   users: (CmsUser & { passwordHash: string })[];
   auditLogs: AuditLogEntry[];
+  pendingContentRevisions?: PendingContentRevision[];
   settings: SiteSettings;
   backups?: BackupRecord[];
   backupSchedule?: BackupScheduleConfig;

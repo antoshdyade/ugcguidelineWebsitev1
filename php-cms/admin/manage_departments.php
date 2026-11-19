@@ -25,6 +25,7 @@ $pageTypes = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
+    $isSuper = cmsIsSuperAdmin($user);
 
     if ($action === 'add_department' && $isFullDeptAdmin) {
         $heroUrl = 'assets/images/hero_robotics.jpg';
@@ -36,11 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($err === '') {
             $slug = trim(preg_replace('/[^a-z0-9-]+/', '-', strtolower(trim($_POST['slug']))), '-');
             $code = strtoupper(preg_replace('/[^A-Z0-9]/', '', strtoupper(trim($_POST['code']))));
-            $stmt = $pdo->prepare('INSERT INTO departments (slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission, hero_image_url, faculty_field_schema_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $deptName = trim($_POST['name']);
+            $isShareable = isset($_POST['is_shareable']) ? 1 : 0;
+            $deptStatus = $isSuper ? 'published' : 'pending_approval';
+            $stmt = $pdo->prepare('INSERT INTO departments (slug, code, name, short_name, established_year, intake_capacity, nba_status, hod_name, overview, vision, mission, hero_image_url, faculty_field_schema_json, is_shareable, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $stmt->execute([
                 $slug,
                 $code,
-                trim($_POST['name']),
+                $deptName,
                 trim($_POST['short_name'] ?: $code),
                 (int)$_POST['established_year'],
                 (int)$_POST['intake_capacity'],
@@ -51,20 +55,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 trim($_POST['mission'] ?? ''),
                 $heroUrl,
                 json_encode(['Google Scholar', 'ORCID ID', 'Patents Granted']),
+                $isShareable,
+                $deptStatus,
             ]);
             $newId = (int)$pdo->lastInsertId();
-            $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, sort_order, updated_at) VALUES (?, "about", "About Department", "general", ?, 1, CURDATE())')
-                ->execute([$newId, '<h2>' . e(trim($_POST['name'])) . '</h2><p>' . e(trim($_POST['overview'])) . '</p>']);
-            logAudit($pdo, $user, 'CREATE_DEPARTMENT', 'Department', $_POST['name']);
-            header('Location: manage_departments.php?dept_id=' . $newId . '&msg=created');
-            exit;
+            $aboutHtml = '<h2>' . e($deptName) . '</h2><p>' . e(trim($_POST['overview'])) . '</p>';
+            $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, sort_order, is_published, is_shareable, updated_at, status) VALUES (?, "about", "About Department", "general", ?, 1, ?, 1, CURDATE(), ?)')
+                ->execute([$newId, $aboutHtml, $isSuper ? 1 : 0, $deptStatus]);
+            $aboutId = (int)$pdo->lastInsertId();
+            if ($isSuper) {
+                logAudit($pdo, $user, 'CREATE_DEPARTMENT', 'Department', $deptName);
+                header('Location: manage_departments.php?dept_id=' . $newId . '&msg=created');
+                exit;
+            }
+            cmsQueuePendingCreate($pdo, $user, 'departments', $newId, $deptName, [
+                'slug' => $slug, 'code' => $code, 'name' => $deptName, 'is_shareable' => $isShareable,
+            ]);
+            cmsQueuePendingCreate($pdo, $user, 'department_subpages', $aboutId, $deptName . ' — About Department', [
+                'department_id' => $newId, 'slug' => 'about', 'title' => 'About Department', 'is_published' => 1, 'is_shareable' => 1,
+            ]);
+            $msg = 'Department microsite submitted for Super Admin approval.';
         }
     } elseif ($action === 'delete_department' && $isFullDeptAdmin) {
         $delId = (int)$_POST['department_id'];
-        $pdo->prepare('DELETE FROM departments WHERE id = ?')->execute([$delId]);
-        logAudit($pdo, $user, 'DELETE_DEPARTMENT', 'Department', 'ID #' . $delId);
-        header('Location: manage_departments.php?msg=deleted');
-        exit;
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM departments WHERE id = ?')->execute([$delId]);
+            logAudit($pdo, $user, 'DELETE_DEPARTMENT', 'Department', 'ID #' . $delId);
+            header('Location: manage_departments.php?msg=deleted');
+            exit;
+        }
+        $stCur = $pdo->prepare('SELECT * FROM departments WHERE id = ? LIMIT 1');
+        $stCur->execute([$delId]);
+        $cur = $stCur->fetch();
+        if ($cur) {
+            cmsQueuePendingDelete($pdo, $user, 'departments', $delId, (string)$cur['name'], $cur);
+            $msg = 'Department deletion submitted for Super Admin approval.';
+        }
     } else {
         $deptId = (int)$_POST['department_id'];
         requireRoleAccess('departments', $deptId);
@@ -76,24 +102,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($up['ok']) $heroUrl = $up['file_url'];
                 else $err = $up['error'];
             }
+            $isShareable = isset($_POST['is_shareable']) ? 1 : 0;
             if ($err === '') {
-                $stmt = $pdo->prepare('UPDATE departments SET name = ?, short_name = ?, established_year = ?, intake_capacity = ?, nba_status = ?, hod_name = ?, hod_message = ?, overview = ?, vision = ?, mission = ?, hero_image_url = ? WHERE id = ?');
-                $stmt->execute([
-                    trim($_POST['name']),
-                    trim($_POST['short_name']),
-                    (int)$_POST['established_year'],
-                    (int)$_POST['intake_capacity'],
-                    trim($_POST['nba_status']),
-                    trim($_POST['hod_name']),
-                    trim($_POST['hod_message'] ?? ''),
-                    trim($_POST['overview']),
-                    trim($_POST['vision'] ?? ''),
-                    trim($_POST['mission'] ?? ''),
-                    $heroUrl,
-                    $deptId,
-                ]);
-                logAudit($pdo, $user, 'UPDATE_DEPARTMENT', 'Department', $_POST['name']);
-                $msg = 'Department profile updated.';
+                $deptPayload = [
+                    'name'             => trim((string)$_POST['name']),
+                    'short_name'       => trim((string)$_POST['short_name']),
+                    'established_year' => (int)$_POST['established_year'],
+                    'intake_capacity'  => (int)$_POST['intake_capacity'],
+                    'nba_status'       => trim((string)$_POST['nba_status']),
+                    'hod_name'         => trim((string)$_POST['hod_name']),
+                    'hod_message'      => trim((string)($_POST['hod_message'] ?? '')),
+                    'overview'         => trim((string)$_POST['overview']),
+                    'vision'           => trim((string)($_POST['vision'] ?? '')),
+                    'mission'          => trim((string)($_POST['mission'] ?? '')),
+                    'hero_image_url'   => $heroUrl,
+                    'is_shareable'     => $isShareable,
+                ];
+                if ($isSuper) {
+                    $stmt = $pdo->prepare("UPDATE departments SET name = ?, short_name = ?, established_year = ?, intake_capacity = ?, nba_status = ?, hod_name = ?, hod_message = ?, overview = ?, vision = ?, mission = ?, hero_image_url = ?, is_shareable = ?, status = 'published' WHERE id = ?");
+                    $stmt->execute([
+                        $deptPayload['name'], $deptPayload['short_name'], $deptPayload['established_year'],
+                        $deptPayload['intake_capacity'], $deptPayload['nba_status'], $deptPayload['hod_name'],
+                        $deptPayload['hod_message'], $deptPayload['overview'], $deptPayload['vision'],
+                        $deptPayload['mission'], $deptPayload['hero_image_url'], $isShareable, $deptId,
+                    ]);
+                    logAudit($pdo, $user, 'UPDATE_DEPARTMENT', 'Department', $deptPayload['name']);
+                    $msg = 'Department profile updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM departments WHERE id = ? LIMIT 1');
+                    $stCur->execute([$deptId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'departments', $deptId, $deptPayload['name'], $cur, $deptPayload);
+                    $msg = 'Department profile edits submitted for Super Admin approval. Live profile remains unchanged.';
+                }
             }
         } elseif ($action === 'update_library_schema') {
             $libPhoto = trim($_POST['existing_library_photo'] ?? 'assets/images/hero_library.jpg');
@@ -114,29 +155,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'photoUrl'          => $libPhoto,
                 ];
                 $schemaLines = array_values(array_filter(array_map('trim', explode(',', (string)($_POST['faculty_schema'] ?? '')))));
-                $pdo->prepare('UPDATE departments SET library_json = ?, faculty_field_schema_json = ? WHERE id = ?')
-                    ->execute([
-                        $libPayload['name'] !== '' ? json_encode($libPayload, JSON_UNESCAPED_UNICODE) : null,
-                        json_encode($schemaLines, JSON_UNESCAPED_UNICODE),
-                        $deptId,
+                $libJson = $libPayload['name'] !== '' ? json_encode($libPayload, JSON_UNESCAPED_UNICODE) : null;
+                $schemaJson = json_encode($schemaLines, JSON_UNESCAPED_UNICODE);
+                if ($isSuper) {
+                    $pdo->prepare('UPDATE departments SET library_json = ?, faculty_field_schema_json = ? WHERE id = ?')
+                        ->execute([$libJson, $schemaJson, $deptId]);
+                    logAudit($pdo, $user, 'UPDATE_DEPT_LIBRARY_SCHEMA', 'Department', 'Dept #' . $deptId);
+                    $msg = 'Department library photo/details & faculty field schema saved.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM departments WHERE id = ? LIMIT 1');
+                    $stCur->execute([$deptId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'departments', $deptId, ((string)($cur['name'] ?? 'Department')) . ' (Library & Faculty Schema)', $cur, [
+                        'library_json'              => $libJson,
+                        'faculty_field_schema_json' => $schemaJson,
                     ]);
-                logAudit($pdo, $user, 'UPDATE_DEPT_LIBRARY_SCHEMA', 'Department', 'Dept #' . $deptId);
-                $msg = 'Department library photo/details & faculty field schema saved.';
+                    $msg = 'Library & faculty field schema update submitted for Super Admin approval.';
+                }
             }
         } elseif ($action === 'save_subpage') {
             $slug = trim(preg_replace('/[^a-z0-9-]+/', '-', strtolower(trim($_POST['slug']))), '-');
             $ptype = array_key_exists($_POST['page_type'] ?? '', $pageTypes) ? $_POST['page_type'] : 'general';
             $sortOrder = max(1, (int)($_POST['sort_order'] ?? 1));
+            $spTitle = trim((string)$_POST['title']);
+            $spHtml = (string)($_POST['content_html'] ?? '<p></p>');
+            $desiredPub = isset($_POST['is_published']) ? 1 : 0;
+            $isShareable = isset($_POST['is_shareable']) ? 1 : 0;
             if (!empty($_POST['subpage_id'])) {
-                $stmt = $pdo->prepare('UPDATE department_subpages SET slug = ?, title = ?, page_type = ?, content_html = ?, sort_order = ?, is_published = ?, updated_at = CURDATE() WHERE id = ? AND department_id = ?');
-                $stmt->execute([$slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', $sortOrder, isset($_POST['is_published']) ? 1 : 0, (int)$_POST['subpage_id'], $deptId]);
-                logAudit($pdo, $user, 'UPDATE_DEPT_SUBPAGE', 'Department', $_POST['title']);
-                $msg = 'Department micro-page updated.';
+                $spId = (int)$_POST['subpage_id'];
+                if ($isSuper) {
+                    $stmt = $pdo->prepare("UPDATE department_subpages SET slug = ?, title = ?, page_type = ?, content_html = ?, sort_order = ?, is_published = ?, is_shareable = ?, updated_at = CURDATE(), status = 'published' WHERE id = ? AND department_id = ?");
+                    $stmt->execute([$slug, $spTitle, $ptype, $spHtml, $sortOrder, $desiredPub, $isShareable, $spId, $deptId]);
+                    logAudit($pdo, $user, 'UPDATE_DEPT_SUBPAGE', 'Department', $spTitle);
+                    $msg = 'Department micro-page updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM department_subpages WHERE id = ? AND department_id = ? LIMIT 1');
+                    $stCur->execute([$spId, $deptId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'department_subpages', $spId, $spTitle, $cur, [
+                        'department_id' => $deptId,
+                        'slug'          => $slug,
+                        'title'         => $spTitle,
+                        'page_type'     => $ptype,
+                        'content_html'  => $spHtml,
+                        'sort_order'    => $sortOrder,
+                        'is_published'  => $desiredPub,
+                        'is_shareable'  => $isShareable,
+                        'updated_at'    => date('Y-m-d'),
+                    ]);
+                    $msg = 'Micro-page edits submitted for Super Admin approval. Live micro-page remains unchanged.';
+                }
             } else {
-                $stmt = $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, sort_order, is_published, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())');
-                $stmt->execute([$deptId, $slug, trim($_POST['title']), $ptype, $_POST['content_html'] ?? '<p></p>', $sortOrder, isset($_POST['is_published']) ? 1 : 0]);
-                logAudit($pdo, $user, 'CREATE_DEPT_SUBPAGE', 'Department', $_POST['title']);
-                $msg = 'Department micro-page created.';
+                $stmt = $pdo->prepare('INSERT INTO department_subpages (department_id, slug, title, page_type, content_html, sort_order, is_published, is_shareable, updated_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?)');
+                $stmt->execute([$deptId, $slug, $spTitle, $ptype, $spHtml, $sortOrder, $isSuper ? $desiredPub : 0, $isShareable, $isSuper ? 'published' : 'pending_approval']);
+                $newSpId = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'CREATE_DEPT_SUBPAGE', 'Department', $spTitle);
+                    $msg = 'Department micro-page created.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'department_subpages', $newSpId, $spTitle, [
+                        'department_id' => $deptId,
+                        'slug'          => $slug,
+                        'title'         => $spTitle,
+                        'page_type'     => $ptype,
+                        'is_published'  => $desiredPub,
+                        'is_shareable'  => $isShareable,
+                        'sort_order'    => $sortOrder,
+                    ]);
+                    $msg = 'Department micro-page submitted for Super Admin approval.';
+                }
             }
         } elseif ($action === 'move_subpage' && !empty($_POST['subpage_id'])) {
             $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
@@ -232,8 +319,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } elseif ($action === 'delete_subpage') {
-            $pdo->prepare('DELETE FROM department_subpages WHERE id = ? AND department_id = ?')->execute([(int)$_POST['subpage_id'], $deptId]);
-            $msg = 'Micro-page deleted.';
+            $spId = (int)$_POST['subpage_id'];
+            if ($isSuper) {
+                $pdo->prepare('DELETE FROM department_subpages WHERE id = ? AND department_id = ?')->execute([$spId, $deptId]);
+                $msg = 'Micro-page deleted.';
+            } else {
+                $stCur = $pdo->prepare('SELECT * FROM department_subpages WHERE id = ? AND department_id = ? LIMIT 1');
+                $stCur->execute([$spId, $deptId]);
+                $cur = $stCur->fetch();
+                if ($cur) {
+                    cmsQueuePendingDelete($pdo, $user, 'department_subpages', $spId, (string)$cur['title'], $cur);
+                    $msg = 'Micro-page deletion submitted for Super Admin approval.';
+                }
+            }
         } elseif ($action === 'add_faculty' || $action === 'update_faculty') {
             $photoUrl = trim($_POST['existing_photo'] ?? 'assets/images/principal.jpg');
             if (!empty($_FILES['photo']['name'])) {
@@ -428,8 +526,11 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <input type="text" name="nba_status" value="AICTE Approved" placeholder="NBA / Accreditation Status" style="padding:0.5rem;">
         </div>
         <textarea name="overview" rows="2" required placeholder="Department overview..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"></textarea>
-        <label style="display:block;margin-bottom:0.75rem;font-size:0.85rem;">Upload Department Hero Banner (JPG/PNG/WEBP):
+        <label style="display:block;margin-bottom:0.5rem;font-size:0.85rem;">Upload Department Hero Banner (JPG/PNG/WEBP):
           <input type="file" name="hero_image" accept="image/jpeg,image/png,image/webp" data-aspect="16:9">
+        </label>
+        <label style="display:block;margin-bottom:0.75rem;font-size:0.85rem;font-weight:600;">
+          <input type="checkbox" name="is_shareable" value="1" checked> Enable Social Share Buttons on Department Microsite
         </label>
         <button type="submit" class="btn-primary">Create Department Microsite</button>
       </form>
@@ -438,7 +539,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 
   <?php if ($activeDept): ?>
     <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.5rem;">
-      <h2 style="margin-top:0;">Department Profile &amp; Banner Image</h2>
+      <h2 style="margin-top:0;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">Department Profile &amp; Banner Image <?= cmsModerationStatusBadge((string)($activeDept['status'] ?? 'published')) ?></h2>
       <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
       <input type="hidden" name="action" value="update_department">
       <input type="hidden" name="department_id" value="<?= $activeDeptId ?>">
@@ -457,8 +558,11 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <textarea name="vision" rows="2" placeholder="Vision" style="padding:0.5rem;"><?= e($activeDept['vision'] ?? '') ?></textarea>
         <textarea name="mission" rows="2" placeholder="Mission" style="padding:0.5rem;"><?= e($activeDept['mission'] ?? '') ?></textarea>
       </div>
-      <label style="display:block;margin-bottom:0.75rem;font-size:0.85rem;">Upload New Hero Banner Image (Current: <code><?= e($activeDept['hero_image_url']) ?></code>):
+      <label style="display:block;margin-bottom:0.55rem;font-size:0.85rem;">Upload New Hero Banner Image (Current: <code><?= e($activeDept['hero_image_url']) ?></code>):
         <input type="file" name="hero_image" accept="image/jpeg,image/png,image/webp" data-aspect="16:9">
+      </label>
+      <label style="display:block;margin-bottom:0.75rem;font-size:0.85rem;font-weight:600;">
+        <input type="checkbox" name="is_shareable" value="1" <?= (!isset($activeDept['is_shareable']) || !empty($activeDept['is_shareable'])) ? 'checked' : '' ?>> Enable Social Share Buttons on this Department Microsite
       </label>
       <button type="submit" class="btn-primary">Save Department Profile</button>
     </form>
@@ -526,7 +630,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           </select>
         </div>
         <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="<?= e(baseUrl('admin/upload_handler.php')) ?>" name="content_html" rows="8"><?= htmlspecialchars($editSub['content_html'] ?? '<p>Department micro-page content...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
-        <label style="display:block;margin:0.5rem 0;"><input type="checkbox" name="is_published" <?= (!$editSub || !empty($editSub['is_published'])) ? 'checked' : '' ?>> Published</label>
+        <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin:0.55rem 0;font-size:0.86rem;font-weight:600;">
+          <label><input type="checkbox" name="is_published" <?= (!$editSub || !empty($editSub['is_published'])) ? 'checked' : '' ?>> Published</label>
+          <label><input type="checkbox" name="is_shareable" value="1" <?= (!$editSub || !isset($editSub['is_shareable']) || !empty($editSub['is_shareable'])) ? 'checked' : '' ?>> Enable Social Share Buttons</label>
+        </div>
         <button type="submit" class="btn-primary"><?= $editSub ? 'Update Micro-Page' : 'Save Micro-Page' ?></button>
         <?php if ($editSub): ?><a href="?dept_id=<?= $activeDeptId ?>" class="btn-secondary">Finish Editing</a><?php endif; ?>
       </form>
@@ -622,7 +729,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
               <td><?= e($s['title']) ?></td>
               <td><?= e($pageTypes[$s['page_type'] ?? 'general'] ?? ($s['page_type'] ?? 'general')) ?></td>
               <td><?= e($s['slug']) ?></td>
-              <td><?= !empty($s['is_published']) ? 'Published' : 'Draft' ?></td>
+              <td><?= !empty($s['is_published']) ? 'Published' : 'Draft' ?> <?= cmsModerationStatusBadge((string)($s['status'] ?? 'published')) ?></td>
               <td style="white-space:nowrap;">
                 <a href="?dept_id=<?= $activeDeptId ?>&edit_sub=<?= (int)$s['id'] ?>" class="btn-primary" style="padding:0.3rem 0.6rem;font-size:0.8rem;">Edit &amp; Media</a>
                 <form method="post" style="display:inline;" onsubmit="return confirm('Delete micro-page?');">

@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Award, Briefcase, Calendar, ChevronLeft, ChevronRight, Download, ExternalLink, FlaskConical, Globe2, Mail, MapPin, Phone, Search, Volume2 } from 'lucide-react';
 import { formatCommitteeGroupLabel, sortByOrder } from '../lib/cmsLogic';
-import { filterResearchPatents, filterResearchProjects } from '../lib/collegeFeaturesLogic';
+import {
+  filterResearchPatents,
+  filterResearchProjects,
+  isEntityShareable,
+  isRecordPublished,
+} from '../lib/collegeFeaturesLogic';
 import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
 import { CmsHtmlContent } from './CmsHtmlContent';
 import { SocialShareBar } from './SocialMediaWidgets';
@@ -60,12 +65,22 @@ export function PageViewer({
     return () => window.clearInterval(timer);
   }, [researchSliderSlides.length]);
 
+  const publishedPages = useMemo(
+    () => pages.filter((p) => p.isPublished !== false && isRecordPublished(p)),
+    [pages],
+  );
   const publishedProjects = useMemo(
-    () => (researchPortfolio?.projects || []).filter((p) => p.isPublished !== false),
+    () =>
+      (researchPortfolio?.projects || []).filter(
+        (p) => p.isPublished !== false && isRecordPublished(p, 'moderationStatus'),
+      ),
     [researchPortfolio],
   );
   const publishedPatents = useMemo(
-    () => (researchPortfolio?.patents || []).filter((p) => p.isPublished !== false),
+    () =>
+      (researchPortfolio?.patents || []).filter(
+        (p) => p.isPublished !== false && isRecordPublished(p, 'moderationStatus'),
+      ),
     [researchPortfolio],
   );
   const projectAgencies = useMemo(
@@ -100,14 +115,14 @@ export function PageViewer({
 
   const resolvedCategory = categorySlug ? categories.find((c) => c.slug === categorySlug) : undefined;
   const categoryPages = resolvedCategory
-    ? pages.filter((p) => p.categorySlug === resolvedCategory.slug).sort((a, b) => a.sortOrder - b.sortOrder)
+    ? publishedPages.filter((p) => p.categorySlug === resolvedCategory.slug).sort((a, b) => a.sortOrder - b.sortOrder)
     : [];
 
   const page = slug
-    ? pages.find((p) => p.slug === slug)
+    ? publishedPages.find((p) => p.slug === slug)
     : resolvedCategory
       ? categoryPages[0]
-      : pages[0];
+      : publishedPages[0];
 
   if (!page && resolvedCategory) {
     return (
@@ -153,7 +168,7 @@ export function PageViewer({
   }
 
   const category = categories.find((c) => c.slug === page.categorySlug);
-  const siblingPages = pages
+  const siblingPages = publishedPages
     .filter((p) => p.categorySlug === page.categorySlug)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -327,9 +342,9 @@ export function PageViewer({
                 </button>
               </div>
 
-              {conferences.filter((c) => c.isPublished).length > 0 && (
+              {conferences.filter((c) => c.isPublished && isRecordPublished(c)).length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {sortByOrder(conferences.filter((c) => c.isPublished)).map((conf) => (
+                  {sortByOrder(conferences.filter((c) => c.isPublished && isRecordPublished(c))).map((conf) => (
                     <div
                       key={conf.id}
                       className="rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40 overflow-hidden flex flex-col justify-between"
@@ -497,6 +512,15 @@ export function PageViewer({
                                   {proj.summary && (
                                     <p className="text-[11px] text-stone-600 dark:text-slate-300 mt-1">{proj.summary}</p>
                                   )}
+                                  <SocialShareBar
+                                    compact
+                                    isShareable={isEntityShareable(proj)}
+                                    title={proj.title}
+                                    summary={`${proj.fundingAgency} · ${proj.grantAmountLakhs} · PI: ${proj.principalInvestigator}`}
+                                    settings={settings}
+                                    location="research"
+                                    className="!mt-2 !pt-2"
+                                  />
                                 </td>
                                 <td>{proj.fundingAgency}</td>
                                 <td>
@@ -644,6 +668,14 @@ export function PageViewer({
                                 </a>
                               )}
                             </div>
+                            <SocialShareBar
+                              compact
+                              isShareable={isEntityShareable(item)}
+                              title={item.title}
+                              summary={`${item.itemType} · ${item.inventorsOrLead} (${item.referenceNumber})`}
+                              settings={settings}
+                              location="research"
+                            />
                           </article>
                         ))}
                       </div>
@@ -695,7 +727,9 @@ export function PageViewer({
 
           {/* Leadership & Committee Profiles with Photographs & Contact Particulars */}
           {(() => {
-            const matchedLeadership = sortByOrder(leadership).filter((officer) => {
+            const matchedLeadership = sortByOrder(
+              leadership.filter((officer) => isRecordPublished(officer)),
+            ).filter((officer) => {
               if (page.slug === 'statutory-officers') return true;
               const label = formatCommitteeGroupLabel(officer.committeeGroup).toLowerCase();
               const slugWords = page.slug.toLowerCase();
@@ -777,7 +811,7 @@ export function PageViewer({
               <h2 className="font-display text-xl font-bold text-stone-900 dark:text-white mb-2">
                 Active Institutional Circulars, Notices &amp; Events
               </h2>
-              {events.map((ev) => (
+              {events.filter((ev) => isRecordPublished(ev)).map((ev) => (
                 <div
                   key={ev.id}
                   className="p-4 rounded-lg border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-800/40"
@@ -793,19 +827,26 @@ export function PageViewer({
                     {ev.title}
                   </h3>
                   <p className="text-sm text-stone-600 dark:text-slate-300">{ev.summary}</p>
+                  <SocialShareBar
+                    compact
+                    isShareable={isEntityShareable(ev)}
+                    title={ev.title}
+                    summary={ev.summary}
+                    settings={settings}
+                    location="portal"
+                  />
                 </div>
               ))}
             </div>
           )}
 
-          {page.showShareBar !== false && (
-            <SocialShareBar
-              title={page.title}
-              summary={page.subtitle}
-              settings={settings}
-              location={page.categorySlug === 'research' ? 'research' : 'page'}
-            />
-          )}
+          <SocialShareBar
+            title={page.title}
+            summary={page.subtitle}
+            settings={settings}
+            location={page.categorySlug === 'research' ? 'research' : 'page'}
+            isShareable={isEntityShareable(page)}
+          />
         </article>
       </div>
     </div>

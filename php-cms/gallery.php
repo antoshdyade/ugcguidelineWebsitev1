@@ -3,8 +3,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 
-$albums = $pdo->query('SELECT * FROM gallery_albums ORDER BY sort_order ASC, event_date DESC, id DESC')->fetchAll();
+$albums = $pdo->query("SELECT * FROM gallery_albums WHERE status = 'published' ORDER BY sort_order ASC, event_date DESC, id DESC")->fetchAll();
 $photosByAlbum = [];
 foreach ($pdo->query('SELECT * FROM gallery_photos')->fetchAll() as $ph) {
     $photosByAlbum[$ph['album_id']][] = $ph;

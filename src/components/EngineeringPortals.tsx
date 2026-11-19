@@ -28,6 +28,8 @@ import {
   filterPlacementNotices,
   GRIEVANCE_CATEGORY_PRESETS,
   GRIEVANCE_ROLE_PRESETS,
+  isEntityShareable,
+  isRecordPublished,
 } from '../lib/collegeFeaturesLogic';
 import { sortByOrder } from '../lib/cmsLogic';
 import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
@@ -42,9 +44,13 @@ interface PlacementsPortalProps {
 }
 
 export function PlacementsPortal({ placements, settings }: PlacementsPortalProps) {
-  const years = useMemo(
-    () => Array.from(new Set(placements.stats.map((s) => s.academicYear))),
+  const publishedStats = useMemo(
+    () => (placements.stats || []).filter((s) => isRecordPublished(s)),
     [placements.stats],
+  );
+  const years = useMemo(
+    () => Array.from(new Set(publishedStats.map((s) => s.academicYear))),
+    [publishedStats],
   );
   const [selectedYear, setSelectedYear] = useState<string>(years[0] || 'All');
 
@@ -57,9 +63,9 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
   const [congratsQuery, setCongratsQuery] = useState<string>('');
 
   const visibleStats = useMemo(() => {
-    const ordered = sortByOrder(placements.stats);
+    const ordered = sortByOrder(publishedStats);
     return selectedYear === 'All' ? ordered : ordered.filter((s) => s.academicYear === selectedYear);
-  }, [placements.stats, selectedYear]);
+  }, [publishedStats, selectedYear]);
 
   const metrics = useMemo(() => computePlacementMetrics(visibleStats), [visibleStats]);
   const upcomingDrives = useMemo(
@@ -67,7 +73,10 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
     [placements.upcomingDrives],
   );
 
-  const allNotices = useMemo(() => placements.notices || [], [placements.notices]);
+  const allNotices = useMemo(
+    () => (placements.notices || []).filter((n) => isRecordPublished(n)),
+    [placements.notices],
+  );
   const noticeCategories = useMemo(
     () => ['All', ...Array.from(new Set(allNotices.map((n) => n.category).filter(Boolean)))],
     [allNotices],
@@ -77,7 +86,10 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
     [allNotices, noticeCat, noticeQuery],
   );
 
-  const allStories = useMemo(() => placements.stories || [], [placements.stories]);
+  const allStories = useMemo(
+    () => (placements.stories || []).filter((s) => isRecordPublished(s)),
+    [placements.stories],
+  );
   const congratsTypes = useMemo(
     () => [
       'All',
@@ -92,7 +104,9 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
 
   const customSections = useMemo(
     () =>
-      sortByOrder((placements.customSections || []).filter((sec) => sec.isPublished !== false)) as PlacementCustomSection[],
+      sortByOrder(
+        (placements.customSections || []).filter((sec) => sec.isPublished !== false && isRecordPublished(sec)),
+      ) as PlacementCustomSection[],
     [placements.customSections],
   );
 
@@ -290,20 +304,29 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
                     </p>
                   )}
                 </div>
-                {notice.attachmentUrl && (
-                  <div className="shrink-0">
-                    <a
-                      href={notice.attachmentUrl}
-                      target={notice.attachmentUrl.startsWith('http') ? '_blank' : undefined}
-                      rel={notice.attachmentUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold border border-stone-300 dark:border-slate-700 hover:bg-stone-100 dark:hover:bg-slate-800 text-stone-900 dark:text-white"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-amber-600" />
-                      <span>{notice.linkLabel || 'Open Circular'}</span>
-                    </a>
+                  <div className="shrink-0 flex flex-col items-start md:items-end gap-2">
+                    {notice.attachmentUrl && (
+                      <a
+                        href={notice.attachmentUrl}
+                        target={notice.attachmentUrl.startsWith('http') ? '_blank' : undefined}
+                        rel={notice.attachmentUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold border border-stone-300 dark:border-slate-700 hover:bg-stone-100 dark:hover:bg-slate-800 text-stone-900 dark:text-white"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-amber-600" />
+                        <span>{notice.linkLabel || 'Open Circular'}</span>
+                      </a>
+                    )}
+                    <SocialShareBar
+                      compact
+                      isShareable={isEntityShareable(notice)}
+                      title={notice.title}
+                      summary={notice.summary}
+                      settings={settings}
+                      location="portal"
+                      className="!mt-0 !pt-2"
+                    />
                   </div>
-                )}
-              </article>
+                </article>
             ))}
           </div>
         )}
@@ -412,6 +435,14 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
                     </blockquote>
                   )}
                 </div>
+                <SocialShareBar
+                  compact
+                  isShareable={isEntityShareable(st)}
+                  title={`${st.studentName} — ${st.company}`}
+                  summary={st.headline || st.quote}
+                  settings={settings}
+                  location="portal"
+                />
               </article>
             ))}
           </div>

@@ -1034,13 +1034,13 @@ function buildPhpSitemapXml(PDO $pdo, string $baseUrl): string
     ];
 
     try {
-        foreach ($pdo->query('SELECT slug FROM pages WHERE is_published = 1 ORDER BY id ASC')->fetchAll() as $p) {
+        foreach ($pdo->query("SELECT slug FROM pages WHERE is_published = 1 AND status = 'published' ORDER BY id ASC")->fetchAll() as $p) {
             $urls[] = ['loc' => $base . '/page.php?slug=' . rawurlencode((string)$p['slug']), 'priority' => '0.8', 'changefreq' => 'weekly'];
         }
-        foreach ($pdo->query('SELECT slug FROM departments ORDER BY sort_order ASC')->fetchAll() as $d) {
+        foreach ($pdo->query("SELECT slug FROM departments WHERE status = 'published' ORDER BY sort_order ASC")->fetchAll() as $d) {
             $urls[] = ['loc' => $base . '/department.php?dept=' . rawurlencode((string)$d['slug']), 'priority' => '0.9', 'changefreq' => 'weekly'];
         }
-        foreach ($pdo->query('SELECT slug FROM conferences WHERE is_published = 1 ORDER BY sort_order ASC')->fetchAll() as $c) {
+        foreach ($pdo->query("SELECT slug FROM conferences WHERE is_published = 1 AND status = 'published' ORDER BY sort_order ASC")->fetchAll() as $c) {
             $urls[] = ['loc' => $base . '/conference.php?slug=' . rawurlencode((string)$c['slug']), 'priority' => '0.85', 'changefreq' => 'weekly'];
         }
     } catch (Throwable $ignored) {

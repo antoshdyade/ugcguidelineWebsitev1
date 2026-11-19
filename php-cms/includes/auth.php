@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/analytics_security.php';
 require_once __DIR__ . '/mail_helper.php';
+require_once __DIR__ . '/moderation_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     $svcoerDirWritable = static function (string $dir): bool {
@@ -1046,11 +1047,11 @@ function resolvePageBySlugWithAliases(PDO $pdo, string $rawSlug): ?array
     }
 
     $stmt = $pdo->prepare(
-        'SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code
+        "SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code
          FROM pages p
          JOIN categories c ON p.category_id = c.id
-         WHERE p.slug = ? AND p.is_published = 1
-         LIMIT 1'
+         WHERE p.slug = ? AND p.is_published = 1 AND p.status = 'published'
+         LIMIT 1"
     );
     foreach (array_values(array_unique($candidates)) as $cand) {
         $stmt->execute([$cand]);
@@ -1247,7 +1248,7 @@ function renderPhpSocialIcons(PDO $pdo, string $variant = 'header'): string
     return $out;
 }
 
-function renderPhpSocialShareBar(PDO $pdo, string $title, string $summary = '', string $url = '', string $location = 'page', bool $pageEnabled = true): string
+function renderPhpSocialShareBar(PDO $pdo, string $title, string $summary = '', string $url = '', string $location = 'page', bool $pageEnabled = true, bool $compact = false): string
 {
     if (!$pageEnabled) {
         return '';
@@ -1287,45 +1288,57 @@ function renderPhpSocialShareBar(PDO $pdo, string $title, string $summary = '', 
     $via = trim(ltrim((string)($cfg['twitterHandle'] ?? ''), '@'));
     $hashtags = trim((string)($cfg['defaultHashtags'] ?? ''));
 
+    $mailSvg  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>';
+    $copySvg  = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+    $shareSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+
+    $btnCls = 'share-icon-btn' . ($compact ? ' is-compact' : '');
     $buttons = '';
     if (!empty($p['whatsapp'])) {
-        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://api.whatsapp.com/send?text=' . $encText . '%20' . $encUrl . '">WhatsApp</a>';
+        $buttons .= '<a class="' . $btnCls . ' share-wa" title="Share on WhatsApp" aria-label="Share on WhatsApp" target="_blank" rel="noopener noreferrer" href="https://api.whatsapp.com/send?text=' . $encText . '%20' . $encUrl . '">' . socialPlatformSvg('whatsapp') . '</a>';
     }
     if (!empty($p['linkedin'])) {
-        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://www.linkedin.com/sharing/share-offsite/?url=' . $encUrl . '">LinkedIn</a>';
+        $buttons .= '<a class="' . $btnCls . ' share-li" title="Share on LinkedIn" aria-label="Share on LinkedIn" target="_blank" rel="noopener noreferrer" href="https://www.linkedin.com/sharing/share-offsite/?url=' . $encUrl . '">' . socialPlatformSvg('linkedin') . '</a>';
     }
     if (!empty($p['twitter'])) {
         $tw = 'https://twitter.com/intent/tweet?text=' . $encTitle . '&url=' . $encUrl
             . ($via !== '' ? '&via=' . rawurlencode($via) : '')
             . ($hashtags !== '' ? '&hashtags=' . rawurlencode($hashtags) : '');
-        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="' . e($tw) . '">X / Twitter</a>';
+        $buttons .= '<a class="' . $btnCls . ' share-tw" title="Share on X (Twitter)" aria-label="Share on X (Twitter)" target="_blank" rel="noopener noreferrer" href="' . e($tw) . '">' . socialPlatformSvg('twitter') . '</a>';
     }
     if (!empty($p['facebook'])) {
-        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://www.facebook.com/sharer/sharer.php?u=' . $encUrl . '">Facebook</a>';
+        $buttons .= '<a class="' . $btnCls . ' share-fb" title="Share on Facebook" aria-label="Share on Facebook" target="_blank" rel="noopener noreferrer" href="https://www.facebook.com/sharer/sharer.php?u=' . $encUrl . '">' . socialPlatformSvg('facebook') . '</a>';
     }
     if (!empty($p['telegram'])) {
-        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=' . $encUrl . '&text=' . $encTitle . '">Telegram</a>';
+        $buttons .= '<a class="' . $btnCls . ' share-tg" title="Share on Telegram" aria-label="Share on Telegram" target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=' . $encUrl . '&text=' . $encTitle . '">' . socialPlatformSvg('telegram') . '</a>';
     }
     if (!empty($p['email'])) {
         $mailBody = rawurlencode(($summary !== '' ? $summary . "\n\n" : '') . $shareUrl);
-        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" href="mailto:?subject=' . $encTitle . '&body=' . $mailBody . '">Email</a>';
+        $buttons .= '<a class="' . $btnCls . ' share-em" title="Share via Email" aria-label="Share via Email" href="mailto:?subject=' . $encTitle . '&body=' . $mailBody . '">' . $mailSvg . '</a>';
     }
     if (!empty($p['copyLink'])) {
-        $buttons .= '<button type="button" class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" onclick="svcoerCopyShareUrl(' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . ', this)">Copy Link</button>';
+        $buttons .= '<button type="button" class="' . $btnCls . ' share-cp" title="Copy link to clipboard" aria-label="Copy link to clipboard" onclick="svcoerCopyShareUrl(' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . ', this)">' . $copySvg . '</button>';
     }
     if (!empty($p['nativeShare'])) {
-        $buttons .= '<button type="button" class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" onclick="if(navigator.share){navigator.share({title:' . htmlspecialchars(json_encode($title), ENT_QUOTES, 'UTF-8') . ',text:' . htmlspecialchars(json_encode($summary ?: $title), ENT_QUOTES, 'UTF-8') . ',url:' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . '}).catch(function(){});}else{svcoerCopyShareUrl(' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . ', this);}">Share…</button>';
+        $buttons .= '<button type="button" class="' . $btnCls . ' share-nat" title="Share" aria-label="Share" onclick="if(navigator.share){navigator.share({title:' . htmlspecialchars(json_encode($title), ENT_QUOTES, 'UTF-8') . ',text:' . htmlspecialchars(json_encode($summary ?: $title), ENT_QUOTES, 'UTF-8') . ',url:' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . '}).catch(function(){});}else{svcoerCopyShareUrl(' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . ', this);}">' . $shareSvg . '</button>';
     }
 
     if ($buttons === '') {
         return '';
     }
 
-    $script = '<script>if(typeof window.svcoerCopyShareUrl!=="function"){window.svcoerCopyShareUrl=function(u,btn){var done=function(){if(btn){var prev=btn.textContent;btn.textContent="Copied!";setTimeout(function(){btn.textContent=prev;},1800);}};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(done).catch(function(){});}else{var ta=document.createElement("textarea");ta.value=u;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");done();}catch(e){}document.body.removeChild(ta);}};}</script>';
+    $script = '<script>if(typeof window.svcoerCopyShareUrl!=="function"){window.svcoerCopyShareUrl=function(u,btn){var showToast=function(){var t=document.getElementById("svcoer-share-toast");if(!t){t=document.createElement("div");t.id="svcoer-share-toast";t.className="share-toast";t.setAttribute("role","status");t.setAttribute("aria-live","polite");document.body.appendChild(t);}t.textContent="Link copied to clipboard";t.classList.add("is-visible");clearTimeout(window._svcoerToastTimer);window._svcoerToastTimer=setTimeout(function(){t.classList.remove("is-visible");},2300);if(btn){btn.classList.add("is-copied");setTimeout(function(){btn.classList.remove("is-copied");},1800);}};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(showToast).catch(function(){});}else{var ta=document.createElement("textarea");ta.value=u;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");showToast();}catch(e){}document.body.removeChild(ta);}};}</script>';
 
-    return '<div class="card" style="margin-top:1.25rem;background:var(--surface-bg);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.75rem;">'
-        . '<strong style="font-size:0.88rem;color:var(--primary-color);">' . e($heading) . '</strong>'
-        . '<div style="display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;">' . $buttons . '</div>'
+    if ($compact) {
+        return '<div class="share-icon-bar is-compact" role="group" aria-label="Share ' . e($title) . '">'
+            . '<span class="share-icon-label">Share</span>'
+            . '<div class="share-icon-group">' . $buttons . '</div>'
+            . '</div>' . $script;
+    }
+
+    return '<div class="card share-icon-bar" role="group" aria-label="Share ' . e($title) . '">'
+        . '<strong class="share-icon-heading">' . e($heading) . '</strong>'
+        . '<div class="share-icon-group">' . $buttons . '</div>'
         . '</div>' . $script;
 }
 
@@ -1388,12 +1401,12 @@ function getResearchPortfolioData(PDO $pdo, bool $onlyPublished = true): array
     $projects = [];
     $patents = [];
     try {
-        $pSql = 'SELECT * FROM research_projects' . ($onlyPublished ? ' WHERE is_published = 1' : '') . ' ORDER BY sort_order ASC, id ASC';
+        $pSql = 'SELECT * FROM research_projects' . ($onlyPublished ? " WHERE is_published = 1 AND moderation_status = 'published'" : '') . ' ORDER BY sort_order ASC, id ASC';
         $projects = $pdo->query($pSql)->fetchAll() ?: [];
     } catch (Throwable $ignored) {
     }
     try {
-        $iSql = 'SELECT * FROM research_patents' . ($onlyPublished ? ' WHERE is_published = 1' : '') . ' ORDER BY sort_order ASC, id ASC';
+        $iSql = 'SELECT * FROM research_patents' . ($onlyPublished ? " WHERE is_published = 1 AND moderation_status = 'published'" : '') . ' ORDER BY sort_order ASC, id ASC';
         $patents = $pdo->query($iSql)->fetchAll() ?: [];
     } catch (Throwable $ignored) {
     }
@@ -2641,6 +2654,82 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 }
             }
         } catch (Throwable $ignoredPm) {
+        }
+
+        // Schema v10: Super Admin Content Approval Workflow + 3-Level Social Share Control
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS content_pending_revisions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                entity_table VARCHAR(64) NOT NULL,
+                entity_id INT NULL,
+                action_type ENUM('create','update','delete') NOT NULL,
+                entity_title VARCHAR(260) NOT NULL,
+                current_snapshot_json LONGTEXT NULL,
+                proposed_payload_json LONGTEXT NULL,
+                submitted_by_user_id INT NULL,
+                submitted_by_name VARCHAR(160) NOT NULL DEFAULT '',
+                submitted_by_email VARCHAR(160) NOT NULL DEFAULT '',
+                submitted_by_role VARCHAR(64) NOT NULL DEFAULT 'content_editor',
+                status ENUM('pending_approval','approved','rejected') NOT NULL DEFAULT 'pending_approval',
+                reviewer_email VARCHAR(160) NULL,
+                reviewer_note TEXT NULL,
+                submitted_at VARCHAR(40) NOT NULL,
+                reviewed_at VARCHAR(40) NULL,
+                INDEX idx_cpr_status (status),
+                INDEX idx_cpr_table (entity_table)
+            ) ENGINE=InnoDB"
+        );
+
+        foreach ([
+            "ALTER TABLE pages ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1 AFTER show_share_bar",
+            "ALTER TABLE pages ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published' AFTER is_published",
+            "ALTER TABLE departments ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE departments ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE department_subpages ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE department_subpages ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE conferences ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE conferences ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE sliders ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE ticker_items ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE campus_events ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE campus_events ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE documents ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE gallery_albums ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE leadership_profiles ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE telephone_directory ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE custom_home_components ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE placement_stats ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE placement_stories ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE placement_stories ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE placement_notices ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE placement_notices ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE placement_custom_sections ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE research_projects ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE research_projects ADD COLUMN moderation_status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE research_patents ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE research_patents ADD COLUMN moderation_status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE sports_facilities ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE sports_events ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE sports_events ADD COLUMN moderation_status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE sports_achievements ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE sports_gallery ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE sports_notices ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE facilities ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE facilities ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+        ] as $v10Alter) {
+            try {
+                $pdo->exec($v10Alter);
+            } catch (Throwable $ignoredV10) {
+            }
+        }
+
+        try {
+            $syncChk = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'shareable_synced_v1' LIMIT 1")->fetchColumn();
+            if (!$syncChk) {
+                $pdo->exec("UPDATE pages SET is_shareable = COALESCE(show_share_bar, 1)");
+                $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('shareable_synced_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")->execute();
+            }
+        } catch (Throwable $ignoredShareSync) {
         }
 
         // Analytics, SEO, Hit Counter & Security WAF tables + firewall execution

@@ -22,7 +22,9 @@ import type { Conference, ConferenceSlide, SiteSettings } from '../types/cms';
 import {
   CONFERENCE_MODE_PRESETS,
   CONFERENCE_PRESENTATION_TYPE_PRESETS,
+  isEntityShareable,
   isExternalPaperSubmissionActive,
+  isRecordPublished,
 } from '../lib/collegeFeaturesLogic';
 import { formatBytes, sortByOrder } from '../lib/cmsLogic';
 import { getUploadSizeLimitBytes, getUploadSizeLimitMb } from '../lib/imageCrop';
@@ -39,7 +41,7 @@ interface ConferencePortalProps {
 }
 
 export function ConferencePortal({ slug, conferences, settings, onNavigate }: ConferencePortalProps) {
-  const ordered = sortByOrder(conferences.filter((c) => c.isPublished));
+  const ordered = sortByOrder(conferences.filter((c) => c.isPublished && isRecordPublished(c)));
   const selectedConf = slug ? ordered.find((c) => c.slug === slug) : undefined;
 
   const [scopeFilter, setScopeFilter] = useState<string>('All');
@@ -434,18 +436,33 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
                     </p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => onNavigate(`/conference/${conf.slug}`)}
-                    className="px-4 py-2 rounded-lg text-xs font-bold text-white"
-                    style={{ backgroundColor: 'var(--primary-color)' }}
-                  >
-                    Open Dedicated Conference Website &rarr;
-                  </button>
-                  <span className="text-[11px] text-stone-500 dark:text-slate-400 ml-auto">
-                    {conf.tracks.length} Tracks · {conf.people.length} Speakers/Chairs
-                  </span>
+                <div className="space-y-3 pt-2 border-t border-stone-100 dark:border-slate-800">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(`/conference/${conf.slug}`)}
+                      className="px-4 py-2 rounded-lg text-xs font-bold text-white"
+                      style={{ backgroundColor: 'var(--primary-color)' }}
+                    >
+                      Open Dedicated Conference Website &rarr;
+                    </button>
+                    <span className="text-[11px] text-stone-500 dark:text-slate-400 ml-auto">
+                      {conf.tracks.length} Tracks · {conf.people.length} Speakers/Chairs
+                    </span>
+                  </div>
+                  <SocialShareBar
+                    compact
+                    isShareable={isEntityShareable(conf)}
+                    title={`${conf.shortName}: ${conf.title}`}
+                    summary={`${conf.scope} · ${conf.startDate} · ${conf.venue}`}
+                    url={
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/conference/${conf.slug}`
+                        : undefined
+                    }
+                    settings={settings}
+                    location="conference"
+                  />
                 </div>
               </div>
             </article>
@@ -1444,6 +1461,7 @@ export function ConferencePortal({ slug, conferences, settings, onNavigate }: Co
         summary={`${selectedConf.scope} · ${selectedConf.startDate} · ${selectedConf.venue}`}
         settings={settings}
         location="conference"
+        isShareable={isEntityShareable(selectedConf)}
       />
     </div>
   );

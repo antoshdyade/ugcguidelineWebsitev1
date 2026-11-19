@@ -18,6 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $category = trim($_POST['category'] ?? 'Circulars & Forms');
         $isQuick = isset($_POST['is_quick_link']) ? 1 : 0;
 
+        $isSuper = cmsIsSuperAdmin($user);
+        $insStatus = $isSuper ? 'published' : 'pending_approval';
         if ($title === '') {
             $err = 'Document title is required.';
         } elseif ($sourceType === 'external') {
@@ -25,15 +27,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!validateExternalUrl($extUrl)) {
                 $err = 'Please provide a valid external link starting with https:// or http:// (e.g. Google Drive share URL).';
             } else {
-                $stmt = $pdo->prepare('INSERT INTO documents (title, category, source_type, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by, is_quick_link) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?)');
-                $stmt->execute([$title, $category, 'external', $extUrl, 'External Download Link', 0, 'text/html', $user['full_name'], $isQuick]);
-                logAudit($pdo, $user, 'ADD_EXTERNAL_DOCUMENT', 'Document', $title);
-                $msg = 'External download link published: ' . $extUrl;
+                $stmt = $pdo->prepare('INSERT INTO documents (title, category, source_type, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by, is_quick_link, status) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?)');
+                $stmt->execute([$title, $category, 'external', $extUrl, 'External Download Link', 0, 'text/html', $user['full_name'], $isQuick, $insStatus]);
+                $docId = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'ADD_EXTERNAL_DOCUMENT', 'Document', $title);
+                    $msg = 'External download link published: ' . $extUrl;
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'documents', $docId, $title, [
+                        'title' => $title,
+                        'category' => $category,
+                        'source_type' => 'external',
+                        'file_url' => $extUrl,
+                        'file_name' => 'External Download Link',
+                        'file_size_bytes' => 0,
+                        'mime_type' => 'text/html',
+                        'uploaded_by' => $user['full_name'],
+                        'is_quick_link' => $isQuick,
+                        'status' => 'pending_approval',
+                    ]);
+                    $msg = 'External document "' . $title . '" submitted for Super Admin approval before going live.';
+                }
             }
         } elseif (!empty($_FILES['doc_file']['name'])) {
             $res = handleCmsUpload($pdo, $_FILES['doc_file'], __DIR__ . '/../uploads', 'document');
             if ($res['ok']) {
-                $stmt = $pdo->prepare('INSERT INTO documents (title, category, source_type, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by, is_quick_link) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?)');
+                $stmt = $pdo->prepare('INSERT INTO documents (title, category, source_type, file_url, file_name, file_size_bytes, mime_type, uploaded_at, uploaded_by, is_quick_link, status) VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?, ?)');
                 $stmt->execute([
                     $title,
                     $category,
@@ -44,9 +63,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $res['mime_type'],
                     $user['full_name'],
                     $isQuick,
+                    $insStatus,
                 ]);
-                logAudit($pdo, $user, 'UPLOAD_DOCUMENT', 'Document', $title);
-                $msg = 'Document uploaded securely: ' . $res['file_url'];
+                $docId = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'UPLOAD_DOCUMENT', 'Document', $title);
+                    $msg = 'Document uploaded and published securely: ' . $res['file_url'];
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'documents', $docId, $title, [
+                        'title' => $title,
+                        'category' => $category,
+                        'source_type' => 'upload',
+                        'file_url' => $res['file_url'],
+                        'file_name' => $res['file_name'],
+                        'file_size_bytes' => $res['size'],
+                        'mime_type' => $res['mime_type'],
+                        'uploaded_by' => $user['full_name'],
+                        'is_quick_link' => $isQuick,
+                        'status' => 'pending_approval',
+                    ]);
+                    $msg = 'Uploaded document "' . $title . '" submitted for Super Admin approval before going live.';
+                }
             } else {
                 $err = $res['error'];
             }
@@ -58,10 +95,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (swapSortOrder($pdo, 'documents', (int)$_POST['doc_id'], $dir, null, null, 'uploaded_at DESC, id DESC')) {
             $msg = 'Document order updated.';
         }
-    } elseif ($action === 'delete') {
-        $pdo->prepare('DELETE FROM documents WHERE id = ?')->execute([(int)$_POST['doc_id']]);
-        logAudit($pdo, $user, 'DELETE_DOCUMENT', 'Document', 'ID #' . (int)$_POST['doc_id']);
-        $msg = 'Document removed.';
+    } elseif ($action === 'delete' && !empty($_POST['doc_id'])) {
+        $docId = (int)$_POST['doc_id'];
+        $currStmt = $pdo->prepare('SELECT * FROM documents WHERE id = ? LIMIT 1');
+        $currStmt->execute([$docId]);
+        $curr = $currStmt->fetch();
+        if (!$curr) {
+            $err = 'Document record not found.';
+        } elseif (cmsIsSuperAdmin($user)) {
+            $pdo->prepare('DELETE FROM documents WHERE id = ?')->execute([$docId]);
+            logAudit($pdo, $user, 'DELETE_DOCUMENT', 'Document', (string)($curr['title'] ?? 'ID #' . $docId));
+            $msg = 'Document removed.';
+        } else {
+            cmsQueuePendingDelete($pdo, $user, 'documents', $docId, (string)($curr['title'] ?? 'Document #' . $docId), $curr);
+            $msg = 'Delete request for document "' . ($curr['title'] ?? '#' . $docId) . '" submitted for Super Admin approval.';
+        }
     }
 }
 
@@ -117,7 +165,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
               <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move"><input type="hidden" name="doc_id" value="<?= (int)$d['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
               <span style="margin-left:4px;font-size:0.8rem;">#<?= (int)($d['sort_order'] ?? 1) ?></span>
             </td>
-            <td><strong><?= e($d['title']) ?></strong></td>
+            <td>
+              <strong><?= e($d['title']) ?></strong>
+              <div style="margin-top:3px;"><?= cmsModerationStatusBadge((string)($d['status'] ?? 'published')) ?></div>
+            </td>
             <td><?= e($d['category']) ?></td>
             <td><?= $isExt ? 'External URL' : e(formatBytes((int)$d['file_size_bytes'])) ?></td>
             <td style="max-width:260px;overflow-wrap:anywhere;"><code><?= e($d['file_url']) ?></code></td>

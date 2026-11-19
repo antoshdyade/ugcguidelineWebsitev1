@@ -45,21 +45,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$slug, $name, $shortLabel, $ugcCode, $desc, $showInMenu, $menuLocation, $showOnHome, $sortOrder]);
             $newCatId = (int)$pdo->lastInsertId();
 
+            $starterQueued = false;
             if (!empty($_POST['create_default_page'])) {
+                $isSuper = cmsIsSuperAdmin($user);
+                $pgSlug = $slug . '-overview';
+                $pgTitle = $name . ' Overview';
+                $pgSub = $ugcCode ?: 'Institutional Section';
+                $pgHtml = '<h2>' . e($name) . '</h2><p>' . e($desc ?: 'Overview and statutory disclosures for ' . $name . '.') . '</p>';
+                $pgPub = $isSuper ? 1 : 0;
+                $pgStatus = $isSuper ? 'published' : 'pending_approval';
                 $pgStmt = $pdo->prepare(
-                    'INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_published, sort_order, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?, CURDATE())'
+                    'INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_published, is_shareable, show_share_bar, sort_order, updated_by, updated_at, status) VALUES (?, ?, ?, ?, ?, ?, 1, 1, 1, ?, CURDATE(), ?)'
                 );
                 $pgStmt->execute([
                     $newCatId,
-                    $slug . '-overview',
-                    $name . ' Overview',
-                    $ugcCode ?: 'Institutional Section',
-                    '<h2>' . e($name) . '</h2><p>' . e($desc ?: 'Overview and statutory disclosures for ' . $name . '.') . '</p>',
+                    $pgSlug,
+                    $pgTitle,
+                    $pgSub,
+                    $pgHtml,
+                    $pgPub,
                     $user['full_name'],
+                    $pgStatus,
                 ]);
+                if (!$isSuper) {
+                    $newPageId = (int)$pdo->lastInsertId();
+                    cmsQueuePendingCreate($pdo, $user, 'pages', $newPageId, $pgTitle, [
+                        'category_id' => $newCatId,
+                        'slug' => $pgSlug,
+                        'title' => $pgTitle,
+                        'subtitle' => $pgSub,
+                        'content_html' => $pgHtml,
+                        'is_published' => 1,
+                        'is_shareable' => 1,
+                        'show_share_bar' => 1,
+                        'sort_order' => 1,
+                        'status' => 'pending_approval',
+                    ]);
+                    $starterQueued = true;
+                }
             }
             logAudit($pdo, $user, 'CREATE_CATEGORY', 'Category', $name . ' [' . $menuLocation . ']');
-            $msg = 'Category created and routed to ' . ($menuLocation === 'main' ? 'Main Header Bar' : ($menuLocation === 'more' ? 'More Portals' : 'Hidden')) . '.';
+            $msg = 'Category created and routed to ' . ($menuLocation === 'main' ? 'Main Header Bar' : ($menuLocation === 'more' ? 'More Portals' : 'Hidden')) . '.'
+                . ($starterQueued ? ' Its starter Overview page has been submitted for Super Admin approval.' : '');
         }
     } elseif ($action === 'move' && !empty($_POST['category_id'])) {
         $cid = (int)$_POST['category_id'];

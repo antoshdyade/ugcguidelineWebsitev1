@@ -19,6 +19,7 @@ $placements = [
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
+    $isSuper = cmsIsSuperAdmin($user);
     try {
         if ($action === 'create' || $action === 'update') {
             $title = trim($_POST['title'] ?? '');
@@ -33,21 +34,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($title === '' || trim(strip_tags($html, '<img><iframe><table><hr>')) === '') {
                 $err = 'Component title and HTML content are required.';
             } elseif ($action === 'update' && !empty($_POST['component_id'])) {
-                $stmt = $pdo->prepare('UPDATE custom_home_components SET title = ?, placement = ?, html_content = ?, sort_order = ?, is_active = ? WHERE id = ?');
-                $stmt->execute([$title, $placement, $html, $sortOrder, $isActive, (int)$_POST['component_id']]);
-                logAudit($pdo, $user, 'UPDATE_HOME_COMPONENT', 'HomeComponent', $title);
-                $msg = 'Homepage HTML component updated.';
+                $cid = (int)$_POST['component_id'];
+                if ($isSuper) {
+                    $stmt = $pdo->prepare("UPDATE custom_home_components SET title = ?, placement = ?, html_content = ?, sort_order = ?, is_active = ?, status = 'published' WHERE id = ?");
+                    $stmt->execute([$title, $placement, $html, $sortOrder, $isActive, $cid]);
+                    logAudit($pdo, $user, 'UPDATE_HOME_COMPONENT', 'HomeComponent', $title);
+                    $msg = 'Homepage HTML component updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM custom_home_components WHERE id = ? LIMIT 1');
+                    $stCur->execute([$cid]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'custom_home_components', $cid, $title, $cur, [
+                        'title' => $title, 'placement' => $placement, 'html_content' => $html,
+                        'sort_order' => $sortOrder, 'is_active' => $isActive,
+                    ]);
+                    $msg = 'Homepage HTML component edits submitted for Super Admin approval.';
+                }
             } else {
-                $stmt = $pdo->prepare('INSERT INTO custom_home_components (title, placement, html_content, sort_order, is_active) VALUES (?, ?, ?, ?, ?)');
-                $stmt->execute([$title, $placement, $html, $sortOrder, $isActive]);
-                logAudit($pdo, $user, 'CREATE_HOME_COMPONENT', 'HomeComponent', $title);
-                $msg = 'Homepage HTML component added and live.';
+                $stmt = $pdo->prepare('INSERT INTO custom_home_components (title, placement, html_content, sort_order, is_active, status) VALUES (?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$title, $placement, $html, $sortOrder, $isSuper ? $isActive : 0, $isSuper ? 'published' : 'pending_approval']);
+                $newCid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'CREATE_HOME_COMPONENT', 'HomeComponent', $title);
+                    $msg = 'Homepage HTML component added and live.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'custom_home_components', $newCid, $title, [
+                        'title' => $title, 'placement' => $placement, 'sort_order' => $sortOrder, 'is_active' => $isActive,
+                    ]);
+                    $msg = 'Homepage HTML component submitted for Super Admin approval.';
+                }
             }
         } elseif ($action === 'toggle_active' && !empty($_POST['component_id'])) {
             $cid = (int)$_POST['component_id'];
-            $pdo->prepare('UPDATE custom_home_components SET is_active = IF(is_active = 1, 0, 1) WHERE id = ?')->execute([$cid]);
-            logAudit($pdo, $user, 'TOGGLE_HOME_COMPONENT', 'HomeComponent', 'ID #' . $cid);
-            $msg = 'Component visibility updated.';
+            if ($isSuper) {
+                $pdo->prepare("UPDATE custom_home_components SET is_active = IF(is_active = 1, 0, 1), status = 'published' WHERE id = ?")->execute([$cid]);
+                logAudit($pdo, $user, 'TOGGLE_HOME_COMPONENT', 'HomeComponent', 'ID #' . $cid);
+                $msg = 'Component visibility updated.';
+            } else {
+                $stCur = $pdo->prepare('SELECT * FROM custom_home_components WHERE id = ? LIMIT 1');
+                $stCur->execute([$cid]);
+                $cur = $stCur->fetch();
+                if ($cur) {
+                    cmsQueuePendingUpdate($pdo, $user, 'custom_home_components', $cid, (string)$cur['title'], $cur, ['is_active' => !empty($cur['is_active']) ? 0 : 1]);
+                    $msg = 'Component visibility change submitted for Super Admin approval.';
+                }
+            }
         } elseif ($action === 'move' && !empty($_POST['component_id'])) {
             $cid = (int)$_POST['component_id'];
             $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
@@ -67,9 +98,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif ($action === 'delete' && !empty($_POST['component_id'])) {
             $cid = (int)$_POST['component_id'];
-            $pdo->prepare('DELETE FROM custom_home_components WHERE id = ?')->execute([$cid]);
-            logAudit($pdo, $user, 'DELETE_HOME_COMPONENT', 'HomeComponent', 'ID #' . $cid);
-            $msg = 'Component deleted.';
+            if ($isSuper) {
+                $pdo->prepare('DELETE FROM custom_home_components WHERE id = ?')->execute([$cid]);
+                logAudit($pdo, $user, 'DELETE_HOME_COMPONENT', 'HomeComponent', 'ID #' . $cid);
+                $msg = 'Component deleted.';
+            } else {
+                $stCur = $pdo->prepare('SELECT * FROM custom_home_components WHERE id = ? LIMIT 1');
+                $stCur->execute([$cid]);
+                $cur = $stCur->fetch();
+                if ($cur) {
+                    cmsQueuePendingDelete($pdo, $user, 'custom_home_components', $cid, (string)$cur['title'], $cur);
+                    $msg = 'Component deletion submitted for Super Admin approval.';
+                }
+            }
         }
     } catch (PDOException $ex) {
         $err = 'Database table custom_home_components missing. Run setup.php to auto-upgrade your database schema.';
@@ -157,6 +198,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
                 <?= !empty($c['is_active']) ? 'Visible' : 'Hidden' ?>
               </button>
             </form>
+            <?= cmsModerationStatusBadge((string)($c['status'] ?? 'published')) ?>
           </td>
           <td style="white-space:nowrap;">
             <a href="?edit=<?= (int)$c['id'] ?>" class="btn-primary" style="padding:0.3rem 0.6rem;font-size:0.8rem;">Edit</a>

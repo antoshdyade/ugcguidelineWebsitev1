@@ -14,8 +14,10 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { formatBytes, formatCommitteeGroupLabel, sortByOrder } from '../lib/cmsLogic';
+import { isEntityShareable, isRecordPublished } from '../lib/collegeFeaturesLogic';
 import { useThemeAccessibility } from '../context/ThemeAccessibilityContext';
 import { CmsHtmlContent } from './CmsHtmlContent';
+import { SocialShareBar } from './SocialMediaWidgets';
 import type {
   CampusEvent,
   CmsCategory,
@@ -60,24 +62,32 @@ export function HomePage({
   const [tickerPaused, setTickerPaused] = useState(false);
   const [activeTickerIdx, setActiveTickerIdx] = useState(0);
 
+  const liveSliders = sliders.filter((s) => s.isActive !== false && isRecordPublished(s));
+  const liveTicker = ticker.filter((tk) => tk.isActive !== false && isRecordPublished(tk));
+  const livePages = pages.filter((p) => p.isPublished !== false && isRecordPublished(p));
+  const liveDepartments = departments.filter((d) => isRecordPublished(d));
+  const liveEvents = events.filter((e) => isRecordPublished(e));
+  const liveDocuments = documents.filter((d) => isRecordPublished(d));
+  const liveLeadership = leadership.filter((l) => isRecordPublished(l));
+
   useEffect(() => {
-    if (sliders.length <= 1) return;
+    if (liveSliders.length <= 1) return;
     const timer = setInterval(() => {
-      setSlideIdx((prev) => (prev + 1) % sliders.length);
+      setSlideIdx((prev) => (prev + 1) % liveSliders.length);
     }, 6500);
     return () => clearInterval(timer);
-  }, [sliders.length]);
+  }, [liveSliders.length]);
 
   useEffect(() => {
-    if (ticker.length <= 1 || tickerPaused) return;
+    if (liveTicker.length <= 1 || tickerPaused) return;
     const timer = setInterval(() => {
-      setActiveTickerIdx((prev) => (prev + 1) % ticker.length);
+      setActiveTickerIdx((prev) => (prev + 1) % liveTicker.length);
     }, 4500);
     return () => clearInterval(timer);
-  }, [ticker.length, tickerPaused]);
+  }, [liveTicker.length, tickerPaused]);
 
-  const activeSlide = sliders[slideIdx % Math.max(1, sliders.length)];
-  const activeTicker = ticker[activeTickerIdx % Math.max(1, ticker.length)];
+  const activeSlide = liveSliders[slideIdx % Math.max(1, liveSliders.length)];
+  const activeTicker = liveTicker[activeTickerIdx % Math.max(1, liveTicker.length)];
 
   const hs: HomeSectionsConfig = {
     showTicker: true,
@@ -93,7 +103,7 @@ export function HomePage({
     ...(settings.homeSections || {}),
   };
 
-  const examPages = pages
+  const examPages = livePages
     .filter((p) => p.categorySlug === 'examination')
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -126,7 +136,7 @@ export function HomePage({
   const recruiters = settings.recruiters || ['TCS', 'Infosys', 'Persistent Systems', 'Bosch India', 'Tata Technologies', 'Bharat Forge'];
 
   const customComponents = (settings.customHomeComponents || [])
-    .filter((c) => c.isActive)
+    .filter((c) => c.isActive && isRecordPublished(c))
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -154,7 +164,7 @@ export function HomePage({
   return (
     <div className="space-y-12 pb-10">
       {/* News Ticker Bar with Prev / Play-Pause / Next Controls */}
-      {hs.showTicker && ticker.length > 0 && (
+      {hs.showTicker && liveTicker.length > 0 && (
         <div className="border-b border-stone-200 dark:border-slate-800 bg-amber-50/95 dark:bg-slate-900">
           <div className="max-w-[1380px] mx-auto px-4 flex items-center justify-between gap-2">
             <div className="flex items-center flex-1 min-w-0">
@@ -179,7 +189,7 @@ export function HomePage({
               ) : (
                 <div className="flex-1 min-w-0 overflow-hidden py-2 ml-3 relative">
                   <div className="ticker-track gap-10">
-                    {[...ticker, ...ticker].map((item, idx) => (
+                    {[...liveTicker, ...liveTicker].map((item, idx) => (
                       <button
                         key={`${item.id}-${idx}`}
                         type="button"
@@ -204,7 +214,7 @@ export function HomePage({
                 aria-label="Previous announcement"
                 onClick={() => {
                   setTickerPaused(true);
-                  setActiveTickerIdx((prev) => (prev - 1 + ticker.length) % ticker.length);
+                  setActiveTickerIdx((prev) => (prev - 1 + liveTicker.length) % liveTicker.length);
                 }}
                 className="p-1.5 rounded bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700 text-stone-700 dark:text-slate-200 hover:bg-stone-100"
               >
@@ -223,7 +233,7 @@ export function HomePage({
                 aria-label="Next announcement"
                 onClick={() => {
                   setTickerPaused(true);
-                  setActiveTickerIdx((prev) => (prev + 1) % ticker.length);
+                  setActiveTickerIdx((prev) => (prev + 1) % liveTicker.length);
                 }}
                 className="p-1.5 rounded bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700 text-stone-700 dark:text-slate-200 hover:bg-stone-100"
               >
@@ -277,23 +287,23 @@ export function HomePage({
               </div>
             </div>
 
-            {sliders.length > 1 && (
+            {liveSliders.length > 1 && (
               <div className="relative z-10 px-6 pb-5 pt-1 flex items-center justify-end gap-2 md:p-0 md:absolute md:bottom-6 md:right-6">
                 <button
                   type="button"
                   aria-label="Previous slide"
-                  onClick={() => setSlideIdx((prev) => (prev - 1 + sliders.length) % sliders.length)}
+                  onClick={() => setSlideIdx((prev) => (prev - 1 + liveSliders.length) % liveSliders.length)}
                   className="p-2 rounded-lg bg-slate-950/75 hover:bg-slate-950 text-white border border-white/20"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <span className="text-xs text-white/95 font-mono-tabular px-2 bg-slate-950/60 py-1 rounded">
-                  {slideIdx + 1} / {sliders.length}
+                  {(slideIdx % liveSliders.length) + 1} / {liveSliders.length}
                 </span>
                 <button
                   type="button"
                   aria-label="Next slide"
-                  onClick={() => setSlideIdx((prev) => (prev + 1) % sliders.length)}
+                  onClick={() => setSlideIdx((prev) => (prev + 1) % liveSliders.length)}
                   className="p-2 rounded-lg bg-slate-950/75 hover:bg-slate-950 text-white border border-white/20"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -411,7 +421,7 @@ export function HomePage({
             </div>
 
             <ul className="space-y-2.5">
-              {documents.slice(0, 5).map((doc) => {
+              {liveDocuments.slice(0, 5).map((doc) => {
                 const isExternal = doc.sourceType === 'external' || /^https?:\/\//i.test(doc.fileUrl);
                 return (
                   <li
@@ -533,7 +543,7 @@ export function HomePage({
       )}
 
       {/* Our Desk — Leadership Showcase */}
-      {hs.showLeadershipDesk && leadership.length > 0 && (
+      {hs.showLeadershipDesk && liveLeadership.length > 0 && (
         <section className="max-w-[1380px] mx-auto px-4">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 pb-3 border-b border-stone-200 dark:border-slate-800">
             <div>
@@ -556,7 +566,7 @@ export function HomePage({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {sortByOrder(leadership).slice(0, 4).map((leader) => (
+            {sortByOrder(liveLeadership).slice(0, 4).map((leader) => (
               <article
                 key={leader.id}
                 className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col justify-between"
@@ -678,7 +688,7 @@ export function HomePage({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {departments.map((dept) => (
+          {liveDepartments.map((dept) => (
             <article
               key={dept.id}
               className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col justify-between"
@@ -744,7 +754,7 @@ export function HomePage({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleHomeCategories.map((cat) => {
-            const catPages = pages
+            const catPages = livePages
               .filter((p) => p.categorySlug === cat.slug)
               .sort((a, b) => a.sortOrder - b.sortOrder);
             return (
@@ -821,7 +831,7 @@ export function HomePage({
             </button>
           </div>
           <div className="divide-y divide-stone-100 dark:divide-slate-800">
-            {events.slice(0, 5).map((ev) => (
+            {liveEvents.slice(0, 5).map((ev) => (
               <div key={ev.id} className="py-3.5 first:pt-0 last:pb-0 flex items-start gap-4">
                 {ev.imageUrl && (
                   <img
@@ -830,7 +840,7 @@ export function HomePage({
                     className="w-20 h-16 rounded-lg object-cover border border-stone-200 dark:border-slate-700 shrink-0"
                   />
                 )}
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs text-stone-500 dark:text-slate-400 tabular-nums mb-1">
                     <span className="font-semibold" style={{ color: 'var(--secondary-color)' }}>
                       {ev.category}
@@ -844,6 +854,14 @@ export function HomePage({
                   <p className="text-xs text-stone-600 dark:text-slate-300 leading-relaxed">
                     {ev.summary}
                   </p>
+                  <SocialShareBar
+                    compact
+                    isShareable={isEntityShareable(ev)}
+                    title={ev.title}
+                    summary={ev.summary}
+                    settings={settings}
+                    location="portal"
+                  />
                 </div>
               </div>
             ))}

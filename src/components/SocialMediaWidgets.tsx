@@ -160,6 +160,9 @@ interface SocialShareBarProps {
   url?: string;
   settings?: SiteSettings;
   location: 'page' | 'research' | 'conference' | 'portal';
+  isShareable?: boolean;
+  compact?: boolean;
+  className?: string;
 }
 
 export function SocialShareBar({
@@ -168,11 +171,14 @@ export function SocialShareBar({
   url,
   settings,
   location,
+  isShareable = true,
+  compact = false,
+  className = '',
 }: SocialShareBarProps) {
   const [copied, setCopied] = useState(false);
   const cfg = normalizeSocialSharingConfig(settings?.socialSharing);
 
-  if (!cfg.enabled) return null;
+  if (!cfg.enabled || !isShareable) return null;
   if (location === 'page' && !cfg.showOnPages) return null;
   if (location === 'research' && !cfg.showOnResearch) return null;
   if (location === 'conference' && !cfg.showOnConferences) return null;
@@ -192,7 +198,7 @@ export function SocialShareBar({
     try {
       await navigator.clipboard.writeText(resolvedUrl);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2200);
+      window.setTimeout(() => setCopied(false), 2400);
     } catch {
       setCopied(false);
     }
@@ -213,98 +219,141 @@ export function SocialShareBar({
     typeof navigator !== 'undefined' &&
     typeof navigator.share === 'function';
 
+  const btnSize = compact ? 'w-8 h-8 rounded-full' : 'w-9 h-9 rounded-full';
+  const iconSize = compact ? 'w-3.5 h-3.5' : 'w-4 h-4';
+
+  const iconButtons = (
+    <div
+      className={`flex flex-wrap items-center ${compact ? 'gap-1.5' : 'gap-2'} relative`}
+      role="group"
+      aria-label={`Share ${title}`}
+    >
+      {cfg.platforms.whatsapp && (
+        <a
+          href={urls.whatsapp}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Share on WhatsApp"
+          aria-label="Share on WhatsApp"
+          className={`inline-flex items-center justify-center ${btnSize} border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-colors`}
+        >
+          <SocialPlatformSvg platform="whatsapp" className={iconSize} />
+        </a>
+      )}
+      {cfg.platforms.linkedin && (
+        <a
+          href={urls.linkedin}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Share on LinkedIn"
+          aria-label="Share on LinkedIn"
+          className={`inline-flex items-center justify-center ${btnSize} border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 hover:bg-sky-700 hover:text-white hover:border-sky-700 transition-colors`}
+        >
+          <SocialPlatformSvg platform="linkedin" className={iconSize} />
+        </a>
+      )}
+      {cfg.platforms.twitter && (
+        <a
+          href={urls.twitter}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Share on X (Twitter)"
+          aria-label="Share on X (Twitter)"
+          className={`inline-flex items-center justify-center ${btnSize} border border-stone-300 dark:border-slate-700 bg-stone-100 dark:bg-slate-800 text-stone-800 dark:text-slate-100 hover:bg-stone-900 hover:text-white hover:border-stone-900 transition-colors`}
+        >
+          <SocialPlatformSvg platform="twitter" className={iconSize} />
+        </a>
+      )}
+      {cfg.platforms.facebook && (
+        <a
+          href={urls.facebook}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Share on Facebook"
+          aria-label="Share on Facebook"
+          className={`inline-flex items-center justify-center ${btnSize} border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors`}
+        >
+          <SocialPlatformSvg platform="facebook" className={iconSize} />
+        </a>
+      )}
+      {cfg.platforms.telegram && (
+        <a
+          href={urls.telegram}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Share on Telegram"
+          aria-label="Share on Telegram"
+          className={`inline-flex items-center justify-center ${btnSize} border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-600 hover:text-white hover:border-cyan-600 transition-colors`}
+        >
+          <SocialPlatformSvg platform="telegram" className={iconSize} />
+        </a>
+      )}
+      {cfg.platforms.email && (
+        <a
+          href={urls.email}
+          title="Share via Email"
+          aria-label="Share via Email"
+          className={`inline-flex items-center justify-center ${btnSize} border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-stone-700 dark:text-slate-200 hover:bg-slate-800 hover:text-white transition-colors`}
+        >
+          <Mail className={iconSize} aria-hidden="true" />
+        </a>
+      )}
+      {cfg.platforms.copyLink && (
+        <button
+          type="button"
+          onClick={handleCopy}
+          title={copied ? 'Link copied to clipboard' : 'Copy link to clipboard'}
+          aria-label={copied ? 'Link copied to clipboard' : 'Copy link to clipboard'}
+          className={`inline-flex items-center justify-center ${btnSize} border ${
+            copied
+              ? 'border-emerald-500 bg-emerald-600 text-white'
+              : 'border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-stone-700 dark:text-slate-200 hover:bg-slate-800 hover:text-white'
+          } transition-colors`}
+        >
+          {copied ? <Check className={iconSize} aria-hidden="true" /> : <Copy className={iconSize} aria-hidden="true" />}
+        </button>
+      )}
+      {canNative && (
+        <button
+          type="button"
+          onClick={handleNativeShare}
+          title="Share using device share sheet"
+          aria-label="Share using device share sheet"
+          className={`inline-flex items-center justify-center ${btnSize} bg-slate-900 dark:bg-slate-700 text-white hover:bg-amber-600 transition-colors`}
+        >
+          <Share2 className={iconSize} aria-hidden="true" />
+        </button>
+      )}
+      {copied && (
+        <span
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-5 right-5 z-50 px-3.5 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold shadow-lg border border-slate-700"
+        >
+          Link copied to clipboard
+        </span>
+      )}
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <div className={`pt-2.5 mt-2.5 border-t border-stone-200/80 dark:border-slate-800 flex items-center justify-between gap-2 ${className}`}>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-slate-400">
+          Share
+        </span>
+        {iconButtons}
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-6 pt-5 border-t border-stone-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className={`mt-6 pt-5 border-t border-stone-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${className}`}>
       <div className="flex items-center gap-2 text-xs font-semibold text-stone-700 dark:text-slate-200">
-        <Share2 className="w-4 h-4 text-amber-600 shrink-0" />
+        <Share2 className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
         <span>{cfg.shareHeading || 'Share this update'}</span>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {cfg.platforms.whatsapp && (
-          <a
-            href={urls.whatsapp}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 text-xs font-semibold hover:bg-emerald-100"
-          >
-            <SocialPlatformSvg platform="whatsapp" className="w-3.5 h-3.5" />
-            <span>WhatsApp</span>
-          </a>
-        )}
-        {cfg.platforms.linkedin && (
-          <a
-            href={urls.linkedin}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-200 text-xs font-semibold hover:bg-sky-100"
-          >
-            <SocialPlatformSvg platform="linkedin" className="w-3.5 h-3.5" />
-            <span>LinkedIn</span>
-          </a>
-        )}
-        {cfg.platforms.twitter && (
-          <a
-            href={urls.twitter}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-100 dark:bg-slate-800 text-stone-900 dark:text-slate-100 text-xs font-semibold hover:bg-stone-200"
-          >
-            <SocialPlatformSvg platform="twitter" className="w-3.5 h-3.5" />
-            <span>Post on X</span>
-          </a>
-        )}
-        {cfg.platforms.facebook && (
-          <a
-            href={urls.facebook}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 text-xs font-semibold hover:bg-blue-100"
-          >
-            <SocialPlatformSvg platform="facebook" className="w-3.5 h-3.5" />
-            <span>Facebook</span>
-          </a>
-        )}
-        {cfg.platforms.telegram && (
-          <a
-            href={urls.telegram}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-cyan-300 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-900 dark:text-cyan-200 text-xs font-semibold hover:bg-cyan-100"
-          >
-            <SocialPlatformSvg platform="telegram" className="w-3.5 h-3.5" />
-            <span>Telegram</span>
-          </a>
-        )}
-        {cfg.platforms.email && (
-          <a
-            href={urls.email}
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-stone-300 dark:border-slate-700 text-stone-700 dark:text-slate-200 text-xs font-semibold hover:bg-stone-100 dark:hover:bg-slate-800"
-          >
-            <Mail className="w-3.5 h-3.5" />
-            <span>Email</span>
-          </a>
-        )}
-        {cfg.platforms.copyLink && (
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-stone-300 dark:border-slate-700 text-stone-700 dark:text-slate-200 text-xs font-semibold hover:bg-stone-100 dark:hover:bg-slate-800"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'Link Copied' : 'Copy Link'}</span>
-          </button>
-        )}
-        {canNative && (
-          <button
-            type="button"
-            onClick={handleNativeShare}
-            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Share App</span>
-          </button>
-        )}
-      </div>
+      {iconButtons}
     </div>
   );
 }

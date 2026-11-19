@@ -75,7 +75,8 @@ try {
         && in_array('alumni_achievers', $tables, true)
         && in_array('alumni_pledges', $tables, true)
         && in_array('sports_facilities', $tables, true)
-        && in_array('facilities', $tables, true);
+        && in_array('facilities', $tables, true)
+        && in_array('content_pending_revisions', $tables, true);
     if (in_array('users', $tables, true)) {
         $usersCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
     }
@@ -194,7 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         <tr><td>Backups Directory</td><td><?= $backupsWritable ? 'PASS' : 'WARN' ?></td><td><code>backups/</code> <?= $backupsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
         <tr><td>PHP Sessions &amp; CAPTCHA</td><td><?= ($sessionOk || $dbConnected) ? 'PASS' : 'FAIL' ?></td><td>Save path: <code><?= e($sessionPath) ?></code> <?= $dbConnected ? '· MySQL DB Session + HMAC CAPTCHA fallback active' : '' ?></td></tr>
         <tr><td>MySQL Connection</td><td><?= $dbConnected ? 'PASS' : 'FAIL' ?></td><td><?= $dbConnected ? ('Connected to ' . e(DB_NAME) . " ($tablesCount tables, $usersCount users)") : e($dbError) ?></td></tr>
-        <tr><td>Enhanced Schema (Sports, Facilities, Portals, Conferences &amp; v7)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v7 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
+        <tr><td>Enhanced Schema (Sports, Facilities, Conferences, Moderation &amp; v10)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v10 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
       </tbody>
     </table>
 

@@ -3,11 +3,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/auth.php';
 $pdo = getDB();
+ensureCmsSchemaUpgraded($pdo);
 
 $dirQuery = trim($_GET['q'] ?? '');
 $stmt = $dirQuery
-    ? $pdo->prepare('SELECT * FROM telephone_directory WHERE section LIKE ? OR officer_name LIKE ? OR email LIKE ? ORDER BY sort_order ASC, id ASC')
-    : $pdo->query('SELECT * FROM telephone_directory ORDER BY sort_order ASC, id ASC');
+    ? $pdo->prepare("SELECT * FROM telephone_directory WHERE status = 'published' AND (section LIKE ? OR officer_name LIKE ? OR email LIKE ?) ORDER BY sort_order ASC, id ASC")
+    : $pdo->query("SELECT * FROM telephone_directory WHERE status = 'published' ORDER BY sort_order ASC, id ASC");
 if ($dirQuery) {
     $like = '%' . $dirQuery . '%';
     $stmt->execute([$like, $like, $like]);

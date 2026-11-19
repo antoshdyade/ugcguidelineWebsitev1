@@ -12,6 +12,7 @@ $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
+    $isSuper = cmsIsSuperAdmin($user);
     if ($action === 'add' || $action === 'update') {
         $photoUrl = trim($_POST['existing_photo'] ?? 'assets/images/principal.jpg');
         if (!empty($_FILES['photo']['name'])) {
@@ -22,16 +23,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $groupName = trim($_POST['committee_group'] ?? '') ?: 'Statutory Officer';
         $sortOrder = max(1, (int)($_POST['sort_order'] ?? 1));
         if ($err === '') {
+            $lPayload = [
+                'role_title'      => trim((string)$_POST['role_title']),
+                'name'            => trim((string)$_POST['name']),
+                'qualification'   => trim((string)$_POST['qualification']),
+                'email'           => trim((string)$_POST['email']),
+                'phone'           => trim((string)$_POST['phone']),
+                'photo_url'       => $photoUrl,
+                'bio'             => trim((string)$_POST['bio']),
+                'committee_group' => $groupName,
+                'sort_order'      => $sortOrder,
+            ];
             if ($action === 'update' && !empty($_POST['id'])) {
-                $pdo->prepare('UPDATE leadership_profiles SET role_title = ?, name = ?, qualification = ?, email = ?, phone = ?, photo_url = ?, bio = ?, committee_group = ?, sort_order = ? WHERE id = ?')
-                    ->execute([trim($_POST['role_title']), trim($_POST['name']), trim($_POST['qualification']), trim($_POST['email']), trim($_POST['phone']), $photoUrl, trim($_POST['bio']), $groupName, $sortOrder, (int)$_POST['id']]);
-                logAudit($pdo, $user, 'UPDATE_LEADERSHIP', 'Leadership', $_POST['name']);
-                $msg = 'Leadership profile updated.';
+                $lid = (int)$_POST['id'];
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE leadership_profiles SET role_title = ?, name = ?, qualification = ?, email = ?, phone = ?, photo_url = ?, bio = ?, committee_group = ?, sort_order = ?, status = 'published' WHERE id = ?")
+                        ->execute([$lPayload['role_title'], $lPayload['name'], $lPayload['qualification'], $lPayload['email'], $lPayload['phone'], $lPayload['photo_url'], $lPayload['bio'], $lPayload['committee_group'], $lPayload['sort_order'], $lid]);
+                    logAudit($pdo, $user, 'UPDATE_LEADERSHIP', 'Leadership', $lPayload['name']);
+                    $msg = 'Leadership profile updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM leadership_profiles WHERE id = ? LIMIT 1');
+                    $stCur->execute([$lid]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'leadership_profiles', $lid, $lPayload['name'], $cur, $lPayload);
+                    $msg = 'Leadership profile update submitted for Super Admin approval.';
+                }
             } else {
-                $pdo->prepare('INSERT INTO leadership_profiles (role_title, name, qualification, email, phone, photo_url, bio, committee_group, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                    ->execute([trim($_POST['role_title']), trim($_POST['name']), trim($_POST['qualification']), trim($_POST['email']), trim($_POST['phone']), $photoUrl, trim($_POST['bio']), $groupName, $sortOrder]);
-                logAudit($pdo, $user, 'ADD_LEADERSHIP', 'Leadership', $_POST['name']);
-                $msg = 'Leadership profile added.';
+                $pdo->prepare('INSERT INTO leadership_profiles (role_title, name, qualification, email, phone, photo_url, bio, committee_group, sort_order, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$lPayload['role_title'], $lPayload['name'], $lPayload['qualification'], $lPayload['email'], $lPayload['phone'], $lPayload['photo_url'], $lPayload['bio'], $lPayload['committee_group'], $lPayload['sort_order'], $isSuper ? 'published' : 'pending_approval']);
+                $newLid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'ADD_LEADERSHIP', 'Leadership', $lPayload['name']);
+                    $msg = 'Leadership profile added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'leadership_profiles', $newLid, $lPayload['name'], $lPayload);
+                    $msg = 'Leadership profile submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($action === 'move' && !empty($_POST['id'])) {
@@ -41,9 +68,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Leadership display order updated.';
         }
     } elseif ($action === 'delete') {
-        $pdo->prepare('DELETE FROM leadership_profiles WHERE id = ?')->execute([(int)$_POST['id']]);
-        logAudit($pdo, $user, 'DELETE_LEADERSHIP', 'Leadership', 'Profile #' . (int)$_POST['id']);
-        $msg = 'Profile removed.';
+        $lid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM leadership_profiles WHERE id = ?')->execute([$lid]);
+            logAudit($pdo, $user, 'DELETE_LEADERSHIP', 'Leadership', 'Profile #' . $lid);
+            $msg = 'Profile removed.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM leadership_profiles WHERE id = ? LIMIT 1');
+            $stCur->execute([$lid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'leadership_profiles', $lid, (string)$cur['name'], $cur);
+                $msg = 'Leadership profile deletion submitted for Super Admin approval.';
+            }
+        }
     }
 }
 
@@ -110,7 +148,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             </form>
           </div>
         </div>
-        <div style="margin-top:0.5rem;font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;"><?= e(formatCommitteeGroupLabel($p['committee_group'] ?? '')) ?></div>
+        <div style="margin-top:0.5rem;font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;gap:4px;"><?= e(formatCommitteeGroupLabel($p['committee_group'] ?? '')) ?> <?= cmsModerationStatusBadge((string)($p['status'] ?? 'published')) ?></div>
         <h3 style="margin:0.2rem 0 0.2rem;"><?= e($p['name']) ?></h3>
         <small style="color:var(--secondary-color);font-weight:700;"><?= e($p['role_title']) ?></small>
         <p style="font-size:0.85rem;color:var(--text-muted);"><?= e($p['bio']) ?></p>

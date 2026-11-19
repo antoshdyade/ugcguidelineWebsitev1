@@ -21,7 +21,7 @@ if ($slug !== '') {
     $catStmt->execute([$catSlug, $normCat]);
     $catRow = $catStmt->fetch();
     if ($catRow) {
-        $pgStmt = $pdo->prepare('SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE c.id = ? AND p.is_published = 1 ORDER BY p.sort_order ASC, p.id ASC LIMIT 1');
+        $pgStmt = $pdo->prepare("SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE c.id = ? AND p.is_published = 1 AND p.status = 'published' ORDER BY p.sort_order ASC, p.id ASC LIMIT 1");
         $pgStmt->execute([(int)$catRow['id']]);
         $page = $pgStmt->fetch() ?: null;
         if ($page) {
@@ -31,7 +31,7 @@ if ($slug !== '') {
         }
     }
 } else {
-    $stmt = $pdo->prepare('SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.is_published = 1 ORDER BY c.sort_order ASC, p.sort_order ASC LIMIT 1');
+    $stmt = $pdo->prepare("SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.is_published = 1 AND p.status = 'published' ORDER BY c.sort_order ASC, p.sort_order ASC LIMIT 1");
     $stmt->execute();
     $page = $stmt->fetch() ?: null;
     if ($page) $slug = (string)$page['slug'];
@@ -61,12 +61,12 @@ if (!$page) {
     exit;
 }
 
-$sibStmt = $pdo->prepare('SELECT slug, title FROM pages WHERE category_id = ? AND is_published = 1 ORDER BY sort_order ASC, id ASC');
+$sibStmt = $pdo->prepare("SELECT slug, title FROM pages WHERE category_id = ? AND is_published = 1 AND status = 'published' ORDER BY sort_order ASC, id ASC");
 $sibStmt->execute([$page['category_id']]);
 $siblings = $sibStmt->fetchAll();
 
 $leaders = ($slug === 'statutory-officers')
-    ? $pdo->query('SELECT * FROM leadership_profiles ORDER BY sort_order ASC')->fetchAll()
+    ? $pdo->query("SELECT * FROM leadership_profiles WHERE status = 'published' ORDER BY sort_order ASC")->fetchAll()
     : [];
 
 $isResearchCat = ($page['category_slug'] ?? '') === 'research';
@@ -77,7 +77,7 @@ if ($isResearchCat) {
     $researchSliderSlides = getResearchSliderSlides($pdo);
     $researchPortfolio = getResearchPortfolioData($pdo, true);
     try {
-        $researchConfs = $pdo->query('SELECT id, slug, short_name, title, scope, theme, start_date, end_date, venue, mode, organizing_department, banner_url FROM conferences WHERE is_published = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+        $researchConfs = $pdo->query("SELECT id, slug, short_name, title, scope, theme, start_date, end_date, venue, mode, organizing_department, banner_url FROM conferences WHERE is_published = 1 AND status = 'published' ORDER BY sort_order ASC, id ASC")->fetchAll();
     } catch (Throwable $ignoredConf) {
         $researchConfs = [];
     }
@@ -130,7 +130,7 @@ require_once __DIR__ . '/includes/header.php';
     <div class="cms-prose"><?= $page['content_html'] ?></div>
 
     <?php
-      $shareEnabledForPage = !isset($page['show_share_bar']) || (int)$page['show_share_bar'] === 1;
+      $shareEnabledForPage = (!isset($page['is_shareable']) || !empty($page['is_shareable'])) && (!isset($page['show_share_bar']) || (int)$page['show_share_bar'] === 1);
       echo renderPhpSocialShareBar(
           $pdo,
           (string)$page['title'],
@@ -213,12 +213,15 @@ require_once __DIR__ . '/includes/header.php';
                 <?php foreach ($rProjects as $rp):
                   $searchHay = strtolower((string)$rp['title'] . ' ' . $rp['principal_investigator'] . ' ' . $rp['project_code'] . ' ' . $rp['funding_agency'] . ' ' . $rp['department_code']);
                 ?>
-                  <tr data-agency="<?= e((string)$rp['funding_agency']) ?>" data-status="<?= e((string)$rp['status']) ?>" data-search="<?= e($searchHay) ?>">
+                  <tr id="res-proj-<?= (int)$rp['id'] ?>" data-agency="<?= e((string)$rp['funding_agency']) ?>" data-status="<?= e((string)$rp['status']) ?>" data-search="<?= e($searchHay) ?>">
                     <td>
                       <strong><?= e((string)$rp['title']) ?></strong>
                       <?php if (!empty($rp['project_code'])): ?><br><small style="color:var(--text-muted);font-variant-numeric:tabular-nums;"><?= e((string)$rp['project_code']) ?> · <?= e((string)$rp['sanction_year']) ?></small><?php endif; ?>
                       <?php if (!empty($rp['summary'])): ?><br><small><?= e((string)$rp['summary']) ?></small><?php endif; ?>
                       <?php if (!empty($rp['document_url'])): ?><br><a href="<?= e(baseUrl((string)$rp['document_url'])) ?>" style="font-size:0.78rem;">Sanction Order / Details &rarr;</a><?php endif; ?>
+                      <?php if (!isset($rp['is_shareable']) || !empty($rp['is_shareable'])): ?>
+                        <?= renderPhpSocialShareBar($pdo, (string)$rp['title'], (string)($rp['summary'] ?? ''), baseUrl('page.php?slug=' . urlencode((string)$page['slug']) . '#res-proj-' . (int)$rp['id']), 'research', true, true) ?>
+                      <?php endif; ?>
                     </td>
                     <td><?= e((string)$rp['funding_agency']) ?></td>
                     <td><?= e((string)$rp['principal_investigator']) ?> <small style="color:var(--text-muted);">(<?= e((string)$rp['department_code']) ?>)</small><?php if (!empty($rp['co_investigator'])): ?><br><small style="color:var(--text-muted);">Co-PI: <?= e((string)$rp['co_investigator']) ?></small><?php endif; ?></td>
@@ -263,7 +266,7 @@ require_once __DIR__ . '/includes/header.php';
               }
               $ipSearch = strtolower((string)$ip['title'] . ' ' . $ip['inventors_or_lead'] . ' ' . $ip['reference_number'] . ' ' . $ip['partner_or_agency'] . ' ' . $ip['department_code']);
             ?>
-              <div class="card rp-pat-card" data-type="<?= e((string)$ip['item_type']) ?>" data-year="<?= e($ipYear) ?>" data-search="<?= e($ipSearch) ?>" style="display:flex;flex-direction:column;justify-content:space-between;gap:0.5rem;">
+              <div id="res-ip-<?= (int)$ip['id'] ?>" class="card rp-pat-card" data-type="<?= e((string)$ip['item_type']) ?>" data-year="<?= e($ipYear) ?>" data-search="<?= e($ipSearch) ?>" style="display:flex;flex-direction:column;justify-content:space-between;gap:0.5rem;">
                 <div>
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem;">
                     <span class="alumni-pill"><?= e((string)$ip['item_type']) ?></span>
@@ -275,10 +278,15 @@ require_once __DIR__ . '/includes/header.php';
                     <p style="margin:0 0 0.4rem;font-size:0.82rem;color:var(--text-muted);"><?= e((string)$ip['summary']) ?></p>
                   <?php endif; ?>
                 </div>
-                <div style="border-top:1px solid var(--border-color);padding-top:0.5rem;font-size:0.78rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
-                  <span><strong><?= e((string)$ip['status']) ?></strong><?php if (!empty($ip['reference_number'])): ?> · <?= e((string)$ip['reference_number']) ?><?php endif; ?></span>
-                  <?php if (!empty($ip['external_url'])): ?>
-                    <a href="<?= e((string)$ip['external_url']) ?>" target="_blank" rel="noopener noreferrer">Open Link &nearr;</a>
+                <div>
+                  <div style="border-top:1px solid var(--border-color);padding-top:0.5rem;font-size:0.78rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.4rem;">
+                    <span><strong><?= e((string)$ip['status']) ?></strong><?php if (!empty($ip['reference_number'])): ?> · <?= e((string)$ip['reference_number']) ?><?php endif; ?></span>
+                    <?php if (!empty($ip['external_url'])): ?>
+                      <a href="<?= e((string)$ip['external_url']) ?>" target="_blank" rel="noopener noreferrer">Open Link &nearr;</a>
+                    <?php endif; ?>
+                  </div>
+                  <?php if (!isset($ip['is_shareable']) || !empty($ip['is_shareable'])): ?>
+                    <?= renderPhpSocialShareBar($pdo, (string)$ip['title'], (string)($ip['summary'] ?? ''), baseUrl('page.php?slug=' . urlencode((string)$page['slug']) . '#res-ip-' . (int)$ip['id']), 'research', true, true) ?>
                   <?php endif; ?>
                 </div>
               </div>

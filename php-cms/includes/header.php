@@ -13,8 +13,8 @@ $primaryCats = $partitionedNav['mainCats'];
 $overflowCats = $partitionedNav['moreCats'];
 $mainPortalMenus = $partitionedNav['mainPortals'];
 $morePortalMenus = $partitionedNav['morePortals'];
-$navDepts = $pdo->query('SELECT id, slug, code, name FROM departments ORDER BY sort_order ASC, id ASC')->fetchAll();
-$navPagesStmt = $pdo->query('SELECT id, category_id, slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC');
+$navDepts = $pdo->query("SELECT id, slug, code, name FROM departments WHERE status = 'published' ORDER BY sort_order ASC, id ASC")->fetchAll();
+$navPagesStmt = $pdo->query("SELECT id, category_id, slug, title FROM pages WHERE is_published = 1 AND status = 'published' ORDER BY sort_order ASC");
 $pagesByCat = [];
 foreach ($navPagesStmt->fetchAll() as $pg) {
     $pagesByCat[$pg['category_id']][] = $pg;

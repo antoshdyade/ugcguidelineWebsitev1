@@ -47,6 +47,7 @@ $decodeCustomFields = static function (?string $raw): array {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = (string)($_POST['action'] ?? '');
+    $isSuper = cmsIsSuperAdmin($user);
 
     if ($action === 'save_sports_config') {
         $tab = 'config';
@@ -85,16 +86,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '') $err = 'Sports facility name is required.';
         if ($err === '') {
             if ($editId > 0) {
-                $pdo->prepare('UPDATE sports_facilities SET name=?, facility_type=?, dimensions_or_capacity=?, timings=?, incharge_name=?, description=?, image_url=?, custom_fields_json=?, is_published=? WHERE id=?')
-                    ->execute([$name, $ftype, $dim, $timings, $incharge, $desc, $imgUrl, $cfJson, $isPub, $editId]);
-                $msg = 'Sports facility updated.';
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE sports_facilities SET name=?, facility_type=?, dimensions_or_capacity=?, timings=?, incharge_name=?, description=?, image_url=?, custom_fields_json=?, is_published=?, status='published' WHERE id=?")
+                        ->execute([$name, $ftype, $dim, $timings, $incharge, $desc, $imgUrl, $cfJson, $isPub, $editId]);
+                    logAudit($pdo, $user, 'SAVE_SPORTS_FACILITY', 'Sports', $name);
+                    $msg = 'Sports facility updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM sports_facilities WHERE id = ? LIMIT 1');
+                    $stCur->execute([$editId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'sports_facilities', $editId, $name, $cur, [
+                        'name' => $name, 'facility_type' => $ftype, 'dimensions_or_capacity' => $dim,
+                        'timings' => $timings, 'incharge_name' => $incharge, 'description' => $desc,
+                        'image_url' => $imgUrl, 'custom_fields_json' => $cfJson, 'is_published' => $isPub,
+                    ]);
+                    $msg = 'Sports facility update submitted for Super Admin approval.';
+                }
             } else {
                 $ord = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM sports_facilities')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO sports_facilities (name, facility_type, dimensions_or_capacity, timings, incharge_name, description, image_url, custom_fields_json, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)')
-                    ->execute([$name, $ftype, $dim, $timings, $incharge, $desc, $imgUrl, $cfJson, $isPub, $ord]);
-                $msg = 'Sports facility added.';
+                $pdo->prepare('INSERT INTO sports_facilities (name, facility_type, dimensions_or_capacity, timings, incharge_name, description, image_url, custom_fields_json, is_published, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$name, $ftype, $dim, $timings, $incharge, $desc, $imgUrl, $cfJson, $isSuper ? $isPub : 0, $ord, $isSuper ? 'published' : 'pending_approval']);
+                $newFid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'SAVE_SPORTS_FACILITY', 'Sports', $name);
+                    $msg = 'Sports facility added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'sports_facilities', $newFid, $name, [
+                        'name' => $name, 'facility_type' => $ftype, 'dimensions_or_capacity' => $dim, 'is_published' => $isPub,
+                    ]);
+                    $msg = 'Sports facility submitted for Super Admin approval.';
+                }
             }
-            logAudit($pdo, $user, 'SAVE_SPORTS_FACILITY', 'Sports', $name);
         }
     } elseif ($action === 'move_facility' && !empty($_POST['id'])) {
         $tab = 'facilities';
@@ -102,9 +124,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = 'Sports facility order updated.';
     } elseif ($action === 'delete_facility' && !empty($_POST['id'])) {
         $tab = 'facilities';
-        $pdo->prepare('DELETE FROM sports_facilities WHERE id = ?')->execute([(int)$_POST['id']]);
-        logAudit($pdo, $user, 'DELETE_SPORTS_FACILITY', 'Sports', '#' . (int)$_POST['id']);
-        $msg = 'Sports facility deleted.';
+        $fid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM sports_facilities WHERE id = ?')->execute([$fid]);
+            logAudit($pdo, $user, 'DELETE_SPORTS_FACILITY', 'Sports', '#' . $fid);
+            $msg = 'Sports facility deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM sports_facilities WHERE id = ? LIMIT 1');
+            $stCur->execute([$fid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'sports_facilities', $fid, (string)$cur['name'], $cur);
+                $msg = 'Sports facility deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'save_event') {
         $tab = 'events';
         $editId = (int)($_POST['edit_id'] ?? 0);
@@ -118,6 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $regUrl = trim((string)($_POST['registration_url'] ?? ''));
         $desc = trim((string)($_POST['description'] ?? ''));
         $isPub = !empty($_POST['is_published']) ? 1 : 0;
+        $isShareable = !empty($_POST['is_shareable']) ? 1 : 0;
         $banner = trim((string)($_POST['existing_banner'] ?? 'assets/images/sports_complex.jpg'));
         if (!empty($_FILES['banner_file']['name'])) {
             $up = handleCmsUpload($pdo, $_FILES['banner_file'], __DIR__ . '/../uploads', 'photo');
@@ -127,21 +161,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($title === '') $err = 'Event title is required.';
         if ($err === '') {
             if ($editId > 0) {
-                $pdo->prepare('UPDATE sports_events SET title=?, event_type=?, discipline=?, event_date=?, venue=?, organizer=?, status=?, registration_url=?, description=?, banner_url=?, is_published=? WHERE id=?')
-                    ->execute([$title, $etype, $disc, $edate, $venue, $org, $status, $regUrl, $desc, $banner, $isPub, $editId]);
-                $msg = 'Sports event updated.';
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE sports_events SET title=?, event_type=?, discipline=?, event_date=?, venue=?, organizer=?, status=?, registration_url=?, description=?, banner_url=?, is_published=?, is_shareable=?, moderation_status='published' WHERE id=?")
+                        ->execute([$title, $etype, $disc, $edate, $venue, $org, $status, $regUrl, $desc, $banner, $isPub, $isShareable, $editId]);
+                    logAudit($pdo, $user, 'SAVE_SPORTS_EVENT', 'Sports Event', $title);
+                    $msg = 'Sports event updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM sports_events WHERE id = ? LIMIT 1');
+                    $stCur->execute([$editId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'sports_events', $editId, $title, $cur, [
+                        'title' => $title, 'event_type' => $etype, 'discipline' => $disc,
+                        'event_date' => $edate, 'venue' => $venue, 'organizer' => $org, 'status' => $status,
+                        'registration_url' => $regUrl, 'description' => $desc, 'banner_url' => $banner,
+                        'is_published' => $isPub, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Sports event update submitted for Super Admin approval.';
+                }
             } else {
                 $ord = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM sports_events')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO sports_events (title, event_type, discipline, event_date, venue, organizer, status, registration_url, description, banner_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-                    ->execute([$title, $etype, $disc, $edate, $venue, $org, $status, $regUrl, $desc, $banner, $isPub, $ord]);
-                $msg = 'Sports event added.';
+                $pdo->prepare('INSERT INTO sports_events (title, event_type, discipline, event_date, venue, organizer, status, registration_url, description, banner_url, is_published, is_shareable, sort_order, moderation_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$title, $etype, $disc, $edate, $venue, $org, $status, $regUrl, $desc, $banner, $isSuper ? $isPub : 0, $isShareable, $ord, $isSuper ? 'published' : 'pending_approval']);
+                $newEid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'SAVE_SPORTS_EVENT', 'Sports Event', $title);
+                    $msg = 'Sports event added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'sports_events', $newEid, $title, [
+                        'title' => $title, 'event_type' => $etype, 'event_date' => $edate, 'is_published' => $isPub, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Sports event submitted for Super Admin approval.';
+                }
             }
-            logAudit($pdo, $user, 'SAVE_SPORTS_EVENT', 'Sports Event', $title);
         }
     } elseif ($action === 'delete_event' && !empty($_POST['id'])) {
         $tab = 'events';
-        $pdo->prepare('DELETE FROM sports_events WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Sports event deleted.';
+        $eid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM sports_events WHERE id = ?')->execute([$eid]);
+            $msg = 'Sports event deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM sports_events WHERE id = ? LIMIT 1');
+            $stCur->execute([$eid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'sports_events', $eid, (string)$cur['title'], $cur);
+                $msg = 'Sports event deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'save_achievement') {
         $tab = 'achievements';
         $editId = (int)($_POST['edit_id'] ?? 0);
@@ -164,21 +231,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '' || $evName === '') $err = 'Student/Team name and Event name are required.';
         if ($err === '') {
             if ($editId > 0) {
-                $pdo->prepare('UPDATE sports_achievements SET student_or_team_name=?, department_code=?, batch_year=?, sport_name=?, level=?, medal_or_rank=?, event_name=?, event_date=?, photo_url=?, highlights=?, is_featured=? WHERE id=?')
-                    ->execute([$name, $dept, $batch, $sport, $level, $medal, $evName, $evDate, $photo, $high, $isFeat, $editId]);
-                $msg = 'Achievement updated.';
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE sports_achievements SET student_or_team_name=?, department_code=?, batch_year=?, sport_name=?, level=?, medal_or_rank=?, event_name=?, event_date=?, photo_url=?, highlights=?, is_featured=?, status='published' WHERE id=?")
+                        ->execute([$name, $dept, $batch, $sport, $level, $medal, $evName, $evDate, $photo, $high, $isFeat, $editId]);
+                    logAudit($pdo, $user, 'SAVE_SPORTS_ACHIEVEMENT', 'Sports Achievement', $name);
+                    $msg = 'Achievement updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM sports_achievements WHERE id = ? LIMIT 1');
+                    $stCur->execute([$editId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'sports_achievements', $editId, $name . ' (' . $evName . ')', $cur, [
+                        'student_or_team_name' => $name, 'department_code' => $dept, 'batch_year' => $batch,
+                        'sport_name' => $sport, 'level' => $level, 'medal_or_rank' => $medal,
+                        'event_name' => $evName, 'event_date' => $evDate, 'photo_url' => $photo,
+                        'highlights' => $high, 'is_featured' => $isFeat,
+                    ]);
+                    $msg = 'Sports achievement update submitted for Super Admin approval.';
+                }
             } else {
                 $ord = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM sports_achievements')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO sports_achievements (student_or_team_name, department_code, batch_year, sport_name, level, medal_or_rank, event_name, event_date, photo_url, highlights, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-                    ->execute([$name, $dept, $batch, $sport, $level, $medal, $evName, $evDate, $photo, $high, $isFeat, $ord]);
-                $msg = 'Sports achievement added.';
+                $pdo->prepare('INSERT INTO sports_achievements (student_or_team_name, department_code, batch_year, sport_name, level, medal_or_rank, event_name, event_date, photo_url, highlights, is_featured, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$name, $dept, $batch, $sport, $level, $medal, $evName, $evDate, $photo, $high, $isFeat, $ord, $isSuper ? 'published' : 'pending_approval']);
+                $newAid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'SAVE_SPORTS_ACHIEVEMENT', 'Sports Achievement', $name);
+                    $msg = 'Sports achievement added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'sports_achievements', $newAid, $name . ' (' . $evName . ')', [
+                        'student_or_team_name' => $name, 'sport_name' => $sport, 'medal_or_rank' => $medal, 'event_name' => $evName,
+                    ]);
+                    $msg = 'Sports achievement submitted for Super Admin approval.';
+                }
             }
-            logAudit($pdo, $user, 'SAVE_SPORTS_ACHIEVEMENT', 'Sports Achievement', $name);
         }
     } elseif ($action === 'delete_achievement' && !empty($_POST['id'])) {
         $tab = 'achievements';
-        $pdo->prepare('DELETE FROM sports_achievements WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Sports achievement removed.';
+        $aid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM sports_achievements WHERE id = ?')->execute([$aid]);
+            $msg = 'Sports achievement removed.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM sports_achievements WHERE id = ? LIMIT 1');
+            $stCur->execute([$aid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'sports_achievements', $aid, (string)$cur['student_or_team_name'], $cur);
+                $msg = 'Achievement deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'save_gallery') {
         $tab = 'gallery';
         $title = trim((string)($_POST['title'] ?? ''));
@@ -195,15 +295,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($title === '' || $mediaUrl === '') $err = 'Title and Photo/Video URL or Upload are required.';
         if ($err === '') {
             $ord = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM sports_gallery')->fetchColumn()) + 1;
-            $pdo->prepare('INSERT INTO sports_gallery (title, media_type, category, media_url, thumbnail_url, event_date, caption, is_published, sort_order) VALUES (?,?,?,?,?,?,?,1,?)')
-                ->execute([$title, $mtype, $cat, $mediaUrl, $mediaUrl, $edate, $cap, $ord]);
-            logAudit($pdo, $user, 'ADD_SPORTS_MEDIA', 'Sports Gallery', $title);
-            $msg = 'Sports gallery item added.';
+            $pdo->prepare('INSERT INTO sports_gallery (title, media_type, category, media_url, thumbnail_url, event_date, caption, is_published, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$title, $mtype, $cat, $mediaUrl, $mediaUrl, $edate, $cap, $isSuper ? 1 : 0, $ord, $isSuper ? 'published' : 'pending_approval']);
+            $newGid = (int)$pdo->lastInsertId();
+            if ($isSuper) {
+                logAudit($pdo, $user, 'ADD_SPORTS_MEDIA', 'Sports Gallery', $title);
+                $msg = 'Sports gallery item added.';
+            } else {
+                cmsQueuePendingCreate($pdo, $user, 'sports_gallery', $newGid, $title, [
+                    'title' => $title, 'media_type' => $mtype, 'category' => $cat, 'is_published' => 1,
+                ]);
+                $msg = 'Sports gallery item submitted for Super Admin approval.';
+            }
         }
     } elseif ($action === 'delete_gallery' && !empty($_POST['id'])) {
         $tab = 'gallery';
-        $pdo->prepare('DELETE FROM sports_gallery WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Gallery item deleted.';
+        $gid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM sports_gallery WHERE id = ?')->execute([$gid]);
+            $msg = 'Gallery item deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM sports_gallery WHERE id = ? LIMIT 1');
+            $stCur->execute([$gid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'sports_gallery', $gid, (string)$cur['title'], $cur);
+                $msg = 'Gallery deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'save_notice') {
         $tab = 'notices';
         $title = trim((string)($_POST['title'] ?? ''));
@@ -221,15 +340,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($title === '') $err = 'Notice title is required.';
         if ($err === '') {
             $ord = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM sports_notices')->fetchColumn()) + 1;
-            $pdo->prepare('INSERT INTO sports_notices (title, notice_date, category, summary, attachment_url, registration_link, is_pinned, is_published, sort_order) VALUES (?,?,?,?,?,?,?,1,?)')
-                ->execute([$title, $ndate, $cat, $summary, $attachUrl, $regLink, $isPinned, $ord]);
-            logAudit($pdo, $user, 'ADD_SPORTS_NOTICE', 'Sports Notice', $title);
-            $msg = 'Sports notice published.';
+            $pdo->prepare('INSERT INTO sports_notices (title, notice_date, category, summary, attachment_url, registration_link, is_pinned, is_published, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$title, $ndate, $cat, $summary, $attachUrl, $regLink, $isPinned, $isSuper ? 1 : 0, $ord, $isSuper ? 'published' : 'pending_approval']);
+            $newNid = (int)$pdo->lastInsertId();
+            if ($isSuper) {
+                logAudit($pdo, $user, 'ADD_SPORTS_NOTICE', 'Sports Notice', $title);
+                $msg = 'Sports notice published.';
+            } else {
+                cmsQueuePendingCreate($pdo, $user, 'sports_notices', $newNid, $title, [
+                    'title' => $title, 'notice_date' => $ndate, 'category' => $cat, 'is_published' => 1,
+                ]);
+                $msg = 'Sports notice submitted for Super Admin approval.';
+            }
         }
     } elseif ($action === 'delete_notice' && !empty($_POST['id'])) {
         $tab = 'notices';
-        $pdo->prepare('DELETE FROM sports_notices WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Sports notice deleted.';
+        $nid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM sports_notices WHERE id = ?')->execute([$nid]);
+            $msg = 'Sports notice deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM sports_notices WHERE id = ? LIMIT 1');
+            $stCur->execute([$nid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'sports_notices', $nid, (string)$cur['title'], $cur);
+                $msg = 'Sports notice deletion submitted for Super Admin approval.';
+            }
+        }
     }
 }
 
@@ -358,7 +496,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <h2 style="margin-top:0;">Existing Sports Facilities (<?= count($facilities) ?>)</h2>
     <?php foreach ($facilities as $f): ?>
       <div class="admin-list-row">
-        <div><strong><?= e($f['name']) ?></strong><div style="font-size:0.78rem;color:#78716C;"><?= e($f['facility_type']) ?> · <?= e((string)$f['dimensions_or_capacity']) ?> · <?= e((string)$f['timings']) ?></div></div>
+        <div><strong><?= e($f['name']) ?></strong> <?= cmsModerationStatusBadge((string)($f['status'] ?? 'published')) ?><div style="font-size:0.78rem;color:#78716C;"><?= e($f['facility_type']) ?> · <?= e((string)$f['dimensions_or_capacity']) ?> · <?= e((string)$f['timings']) ?></div></div>
         <div style="display:flex;gap:0.4rem;">
           <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_facility"><input type="hidden" name="id" value="<?= (int)$f['id'] ?>"><button type="submit" name="dir" value="up" class="btn-outline btn-sm">&uarr;</button><button type="submit" name="dir" value="down" class="btn-outline btn-sm">&darr;</button></form>
           <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_facility"><input type="hidden" name="id" value="<?= (int)$f['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
@@ -384,14 +522,17 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <label style="font-size:0.82rem;font-weight:600;">Banner Photo<input type="file" name="banner_file" accept="image/*" style="width:100%;margin-top:3px;"></label>
     </div>
     <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.55rem;">Description<textarea name="description" rows="2" style="width:100%;padding:0.45rem;margin-top:3px;"></textarea></label>
-    <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.65rem;"><input type="checkbox" name="is_published" value="1" checked> Published on Website</label>
+    <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin-bottom:0.65rem;font-size:0.82rem;font-weight:600;">
+      <label><input type="checkbox" name="is_published" value="1" checked> Published on Website</label>
+      <label><input type="checkbox" name="is_shareable" value="1" checked> Enable Social Share Buttons</label>
+    </div>
     <button type="submit" class="btn-primary">Add Sports Event</button>
   </form>
   <div class="card">
     <h2 style="margin-top:0;">Sports Events (<?= count($events) ?>)</h2>
     <?php foreach ($events as $ev): ?>
       <div class="admin-list-row">
-        <div><strong><?= e($ev['title']) ?></strong><div style="font-size:0.78rem;color:#78716C;"><?= e($ev['event_date']) ?> · <?= e($ev['event_type']) ?> · <?= e($ev['status']) ?></div></div>
+        <div><strong><?= e($ev['title']) ?></strong> <?= cmsModerationStatusBadge((string)($ev['moderation_status'] ?? 'published')) ?><div style="font-size:0.78rem;color:#78716C;"><?= e($ev['event_date']) ?> · <?= e($ev['event_type']) ?> · <?= e($ev['status']) ?></div></div>
         <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_event"><input type="hidden" name="id" value="<?= (int)$ev['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
       </div>
     <?php endforeach; ?>
@@ -420,7 +561,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <h2 style="margin-top:0;">Student Sports Medalists (<?= count($achievs) ?>)</h2>
     <?php foreach ($achievs as $ac): ?>
       <div class="admin-list-row">
-        <div><strong><?= e($ac['student_or_team_name']) ?> (<?= e($ac['sport_name']) ?>)</strong><div style="font-size:0.78rem;color:#78716C;"><?= e($ac['level']) ?> · <?= e($ac['medal_or_rank']) ?> · <?= e($ac['event_name']) ?></div></div>
+        <div><strong><?= e($ac['student_or_team_name']) ?> (<?= e($ac['sport_name']) ?>)</strong> <?= cmsModerationStatusBadge((string)($ac['status'] ?? 'published')) ?><div style="font-size:0.78rem;color:#78716C;"><?= e($ac['level']) ?> · <?= e($ac['medal_or_rank']) ?> · <?= e($ac['event_name']) ?></div></div>
         <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_achievement"><input type="hidden" name="id" value="<?= (int)$ac['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
       </div>
     <?php endforeach; ?>
@@ -446,7 +587,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <h2 style="margin-top:0;">Sports Gallery (<?= count($gallery) ?>)</h2>
     <?php foreach ($gallery as $g): ?>
       <div class="admin-list-row">
-        <div><strong><?= e($g['title']) ?></strong><div style="font-size:0.78rem;color:#78716C;"><?= e($g['media_type']) ?> · <?= e((string)$g['category']) ?> · <?= e((string)$g['event_date']) ?></div></div>
+        <div><strong><?= e($g['title']) ?></strong> <?= cmsModerationStatusBadge((string)($g['status'] ?? 'published')) ?><div style="font-size:0.78rem;color:#78716C;"><?= e($g['media_type']) ?> · <?= e((string)$g['category']) ?> · <?= e((string)$g['event_date']) ?></div></div>
         <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_gallery"><input type="hidden" name="id" value="<?= (int)$g['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
       </div>
     <?php endforeach; ?>
@@ -473,7 +614,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     <h2 style="margin-top:0;">Sports Notices (<?= count($notices) ?>)</h2>
     <?php foreach ($notices as $nt): ?>
       <div class="admin-list-row">
-        <div><strong><?= !empty($nt['is_pinned']) ? '[PINNED] ' : '' ?><?= e($nt['title']) ?></strong><div style="font-size:0.78rem;color:#78716C;"><?= e((string)$nt['category']) ?> · <?= e((string)$nt['notice_date']) ?></div></div>
+        <div><strong><?= !empty($nt['is_pinned']) ? '[PINNED] ' : '' ?><?= e($nt['title']) ?></strong> <?= cmsModerationStatusBadge((string)($nt['status'] ?? 'published')) ?><div style="font-size:0.78rem;color:#78716C;"><?= e((string)$nt['category']) ?> · <?= e((string)$nt['notice_date']) ?></div></div>
         <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_notice"><input type="hidden" name="id" value="<?= (int)$nt['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
       </div>
     <?php endforeach; ?>

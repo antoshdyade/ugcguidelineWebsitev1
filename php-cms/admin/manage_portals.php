@@ -160,25 +160,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($canPlacements && $action === 'save_stat') {
         $tab = 'placements';
         $section = 'stats';
+        $isSuper = cmsIsSuperAdmin($user);
         $sid = (int)($_POST['id'] ?? 0);
-        $vals = [
-            trim((string)$_POST['academic_year']),
-            trim((string)$_POST['branch']),
-            (int)$_POST['eligible_students'],
-            (int)$_POST['placed_students'],
-            (float)$_POST['highest_package_lpa'],
-            (float)$_POST['average_package_lpa'],
-            trim((string)$_POST['top_recruiters_list']),
+        $statPayload = [
+            'academic_year'       => trim((string)$_POST['academic_year']),
+            'branch'              => trim((string)$_POST['branch']),
+            'eligible_students'   => (int)$_POST['eligible_students'],
+            'placed_students'     => (int)$_POST['placed_students'],
+            'highest_package_lpa' => (float)$_POST['highest_package_lpa'],
+            'average_package_lpa' => (float)$_POST['average_package_lpa'],
+            'top_recruiters_list' => trim((string)$_POST['top_recruiters_list']),
         ];
+        $statTitle = $statPayload['academic_year'] . ' · ' . $statPayload['branch'];
         if ($sid > 0) {
-            $pdo->prepare('UPDATE placement_stats SET academic_year=?, branch=?, eligible_students=?, placed_students=?, highest_package_lpa=?, average_package_lpa=?, top_recruiters_list=? WHERE id=?')
-                ->execute(array_merge($vals, [$sid]));
-            $msg = 'Branch placement statistic updated.';
+            if ($isSuper) {
+                $pdo->prepare("UPDATE placement_stats SET academic_year=?, branch=?, eligible_students=?, placed_students=?, highest_package_lpa=?, average_package_lpa=?, top_recruiters_list=?, status='published' WHERE id=?")
+                    ->execute([$statPayload['academic_year'], $statPayload['branch'], $statPayload['eligible_students'], $statPayload['placed_students'], $statPayload['highest_package_lpa'], $statPayload['average_package_lpa'], $statPayload['top_recruiters_list'], $sid]);
+                $msg = 'Branch placement statistic updated.';
+            } else {
+                $stCur = $pdo->prepare('SELECT * FROM placement_stats WHERE id = ? LIMIT 1');
+                $stCur->execute([$sid]);
+                $cur = $stCur->fetch() ?: [];
+                cmsQueuePendingUpdate($pdo, $user, 'placement_stats', $sid, $statTitle, $cur, $statPayload);
+                $msg = 'Branch placement statistic update submitted for Super Admin approval.';
+            }
         } else {
             $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM placement_stats')->fetchColumn()) + 1;
-            $pdo->prepare('INSERT INTO placement_stats (academic_year, branch, eligible_students, placed_students, highest_package_lpa, average_package_lpa, top_recruiters_list, sort_order) VALUES (?,?,?,?,?,?,?,?)')
-                ->execute(array_merge($vals, [$next]));
-            $msg = 'Branch placement statistic added.';
+            $pdo->prepare('INSERT INTO placement_stats (academic_year, branch, eligible_students, placed_students, highest_package_lpa, average_package_lpa, top_recruiters_list, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?)')
+                ->execute([$statPayload['academic_year'], $statPayload['branch'], $statPayload['eligible_students'], $statPayload['placed_students'], $statPayload['highest_package_lpa'], $statPayload['average_package_lpa'], $statPayload['top_recruiters_list'], $next, $isSuper ? 'published' : 'pending_approval']);
+            $newSid = (int)$pdo->lastInsertId();
+            if ($isSuper) {
+                $msg = 'Branch placement statistic added.';
+            } else {
+                cmsQueuePendingCreate($pdo, $user, 'placement_stats', $newSid, $statTitle, $statPayload);
+                $msg = 'Branch placement statistic submitted for Super Admin approval.';
+            }
         }
     } elseif ($canPlacements && $action === 'move_stat' && !empty($_POST['id'])) {
         $tab = 'placements';
@@ -188,11 +204,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($canPlacements && $action === 'delete_stat' && !empty($_POST['id'])) {
         $tab = 'placements';
         $section = 'stats';
-        $pdo->prepare('DELETE FROM placement_stats WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Placement statistic row deleted.';
+        $sid = (int)$_POST['id'];
+        if (cmsIsSuperAdmin($user)) {
+            $pdo->prepare('DELETE FROM placement_stats WHERE id = ?')->execute([$sid]);
+            $msg = 'Placement statistic row deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM placement_stats WHERE id = ? LIMIT 1');
+            $stCur->execute([$sid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'placement_stats', $sid, $cur['academic_year'] . ' · ' . $cur['branch'], $cur);
+                $msg = 'Placement statistic deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($canPlacements && $action === 'save_notice') {
         $tab = 'placements';
         $section = 'notices';
+        $isSuper = cmsIsSuperAdmin($user);
         $nid = (int)($_POST['notice_id'] ?? 0);
         $title = trim((string)($_POST['title'] ?? ''));
         $noticeDate = trim((string)($_POST['notice_date'] ?? date('Y-m-d')));
@@ -212,21 +240,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $linkLabel = trim((string)($_POST['link_label'] ?? ''));
         $isPinned = !empty($_POST['is_pinned']) ? 1 : 0;
+        $isShareable = !empty($_POST['is_shareable']) ? 1 : 0;
 
         if ($err === '') {
             if ($title === '') {
                 $err = 'Notice title is required.';
             } elseif ($nid > 0) {
-                $pdo->prepare('UPDATE placement_notices SET title=?, notice_date=?, category=?, summary=?, attachment_url=?, link_label=?, is_pinned=? WHERE id=?')
-                    ->execute([$title, $noticeDate, $category, $summaryText, $attachmentUrl, $linkLabel, $isPinned, $nid]);
-                logAudit($pdo, $user, 'UPDATE_PLACEMENT_NOTICE', 'Placements Notice', $title);
-                $msg = 'Student notice updated.';
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE placement_notices SET title=?, notice_date=?, category=?, summary=?, attachment_url=?, link_label=?, is_pinned=?, is_shareable=?, status='published' WHERE id=?")
+                        ->execute([$title, $noticeDate, $category, $summaryText, $attachmentUrl, $linkLabel, $isPinned, $isShareable, $nid]);
+                    logAudit($pdo, $user, 'UPDATE_PLACEMENT_NOTICE', 'Placements Notice', $title);
+                    $msg = 'Student notice updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM placement_notices WHERE id = ? LIMIT 1');
+                    $stCur->execute([$nid]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'placement_notices', $nid, $title, $cur, [
+                        'title' => $title, 'notice_date' => $noticeDate, 'category' => $category,
+                        'summary' => $summaryText, 'attachment_url' => $attachmentUrl,
+                        'link_label' => $linkLabel, 'is_pinned' => $isPinned, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Student notice update submitted for Super Admin approval.';
+                }
             } else {
                 $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM placement_notices')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO placement_notices (title, notice_date, category, summary, attachment_url, link_label, is_pinned, sort_order) VALUES (?,?,?,?,?,?,?,?)')
-                    ->execute([$title, $noticeDate, $category, $summaryText, $attachmentUrl, $linkLabel, $isPinned, $next]);
-                logAudit($pdo, $user, 'ADD_PLACEMENT_NOTICE', 'Placements Notice', $title);
-                $msg = 'Student notice published.';
+                $pdo->prepare('INSERT INTO placement_notices (title, notice_date, category, summary, attachment_url, link_label, is_pinned, is_shareable, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$title, $noticeDate, $category, $summaryText, $attachmentUrl, $linkLabel, $isPinned, $isShareable, $next, $isSuper ? 'published' : 'pending_approval']);
+                $newNid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'ADD_PLACEMENT_NOTICE', 'Placements Notice', $title);
+                    $msg = 'Student notice published.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'placement_notices', $newNid, $title, [
+                        'title' => $title, 'notice_date' => $noticeDate, 'category' => $category, 'is_shareable' => $isShareable,
+                    ]);
+                    $msg = 'Student notice submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($canPlacements && $action === 'move_notice' && !empty($_POST['id'])) {
@@ -237,11 +286,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($canPlacements && $action === 'delete_notice' && !empty($_POST['id'])) {
         $tab = 'placements';
         $section = 'notices';
-        $pdo->prepare('DELETE FROM placement_notices WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Student notice removed.';
+        $nid = (int)$_POST['id'];
+        if (cmsIsSuperAdmin($user)) {
+            $pdo->prepare('DELETE FROM placement_notices WHERE id = ?')->execute([$nid]);
+            $msg = 'Student notice removed.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM placement_notices WHERE id = ? LIMIT 1');
+            $stCur->execute([$nid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'placement_notices', $nid, (string)$cur['title'], $cur);
+                $msg = 'Student notice deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($canPlacements && $action === 'save_story') {
         $tab = 'placements';
         $section = 'congratulations';
+        $isSuper = cmsIsSuperAdmin($user);
         $srId = (int)($_POST['story_id'] ?? 0);
         $photoUrl = trim((string)($_POST['existing_photo'] ?? 'assets/images/principal.jpg'));
         if (!empty($_FILES['photo']['name'])) {
@@ -252,43 +313,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $entryType = trim((string)($_POST['entry_type'] ?? 'Campus Placement')) ?: 'Campus Placement';
         $headline = trim((string)($_POST['headline'] ?? ''));
         $isFeatured = !empty($_POST['is_featured']) ? 1 : 0;
+        $isShareable = !empty($_POST['is_shareable']) ? 1 : 0;
+        $studentName = trim((string)$_POST['student_name']);
+        $companyName = trim((string)$_POST['company']);
 
         if ($err === '') {
+            $storyPayload = [
+                'entry_type'   => $entryType,
+                'headline'     => $headline,
+                'student_name' => $studentName,
+                'batch_year'   => trim((string)$_POST['batch_year']),
+                'branch'       => trim((string)$_POST['branch']),
+                'company'      => $companyName,
+                'role_title'   => trim((string)$_POST['role_title']),
+                'package_lpa'  => trim((string)$_POST['package_lpa']),
+                'photo_url'    => $photoUrl,
+                'quote_text'   => trim((string)$_POST['quote_text']),
+                'is_featured'  => $isFeatured,
+                'is_shareable' => $isShareable,
+            ];
             if ($srId > 0) {
-                $pdo->prepare('UPDATE placement_stories SET entry_type=?, headline=?, student_name=?, batch_year=?, branch=?, company=?, role_title=?, package_lpa=?, photo_url=?, quote_text=?, is_featured=? WHERE id=?')
-                    ->execute([
-                        $entryType,
-                        $headline,
-                        trim((string)$_POST['student_name']),
-                        trim((string)$_POST['batch_year']),
-                        trim((string)$_POST['branch']),
-                        trim((string)$_POST['company']),
-                        trim((string)$_POST['role_title']),
-                        trim((string)$_POST['package_lpa']),
-                        $photoUrl,
-                        trim((string)$_POST['quote_text']),
-                        $isFeatured,
-                        $srId,
-                    ]);
-                $msg = 'Congratulations Desk entry updated.';
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE placement_stories SET entry_type=?, headline=?, student_name=?, batch_year=?, branch=?, company=?, role_title=?, package_lpa=?, photo_url=?, quote_text=?, is_featured=?, is_shareable=?, status='published' WHERE id=?")
+                        ->execute([
+                            $storyPayload['entry_type'], $storyPayload['headline'], $storyPayload['student_name'],
+                            $storyPayload['batch_year'], $storyPayload['branch'], $storyPayload['company'],
+                            $storyPayload['role_title'], $storyPayload['package_lpa'], $storyPayload['photo_url'],
+                            $storyPayload['quote_text'], $isFeatured, $isShareable, $srId,
+                        ]);
+                    $msg = 'Congratulations Desk entry updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM placement_stories WHERE id = ? LIMIT 1');
+                    $stCur->execute([$srId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'placement_stories', $srId, $studentName . ' (' . $companyName . ')', $cur, $storyPayload);
+                    $msg = 'Congratulations Desk update submitted for Super Admin approval.';
+                }
             } else {
                 $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM placement_stories')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO placement_stories (entry_type, headline, student_name, batch_year, branch, company, role_title, package_lpa, photo_url, quote_text, is_featured, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+                $pdo->prepare('INSERT INTO placement_stories (entry_type, headline, student_name, batch_year, branch, company, role_title, package_lpa, photo_url, quote_text, is_featured, is_shareable, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                     ->execute([
-                        $entryType,
-                        $headline,
-                        trim((string)$_POST['student_name']),
-                        trim((string)$_POST['batch_year']),
-                        trim((string)$_POST['branch']),
-                        trim((string)$_POST['company']),
-                        trim((string)$_POST['role_title']),
-                        trim((string)$_POST['package_lpa']),
-                        $photoUrl,
-                        trim((string)$_POST['quote_text']),
-                        $isFeatured,
-                        $next,
+                        $storyPayload['entry_type'], $storyPayload['headline'], $storyPayload['student_name'],
+                        $storyPayload['batch_year'], $storyPayload['branch'], $storyPayload['company'],
+                        $storyPayload['role_title'], $storyPayload['package_lpa'], $storyPayload['photo_url'],
+                        $storyPayload['quote_text'], $isFeatured, $isShareable, $next, $isSuper ? 'published' : 'pending_approval',
                     ]);
-                $msg = 'Congratulations Desk student entry added.';
+                $newSrid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    $msg = 'Congratulations Desk student entry added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'placement_stories', $newSrid, $studentName . ' (' . $companyName . ')', $storyPayload);
+                    $msg = 'Congratulations Desk entry submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($canPlacements && $action === 'move_story' && !empty($_POST['id'])) {
@@ -299,8 +375,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($canPlacements && $action === 'delete_story' && !empty($_POST['id'])) {
         $tab = 'placements';
         $section = 'congratulations';
-        $pdo->prepare('DELETE FROM placement_stories WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Congratulations Desk entry removed.';
+        $srId = (int)$_POST['id'];
+        if (cmsIsSuperAdmin($user)) {
+            $pdo->prepare('DELETE FROM placement_stories WHERE id = ?')->execute([$srId]);
+            $msg = 'Congratulations Desk entry removed.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM placement_stories WHERE id = ? LIMIT 1');
+            $stCur->execute([$srId]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'placement_stories', $srId, (string)$cur['student_name'], $cur);
+                $msg = 'Congratulations Desk deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($canPlacements && $action === 'save_drive') {
         $tab = 'placements';
         $section = 'drives';
@@ -388,17 +475,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         if ($err === '') {
+            $isSuper = cmsIsSuperAdmin($user);
             if ($csId > 0) {
-                $pdo->prepare('UPDATE placement_custom_sections SET title=?, subtitle=?, section_type=?, html_content=?, payload_json=?, cta_label=?, cta_url=?, is_published=? WHERE id=?')
-                    ->execute([$csTitle, $csSubtitle, $csType, $csHtml, $csPayload, $csCtaLabel, $csCtaUrl, $isPublished, $csId]);
-                logAudit($pdo, $user, 'UPDATE_PLACEMENT_CUSTOM', 'Placements Custom', $csTitle);
-                $msg = 'Custom placement section updated.';
+                if ($isSuper) {
+                    $pdo->prepare("UPDATE placement_custom_sections SET title=?, subtitle=?, section_type=?, html_content=?, payload_json=?, cta_label=?, cta_url=?, is_published=?, status='published' WHERE id=?")
+                        ->execute([$csTitle, $csSubtitle, $csType, $csHtml, $csPayload, $csCtaLabel, $csCtaUrl, $isPublished, $csId]);
+                    logAudit($pdo, $user, 'UPDATE_PLACEMENT_CUSTOM', 'Placements Custom', $csTitle);
+                    $msg = 'Custom placement section updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM placement_custom_sections WHERE id = ? LIMIT 1');
+                    $stCur->execute([$csId]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'placement_custom_sections', $csId, $csTitle, $cur, [
+                        'title' => $csTitle, 'subtitle' => $csSubtitle, 'section_type' => $csType,
+                        'html_content' => $csHtml, 'payload_json' => $csPayload,
+                        'cta_label' => $csCtaLabel, 'cta_url' => $csCtaUrl, 'is_published' => $isPublished,
+                    ]);
+                    $msg = 'Custom placement section update submitted for Super Admin approval.';
+                }
             } else {
                 $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM placement_custom_sections')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO placement_custom_sections (title, subtitle, section_type, html_content, payload_json, cta_label, cta_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?)')
-                    ->execute([$csTitle, $csSubtitle, $csType, $csHtml, $csPayload, $csCtaLabel, $csCtaUrl, $isPublished, $next]);
-                logAudit($pdo, $user, 'ADD_PLACEMENT_CUSTOM', 'Placements Custom', $csTitle);
-                $msg = 'Custom placement section added.';
+                $pdo->prepare('INSERT INTO placement_custom_sections (title, subtitle, section_type, html_content, payload_json, cta_label, cta_url, is_published, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$csTitle, $csSubtitle, $csType, $csHtml, $csPayload, $csCtaLabel, $csCtaUrl, $isSuper ? $isPublished : 0, $next, $isSuper ? 'published' : 'pending_approval']);
+                $newCsid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'ADD_PLACEMENT_CUSTOM', 'Placements Custom', $csTitle);
+                    $msg = 'Custom placement section added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'placement_custom_sections', $newCsid, $csTitle, [
+                        'title' => $csTitle, 'subtitle' => $csSubtitle, 'section_type' => $csType, 'is_published' => $isPublished,
+                    ]);
+                    $msg = 'Custom placement section submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($canPlacements && $action === 'move_custom_section' && !empty($_POST['id'])) {
@@ -409,13 +517,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($canPlacements && $action === 'toggle_custom_section' && !empty($_POST['id'])) {
         $tab = 'placements';
         $section = 'custom_data';
-        $pdo->prepare('UPDATE placement_custom_sections SET is_published = 1 - is_published WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Custom section visibility toggled.';
+        $csId = (int)$_POST['id'];
+        if (cmsIsSuperAdmin($user)) {
+            $pdo->prepare("UPDATE placement_custom_sections SET is_published = 1 - is_published, status = 'published' WHERE id = ?")->execute([$csId]);
+            $msg = 'Custom section visibility toggled.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM placement_custom_sections WHERE id = ? LIMIT 1');
+            $stCur->execute([$csId]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingUpdate($pdo, $user, 'placement_custom_sections', $csId, (string)$cur['title'], $cur, ['is_published' => !empty($cur['is_published']) ? 0 : 1]);
+                $msg = 'Custom section visibility change submitted for Super Admin approval.';
+            }
+        }
     } elseif ($canPlacements && $action === 'delete_custom_section' && !empty($_POST['id'])) {
         $tab = 'placements';
         $section = 'custom_data';
-        $pdo->prepare('DELETE FROM placement_custom_sections WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Custom placement section deleted.';
+        $csId = (int)$_POST['id'];
+        if (cmsIsSuperAdmin($user)) {
+            $pdo->prepare('DELETE FROM placement_custom_sections WHERE id = ?')->execute([$csId]);
+            $msg = 'Custom placement section deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM placement_custom_sections WHERE id = ? LIMIT 1');
+            $stCur->execute([$csId]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'placement_custom_sections', $csId, (string)$cur['title'], $cur);
+                $msg = 'Custom section deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($canGrievances && $action === 'update_grievance' && !empty($_POST['id'])) {
         $tab = 'grievances';
         $pdo->prepare('UPDATE grievances SET status = ?, resolution_note = ?, updated_at = ? WHERE id = ?')
@@ -817,7 +947,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
                   <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_stat"><input type="hidden" name="id" value="<?= (int)$st['id'] ?>"><button type="submit" name="dir" value="up" class="btn-outline btn-sm">&uarr;</button><button type="submit" name="dir" value="down" class="btn-outline btn-sm">&darr;</button></form>
                 </td>
                 <td><?= e($st['academic_year']) ?></td>
-                <td><strong><?= e($st['branch']) ?></strong></td>
+                <td><strong><?= e($st['branch']) ?></strong> <?= cmsModerationStatusBadge((string)($st['status'] ?? 'published')) ?></td>
                 <td><?= $el ?></td>
                 <td><strong><?= $pl ?></strong></td>
                 <td><strong><?= e((string)$pct) ?>%</strong></td>
@@ -882,10 +1012,16 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <label style="font-size:0.8rem;font-weight:600;">Upload Circular PDF / Doc (Optional):
           <input type="file" name="notice_file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
         </label>
-        <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:700;color:#B45309;">
-          <input type="checkbox" name="is_pinned" value="1" <?= !empty($editingNotice['is_pinned']) ? 'checked' : '' ?>>
-          Pin as Priority Notice (Shown at Top)
-        </label>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;">
+          <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:700;color:#B45309;">
+            <input type="checkbox" name="is_pinned" value="1" <?= !empty($editingNotice['is_pinned']) ? 'checked' : '' ?>>
+            Pin as Priority Notice (Shown at Top)
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:600;">
+            <input type="checkbox" name="is_shareable" value="1" <?= (!$editingNotice || !isset($editingNotice['is_shareable']) || !empty($editingNotice['is_shareable'])) ? 'checked' : '' ?>>
+            Enable Social Share Buttons
+          </label>
+        </div>
       </div>
       <?php if (!empty($editingNotice['attachment_url'])): ?>
         <label style="display:inline-flex;align-items:center;gap:0.35rem;margin-bottom:0.65rem;font-size:0.78rem;color:#B91C1C;font-weight:600;">
@@ -906,7 +1042,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <div class="admin-list-row">
             <div style="flex:1;padding-right:0.75rem;">
               <div style="font-size:0.74rem;font-weight:700;color:var(--secondary-color);text-transform:uppercase;">
-                <?= !empty($nr['is_pinned']) ? '[PINNED] ' : '' ?><?= e((string)$nr['category']) ?> · <?= e((string)$nr['notice_date']) ?>
+                <?= !empty($nr['is_pinned']) ? '[PINNED] ' : '' ?><?= e((string)$nr['category']) ?> · <?= e((string)$nr['notice_date']) ?> <?= cmsModerationStatusBadge((string)($nr['status'] ?? 'published')) ?>
               </div>
               <strong><?= e((string)$nr['title']) ?></strong>
               <?php if (!empty($nr['summary'])): ?>
@@ -968,10 +1104,16 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <label style="font-size:0.82rem;font-weight:600;">Student Photograph (1:1 Auto-Crop):
           <input type="file" name="photo" data-aspect="1:1" accept="image/jpeg,image/png,image/webp">
         </label>
-        <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:700;color:var(--primary-color);">
-          <input type="checkbox" name="is_featured" value="1" <?= !empty($editingStory['is_featured']) ? 'checked' : '' ?>>
-          Highlight as Featured Achiever
-        </label>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;">
+          <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:700;color:var(--primary-color);">
+            <input type="checkbox" name="is_featured" value="1" <?= !empty($editingStory['is_featured']) ? 'checked' : '' ?>>
+            Highlight as Featured Achiever
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:600;">
+            <input type="checkbox" name="is_shareable" value="1" <?= (!$editingStory || !isset($editingStory['is_shareable']) || !empty($editingStory['is_shareable'])) ? 'checked' : '' ?>>
+            Enable Social Share Buttons
+          </label>
+        </div>
       </div>
 
       <button type="submit" class="btn-primary"><?= $editingStory ? 'Update Congratulations Card' : 'Add to Congratulations Desk' ?></button>
@@ -986,7 +1128,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             <img src="<?= e(mediaUrl($sr['photo_url'] ?? '', 'assets/images/principal.jpg')) ?>" alt="" style="width:52px;height:52px;border-radius:10px;object-fit:cover;border:1px solid var(--border-color);">
             <div>
               <div style="font-size:0.72rem;font-weight:700;color:var(--secondary-color);text-transform:uppercase;">
-                <?= e((string)($sr['entry_type'] ?? 'Campus Placement')) ?><?= !empty($sr['is_featured']) ? ' · FEATURED' : '' ?>
+                <?= e((string)($sr['entry_type'] ?? 'Campus Placement')) ?><?= !empty($sr['is_featured']) ? ' · FEATURED' : '' ?> <?= cmsModerationStatusBadge((string)($sr['status'] ?? 'published')) ?>
               </div>
               <strong><?= e($sr['student_name']) ?> — <?= e($sr['company']) ?> (<?= e($sr['package_lpa']) ?>)</strong>
               <div style="font-size:0.78rem;color:#78716C;"><?= e($sr['role_title']) ?> · <?= e($sr['branch']) ?> Batch <?= e($sr['batch_year']) ?></div>
@@ -1148,7 +1290,8 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <div class="admin-list-row">
             <div>
               <span style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:var(--secondary-color);"><?= e((string)$cs['section_type']) ?></span>
-              · <span style="font-size:0.72rem;font-weight:700;color:<?= !empty($cs['is_published']) ? '#047857' : '#B91C1C' ?>;"><?= !empty($cs['is_published']) ? 'Published' : 'Draft / Hidden' ?></span><br>
+              · <span style="font-size:0.72rem;font-weight:700;color:<?= !empty($cs['is_published']) ? '#047857' : '#B91C1C' ?>;"><?= !empty($cs['is_published']) ? 'Published' : 'Draft / Hidden' ?></span>
+              <?= cmsModerationStatusBadge((string)($cs['status'] ?? 'published')) ?><br>
               <strong><?= e((string)$cs['title']) ?></strong>
               <?php if (!empty($cs['subtitle'])): ?>
                 <div style="font-size:0.78rem;color:#78716C;"><?= e((string)$cs['subtitle']) ?></div>

@@ -27,16 +27,16 @@ try {
 } catch (Throwable $ignored) {
 }
 
-$stats = $pdo->query('SELECT * FROM placement_stats ORDER BY sort_order ASC, id ASC')->fetchAll();
-$stories = $pdo->query('SELECT * FROM placement_stories ORDER BY is_featured DESC, sort_order ASC, id ASC')->fetchAll();
+$stats = $pdo->query("SELECT * FROM placement_stats WHERE status = 'published' ORDER BY sort_order ASC, id ASC")->fetchAll();
+$stories = $pdo->query("SELECT * FROM placement_stories WHERE status = 'published' ORDER BY is_featured DESC, sort_order ASC, id ASC")->fetchAll();
 $notices = [];
 try {
-    $notices = $pdo->query('SELECT * FROM placement_notices ORDER BY is_pinned DESC, sort_order ASC, id DESC')->fetchAll();
+    $notices = $pdo->query("SELECT * FROM placement_notices WHERE status = 'published' ORDER BY is_pinned DESC, sort_order ASC, id DESC")->fetchAll();
 } catch (Throwable $ignoredNotices) {
 }
 $customSections = [];
 try {
-    $customSections = $pdo->query('SELECT * FROM placement_custom_sections WHERE is_published = 1 ORDER BY sort_order ASC, id ASC')->fetchAll();
+    $customSections = $pdo->query("SELECT * FROM placement_custom_sections WHERE is_published = 1 AND status = 'published' ORDER BY sort_order ASC, id ASC")->fetchAll();
 } catch (Throwable $ignoredCustom) {
 }
 $drives = getPlacementDrives($pdo);
@@ -323,7 +323,7 @@ require_once __DIR__ . '/includes/header.php';
       <?php foreach ($filteredNotices as $nr):
         $attHref = $resolveDocHref((string)($nr['attachment_url'] ?? ''));
       ?>
-        <article class="tp-notice-item">
+        <article id="placement-notice-<?= (int)$nr['id'] ?>" class="tp-notice-item">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.65rem;">
             <div style="flex:1;min-width:240px;">
               <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.65rem;font-size:0.75rem;margin-bottom:0.35rem;">
@@ -346,6 +346,9 @@ require_once __DIR__ . '/includes/header.php';
               </div>
             <?php endif; ?>
           </div>
+          <?php if (!isset($nr['is_shareable']) || !empty($nr['is_shareable'])): ?>
+            <?= renderPhpSocialShareBar($pdo, (string)$nr['title'], (string)($nr['summary'] ?? ''), baseUrl('placements.php#placement-notice-' . (int)$nr['id']), 'portal', true, true) ?>
+          <?php endif; ?>
         </article>
       <?php endforeach; ?>
     </div>
@@ -391,7 +394,7 @@ require_once __DIR__ . '/includes/header.php';
         $etype = trim((string)($st['entry_type'] ?? 'Campus Placement'));
         $headline = trim((string)($st['headline'] ?? ''));
       ?>
-        <article class="tp-congrats-card">
+        <article id="placement-story-<?= (int)$st['id'] ?>" class="tp-congrats-card">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;font-size:0.72rem;border-bottom:1px solid var(--border-color);padding-bottom:0.45rem;">
             <span style="font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--secondary-color);"><?= e($etype) ?></span>
             <?php if (!empty($st['is_featured'])): ?>
@@ -429,6 +432,10 @@ require_once __DIR__ . '/includes/header.php';
             <p style="margin:0;font-size:0.82rem;color:var(--text-muted);font-style:italic;line-height:1.5;">
               &ldquo;<?= e($st['quote_text']) ?>&rdquo;
             </p>
+          <?php endif; ?>
+
+          <?php if (!isset($st['is_shareable']) || !empty($st['is_shareable'])): ?>
+            <?= renderPhpSocialShareBar($pdo, $st['student_name'] . ' — ' . ($st['company'] ?: 'Congratulations Desk'), (string)($st['headline'] ?: $st['role_title']), baseUrl('placements.php#placement-story-' . (int)$st['id']), 'portal', true, true) ?>
           <?php endif; ?>
         </article>
       <?php endforeach; ?>

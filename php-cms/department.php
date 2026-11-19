@@ -8,12 +8,12 @@ ensureCmsSchemaUpgraded($pdo);
 $deptSlug = $_GET['dept'] ?? 'computer-science';
 $subSlug  = $_GET['sub'] ?? 'about';
 
-$dStmt = $pdo->prepare('SELECT * FROM departments WHERE slug = ? LIMIT 1');
+$dStmt = $pdo->prepare("SELECT * FROM departments WHERE slug = ? AND status = 'published' LIMIT 1");
 $dStmt->execute([$deptSlug]);
 $dept = $dStmt->fetch();
 
 if (!$dept) {
-    $dept = $pdo->query('SELECT * FROM departments ORDER BY sort_order ASC, id ASC LIMIT 1')->fetch();
+    $dept = $pdo->query("SELECT * FROM departments WHERE status = 'published' ORDER BY sort_order ASC, id ASC LIMIT 1")->fetch();
 }
 
 if (!$dept) {
@@ -24,7 +24,7 @@ if (!$dept) {
     exit;
 }
 
-$subStmt = $pdo->prepare('SELECT * FROM department_subpages WHERE department_id = ? AND is_published = 1 ORDER BY sort_order ASC, id ASC');
+$subStmt = $pdo->prepare("SELECT * FROM department_subpages WHERE department_id = ? AND is_published = 1 AND status = 'published' ORDER BY sort_order ASC, id ASC");
 $subStmt->execute([$dept['id']]);
 $subPages = $subStmt->fetchAll();
 
@@ -250,6 +250,13 @@ require_once __DIR__ . '/includes/header.php';
         </div>
       <?php endif; ?>
     <?php endif; ?>
+    <?php
+      $deptShareable = !isset($dept['is_shareable']) || !empty($dept['is_shareable']);
+      $subShareable = $activeSubPage ? (!isset($activeSubPage['is_shareable']) || !empty($activeSubPage['is_shareable'])) : true;
+      $shareTitle = $dept['name'] . ($activeSubPage ? ' — ' . $activeSubPage['title'] : ($subSlug === 'faculty' ? ' — Faculty Directory' : ($subSlug === 'laboratories' ? ' — Laboratories' : ($subSlug === 'library' ? ' — Department Library' : ''))));
+      $shareUrl = baseUrl('department.php?dept=' . urlencode((string)$dept['slug']) . ($subSlug ? '&sub=' . urlencode((string)$subSlug) : ''));
+      echo renderPhpSocialShareBar($pdo, $shareTitle, (string)($dept['overview'] ?? ''), $shareUrl, 'page', $deptShareable && $subShareable);
+    ?>
   </section>
 </div>
 

@@ -11,13 +11,16 @@ import {
   X,
 } from 'lucide-react';
 import { sortByOrder } from '../lib/cmsLogic';
+import { isEntityShareable, isRecordPublished } from '../lib/collegeFeaturesLogic';
 import { CmsHtmlContent } from './CmsHtmlContent';
-import type { Department, DepartmentSubPagePhoto } from '../types/cms';
+import { SocialShareBar } from './SocialMediaWidgets';
+import type { Department, DepartmentSubPagePhoto, SiteSettings } from '../types/cms';
 
 interface DepartmentMicrositeProps {
   departments: Department[];
   deptSlug: string;
   subSlug?: string;
+  settings?: SiteSettings;
   onNavigate: (path: string) => void;
 }
 
@@ -25,18 +28,24 @@ export function DepartmentMicrosite({
   departments,
   deptSlug,
   subSlug = 'about',
+  settings,
   onNavigate,
 }: DepartmentMicrositeProps) {
   const [lightboxPhoto, setLightboxPhoto] = useState<DepartmentSubPagePhoto | null>(null);
-  const dept = departments.find((d) => d.slug === deptSlug) || departments[0];
+  const publishedDepartments = departments.filter((d) => isRecordPublished(d));
+  const dept = publishedDepartments.find((d) => d.slug === deptSlug) || publishedDepartments[0];
   if (!dept) return null;
+
+  const publishedSubPages = (dept.subPages || []).filter(
+    (s) => s.isPublished !== false && isRecordPublished(s),
+  );
 
   const activeSub =
     subSlug === 'faculty' || subSlug === 'laboratories'
       ? subSlug
-      : dept.subPages.find((s) => s.slug === subSlug)?.slug || dept.subPages[0]?.slug || 'about';
+      : publishedSubPages.find((s) => s.slug === subSlug)?.slug || publishedSubPages[0]?.slug || 'about';
 
-  const currentSubPage = dept.subPages.find((s) => s.slug === activeSub);
+  const currentSubPage = publishedSubPages.find((s) => s.slug === activeSub);
 
   return (
     <div className="max-w-[1380px] mx-auto px-4 py-8 space-y-8">
@@ -53,7 +62,7 @@ export function DepartmentMicrosite({
         </nav>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {departments.map((d) => (
+          {publishedDepartments.map((d) => (
             <button
               key={d.id}
               type="button"
@@ -101,7 +110,7 @@ export function DepartmentMicrosite({
             {dept.shortName} Navigation
           </p>
           <ul className="space-y-1">
-            {dept.subPages
+            {publishedSubPages
               .slice()
               .sort((a, b) => a.sortOrder - b.sortOrder)
               .map((sp) => {
@@ -500,6 +509,20 @@ export function DepartmentMicrosite({
               )}
             </div>
           )}
+
+          <SocialShareBar
+            title={
+              currentSubPage
+                ? `${dept.name} — ${currentSubPage.title}`
+                : `${dept.name} (${dept.code})`
+            }
+            summary={dept.overview}
+            settings={settings}
+            location="page"
+            isShareable={
+              isEntityShareable(dept) && (!currentSubPage || isEntityShareable(currentSubPage))
+            }
+          />
         </main>
       </div>
 

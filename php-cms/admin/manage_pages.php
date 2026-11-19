@@ -71,49 +71,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $sortOrder = max(1, (int)($_POST['sort_order'] ?? 1));
             $metaDesc = trim((string)($_POST['meta_description'] ?? ''));
-            $showShareBar = isset($_POST['show_share_bar']) ? 1 : 0;
+            $isShareable = (isset($_POST['is_shareable']) || isset($_POST['show_share_bar'])) ? 1 : 0;
+            $desiredPublished = isset($_POST['is_published']) ? 1 : 0;
+            $titleClean = trim((string)$_POST['title']);
+            $subtitleClean = trim((string)($_POST['subtitle'] ?? ''));
+            $contentHtml = (string)($_POST['content_html'] ?? '<p></p>');
+            $isSuper = cmsIsSuperAdmin($user);
 
             if ($action === 'update' && !empty($_POST['page_id'])) {
-                $stmt = $pdo->prepare(
-                    'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, meta_description = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, show_share_bar = ?, is_published = ?, sort_order = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?'
-                );
-                $stmt->execute([
-                    $targetCatId,
-                    $slug,
-                    trim($_POST['title']),
-                    trim($_POST['subtitle'] ?? ''),
-                    $metaDesc,
-                    $_POST['content_html'] ?? '<p></p>',
-                    $pdfUrl !== '' ? $pdfUrl : null,
-                    $pdfLabel !== '' ? $pdfLabel : null,
-                    $showShareBar,
-                    isset($_POST['is_published']) ? 1 : 0,
-                    $sortOrder,
-                    $user['full_name'],
-                    (int)$_POST['page_id'],
-                ]);
-                logAudit($pdo, $user, 'UPDATE_PAGE', 'Page', $_POST['title']);
-                $msg = 'Disclosure page updated successfully.';
+                $pid = (int)$_POST['page_id'];
+                if ($isSuper) {
+                    $stmt = $pdo->prepare(
+                        'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, meta_description = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, show_share_bar = ?, is_shareable = ?, is_published = ?, sort_order = ?, updated_by = ?, updated_at = CURDATE(), status = \'published\' WHERE id = ?'
+                    );
+                    $stmt->execute([
+                        $targetCatId,
+                        $slug,
+                        $titleClean,
+                        $subtitleClean,
+                        $metaDesc,
+                        $contentHtml,
+                        $pdfUrl !== '' ? $pdfUrl : null,
+                        $pdfLabel !== '' ? $pdfLabel : null,
+                        $isShareable,
+                        $isShareable,
+                        $desiredPublished,
+                        $sortOrder,
+                        $user['full_name'],
+                        $pid,
+                    ]);
+                    logAudit($pdo, $user, 'UPDATE_PAGE', 'Page', $titleClean);
+                    $msg = 'Disclosure page updated and published.';
+                } else {
+                    $proposed = [
+                        'category_id'        => $targetCatId,
+                        'slug'               => $slug,
+                        'title'              => $titleClean,
+                        'subtitle'           => $subtitleClean,
+                        'meta_description'   => $metaDesc,
+                        'content_html'       => $contentHtml,
+                        'attached_pdf_url'   => $pdfUrl !== '' ? $pdfUrl : null,
+                        'attached_pdf_label' => $pdfLabel !== '' ? $pdfLabel : null,
+                        'show_share_bar'     => $isShareable,
+                        'is_shareable'       => $isShareable,
+                        'is_published'       => $desiredPublished,
+                        'sort_order'         => $sortOrder,
+                        'updated_by'         => $user['full_name'],
+                        'updated_at'         => date('Y-m-d'),
+                    ];
+                    cmsQueuePendingUpdate($pdo, $user, 'pages', $pid, $titleClean, $existing, $proposed);
+                    $msg = 'Changes submitted for Super Admin approval. Live page remains unchanged until approved.';
+                }
             } else {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO pages (category_id, slug, title, subtitle, meta_description, content_html, attached_pdf_url, attached_pdf_label, show_share_bar, is_published, sort_order, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())'
+                    'INSERT INTO pages (category_id, slug, title, subtitle, meta_description, content_html, attached_pdf_url, attached_pdf_label, show_share_bar, is_shareable, is_published, sort_order, updated_by, updated_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), ?)'
                 );
                 $stmt->execute([
                     $targetCatId,
                     $slug,
-                    trim($_POST['title']),
-                    trim($_POST['subtitle'] ?? ''),
+                    $titleClean,
+                    $subtitleClean,
                     $metaDesc,
-                    $_POST['content_html'] ?? '<p></p>',
+                    $contentHtml,
                     $pdfUrl !== '' ? $pdfUrl : null,
                     $pdfLabel !== '' ? $pdfLabel : null,
-                    $showShareBar,
-                    isset($_POST['is_published']) ? 1 : 0,
+                    $isShareable,
+                    $isShareable,
+                    $isSuper ? $desiredPublished : 0,
                     $sortOrder,
                     $user['full_name'],
+                    $isSuper ? 'published' : 'pending_approval',
                 ]);
-                logAudit($pdo, $user, 'CREATE_PAGE', 'Page', $_POST['title']);
-                $msg = 'Disclosure page created successfully.';
+                $newPageId = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'CREATE_PAGE', 'Page', $titleClean);
+                    $msg = 'Disclosure page created successfully.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'pages', $newPageId, $titleClean, [
+                        'category_id'        => $targetCatId,
+                        'slug'               => $slug,
+                        'title'              => $titleClean,
+                        'subtitle'           => $subtitleClean,
+                        'meta_description'   => $metaDesc,
+                        'is_shareable'       => $isShareable,
+                        'is_published'       => $desiredPublished,
+                        'sort_order'         => $sortOrder,
+                    ]);
+                    $msg = 'Page submitted for Super Admin approval. It remains hidden until approved.';
+                }
             }
         }
     } elseif ($action === 'toggle_publish' && !empty($_POST['page_id'])) {
@@ -124,10 +169,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $err = 'Access Denied: Cannot change visibility of a page outside your RBAC scope.';
         } else {
             $nextState = !empty($existing['is_published']) ? 0 : 1;
-            $pdo->prepare('UPDATE pages SET is_published = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?')
-                ->execute([$nextState, $user['full_name'], (int)$existing['id']]);
-            logAudit($pdo, $user, $nextState ? 'SHOW_PAGE' : 'HIDE_PAGE', 'Page', $existing['title']);
-            $msg = 'Micro-page "' . $existing['title'] . '" is now ' . ($nextState ? 'Visible (Published).' : 'Hidden (Draft).');
+            if (cmsIsSuperAdmin($user)) {
+                $pdo->prepare("UPDATE pages SET is_published = ?, status = 'published', updated_by = ?, updated_at = CURDATE() WHERE id = ?")
+                    ->execute([$nextState, $user['full_name'], (int)$existing['id']]);
+                logAudit($pdo, $user, $nextState ? 'SHOW_PAGE' : 'HIDE_PAGE', 'Page', $existing['title']);
+                $msg = 'Micro-page "' . $existing['title'] . '" is now ' . ($nextState ? 'Visible (Published).' : 'Hidden (Draft).');
+            } else {
+                cmsQueuePendingUpdate($pdo, $user, 'pages', (int)$existing['id'], (string)$existing['title'], $existing, [
+                    'is_published' => $nextState,
+                    'updated_by'   => $user['full_name'],
+                    'updated_at'   => date('Y-m-d'),
+                ]);
+                $msg = 'Visibility change for "' . $existing['title'] . '" submitted for Super Admin approval.';
+            }
         }
     } elseif ($action === 'delete') {
         $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
@@ -135,11 +189,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $existing = $chk->fetch();
         if (!$existing || !canAccessPage($user, $existing, $existing['cat_slug'])) {
             $err = 'Access Denied: Cannot delete a page outside your RBAC scope.';
-        } else {
+        } elseif (cmsIsSuperAdmin($user)) {
             $stmt = $pdo->prepare('DELETE FROM pages WHERE id = ?');
             $stmt->execute([(int)$_POST['page_id']]);
             logAudit($pdo, $user, 'DELETE_PAGE', 'Page', $existing['title']);
             $msg = 'Page deleted.';
+        } else {
+            cmsQueuePendingDelete($pdo, $user, 'pages', (int)$existing['id'], (string)$existing['title'], $existing);
+            $msg = 'Deletion request for "' . $existing['title'] . '" submitted for Super Admin approval. Live page remains untouched.';
         }
     } elseif ($action === 'move' && !empty($_POST['page_id'])) {
         $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
@@ -252,9 +309,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 
     <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin:0.75rem 0;font-size:0.88rem;font-weight:600;">
       <label><input type="checkbox" name="is_published" <?= (!$editingPage || !empty($editingPage['is_published'])) ? 'checked' : '' ?>> Visible / Published on Website</label>
-      <label><input type="checkbox" name="show_share_bar" <?= (!$editingPage || !isset($editingPage['show_share_bar']) || !empty($editingPage['show_share_bar'])) ? 'checked' : '' ?>> Enable Social Sharing Bar on this Micro-Page</label>
+      <?php $pgShareChecked = !$editingPage || ((int)($editingPage['is_shareable'] ?? $editingPage['show_share_bar'] ?? 1) === 1); ?>
+      <label><input type="checkbox" name="is_shareable" value="1" <?= $pgShareChecked ? 'checked' : '' ?>> Enable Social Share Buttons on this Micro-Page</label>
     </div>
-    <button type="submit" class="btn-primary"><?= $editingPage ? 'Update Disclosure Page' : 'Save &amp; Publish Page' ?></button>
+    <button type="submit" class="btn-primary"><?= $editingPage ? (cmsIsSuperAdmin($user) ? 'Update Disclosure Page' : 'Submit Page Update for Approval') : (cmsIsSuperAdmin($user) ? 'Save &amp; Publish Page' : 'Submit Page for Super Admin Approval') ?></button>
     <?php if ($editingPage): ?>
       <a href="manage_pages.php" class="btn-secondary" style="margin-left:0.5rem;">Cancel Edit</a>
     <?php endif; ?>
@@ -288,6 +346,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
               <span class="badge <?= !empty($pg['is_published']) ? 'badge-ok' : 'badge-warn' ?>">
                 <?= !empty($pg['is_published']) ? 'Visible' : 'Hidden' ?>
               </span>
+              <?= cmsModerationStatusBadge((string)($pg['status'] ?? 'published')) ?>
             </td>
             <td><?= e($pg['updated_at']) ?></td>
             <td style="white-space:nowrap;">

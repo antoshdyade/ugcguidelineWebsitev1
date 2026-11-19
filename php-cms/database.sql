@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS departments (
   hero_image_url VARCHAR(255) DEFAULT 'assets/images/hero_robotics.jpg',
   library_json TEXT NULL,
   faculty_field_schema_json TEXT NULL,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -99,7 +101,9 @@ CREATE TABLE IF NOT EXISTS pages (
   attached_pdf_url VARCHAR(500) NULL,
   attached_pdf_label VARCHAR(255) NULL,
   is_published TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   show_share_bar TINYINT(1) DEFAULT 1,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
   sort_order INT DEFAULT 1,
   updated_by VARCHAR(120) DEFAULT 'Super Admin',
   updated_at DATE NOT NULL,
@@ -119,6 +123,8 @@ CREATE TABLE IF NOT EXISTS department_subpages (
   items_json MEDIUMTEXT NULL,
   sort_order INT DEFAULT 1,
   is_published TINYINT(1) DEFAULT 1,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   updated_at DATE NOT NULL,
   UNIQUE KEY uq_dept_sub (department_id, slug),
   CONSTRAINT fk_subpage_dept FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
@@ -169,6 +175,7 @@ CREATE TABLE IF NOT EXISTS leadership_profiles (
   photo_url VARCHAR(255) NOT NULL,
   bio TEXT,
   committee_group VARCHAR(120) NOT NULL DEFAULT 'Statutory Officer',
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -181,7 +188,8 @@ CREATE TABLE IF NOT EXISTS sliders (
   cta_label VARCHAR(100) DEFAULT 'Learn More',
   cta_link VARCHAR(255) DEFAULT 'page.php?slug=about-overview',
   sort_order INT DEFAULT 1,
-  is_active TINYINT(1) DEFAULT 1
+  is_active TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS ticker_items (
@@ -190,6 +198,7 @@ CREATE TABLE IF NOT EXISTS ticker_items (
   link_url VARCHAR(255) NOT NULL,
   badge_text VARCHAR(60) DEFAULT 'Notice',
   is_active TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -202,6 +211,8 @@ CREATE TABLE IF NOT EXISTS campus_events (
   content_html MEDIUMTEXT,
   image_url VARCHAR(255) DEFAULT '',
   is_featured TINYINT(1) DEFAULT 1,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1,
   FULLTEXT KEY ft_events (title, summary)
 ) ENGINE=InnoDB;
@@ -219,6 +230,7 @@ CREATE TABLE IF NOT EXISTS documents (
   uploaded_at DATE NOT NULL,
   uploaded_by VARCHAR(120) NOT NULL,
   is_quick_link TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1,
   FULLTEXT KEY ft_docs (title, category, file_name)
 ) ENGINE=InnoDB;
@@ -230,6 +242,7 @@ CREATE TABLE IF NOT EXISTS gallery_albums (
   category VARCHAR(80) NOT NULL,
   event_date DATE NOT NULL,
   cover_url VARCHAR(255) NOT NULL,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -251,6 +264,7 @@ CREATE TABLE IF NOT EXISTS telephone_directory (
   extension VARCHAR(20) NOT NULL,
   direct_phone VARCHAR(60) NOT NULL,
   email VARCHAR(160) NOT NULL,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -272,6 +286,7 @@ CREATE TABLE IF NOT EXISTS custom_home_components (
   html_content MEDIUMTEXT NOT NULL,
   sort_order INT DEFAULT 1,
   is_active TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -653,6 +668,8 @@ CREATE TABLE IF NOT EXISTS conferences (
   custom_sections_json MEDIUMTEXT NULL,
   is_published TINYINT(1) DEFAULT 1,
   is_featured TINYINT(1) DEFAULT 0,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -700,6 +717,7 @@ CREATE TABLE IF NOT EXISTS placement_stats (
   highest_package_lpa DECIMAL(6,2) DEFAULT 0.00,
   average_package_lpa DECIMAL(6,2) DEFAULT 0.00,
   top_recruiters_list VARCHAR(400) NULL,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -716,6 +734,8 @@ CREATE TABLE IF NOT EXISTS placement_stories (
   photo_url VARCHAR(255) DEFAULT 'assets/images/principal.jpg',
   quote_text TEXT NULL,
   is_featured TINYINT(1) DEFAULT 0,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -728,6 +748,8 @@ CREATE TABLE IF NOT EXISTS placement_notices (
   attachment_url VARCHAR(500) NULL,
   link_label VARCHAR(120) NULL,
   is_pinned TINYINT(1) DEFAULT 0,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -741,6 +763,7 @@ CREATE TABLE IF NOT EXISTS placement_custom_sections (
   cta_label VARCHAR(140) NULL,
   cta_url VARCHAR(500) NULL,
   is_published TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -820,6 +843,7 @@ CREATE TABLE IF NOT EXISTS sports_facilities (
   image_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
   custom_fields_json MEDIUMTEXT NULL,
   is_published TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -836,6 +860,8 @@ CREATE TABLE IF NOT EXISTS sports_events (
   description TEXT NULL,
   banner_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
   is_published TINYINT(1) DEFAULT 1,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  moderation_status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -852,6 +878,7 @@ CREATE TABLE IF NOT EXISTS sports_achievements (
   photo_url VARCHAR(300) DEFAULT 'assets/images/sports_complex.jpg',
   highlights TEXT NULL,
   is_featured TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -865,6 +892,7 @@ CREATE TABLE IF NOT EXISTS sports_gallery (
   event_date VARCHAR(40) NULL,
   caption TEXT NULL,
   is_published TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -878,6 +906,7 @@ CREATE TABLE IF NOT EXISTS sports_notices (
   registration_link VARCHAR(500) NULL,
   is_pinned TINYINT(1) DEFAULT 0,
   is_published TINYINT(1) DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -898,6 +927,8 @@ CREATE TABLE IF NOT EXISTS facilities (
   custom_fields_json MEDIUMTEXT NULL,
   is_featured TINYINT(1) DEFAULT 0,
   is_published TINYINT(1) DEFAULT 1,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -936,6 +967,8 @@ CREATE TABLE IF NOT EXISTS research_projects (
   summary TEXT NULL,
   document_url VARCHAR(500) DEFAULT '',
   is_published TINYINT(1) DEFAULT 1,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  moderation_status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -959,6 +992,8 @@ CREATE TABLE IF NOT EXISTS research_patents (
   summary TEXT NULL,
   external_url VARCHAR(500) DEFAULT '',
   is_published TINYINT(1) DEFAULT 1,
+  is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+  moderation_status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
@@ -1041,5 +1076,28 @@ INSERT INTO cms_kv_store (key_name, val_json) VALUES
 ('pages_parity_seeded_v2', '1'),
 ('social_seeded_v1', '1'),
 ('research_portfolio_seeded_v1', '1'),
-('feedback_seeded_v1', '1')
+('feedback_seeded_v1', '1'),
+('shareable_synced_v1', '1')
 ON DUPLICATE KEY UPDATE val_json = VALUES(val_json);
+
+-- 22. Content Moderation & Super Admin Approval Queue
+CREATE TABLE IF NOT EXISTS content_pending_revisions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  entity_table VARCHAR(64) NOT NULL,
+  entity_id INT NULL,
+  action_type ENUM('create','update','delete') NOT NULL,
+  entity_title VARCHAR(260) NOT NULL,
+  current_snapshot_json LONGTEXT NULL,
+  proposed_payload_json LONGTEXT NULL,
+  submitted_by_user_id INT NULL,
+  submitted_by_name VARCHAR(160) NOT NULL DEFAULT '',
+  submitted_by_email VARCHAR(160) NOT NULL DEFAULT '',
+  submitted_by_role VARCHAR(64) NOT NULL DEFAULT 'content_editor',
+  status ENUM('pending_approval','approved','rejected') NOT NULL DEFAULT 'pending_approval',
+  reviewer_email VARCHAR(160) NULL,
+  reviewer_note TEXT NULL,
+  submitted_at VARCHAR(40) NOT NULL,
+  reviewed_at VARCHAR(40) NULL,
+  INDEX idx_cpr_status (status),
+  INDEX idx_cpr_table (entity_table)
+) ENGINE=InnoDB;

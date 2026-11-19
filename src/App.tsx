@@ -301,6 +301,7 @@ export default function App() {
           departments={data.departments}
           deptSlug={deptSlug}
           subSlug={subSlug}
+          settings={data.settings}
           onNavigate={navigate}
         />
       );

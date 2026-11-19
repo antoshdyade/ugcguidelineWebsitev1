@@ -25,7 +25,7 @@ $config = array_merge([
     'heroSubtitle' => 'AICTE/UGC-compliant smart lecture theatres, 1 Gbps campus computing backbone, central library, hostels, research centres, green solar microgrids, and barrier-free amenities.',
 ], $cfgRow);
 
-$allFacilities = $pdo->query('SELECT * FROM facilities WHERE is_published = 1 ORDER BY is_featured DESC, sort_order ASC, id ASC')->fetchAll();
+$allFacilities = $pdo->query("SELECT * FROM facilities WHERE is_published = 1 AND status = 'published' ORDER BY is_featured DESC, sort_order ASC, id ASC")->fetchAll();
 
 $categories = ['All'];
 foreach ($allFacilities as $fac) {
@@ -92,7 +92,7 @@ require_once __DIR__ . '/includes/header.php';
     <?php foreach ($visible as $fac):
         $customFields = json_decode((string)($fac['custom_fields_json'] ?? '[]'), true) ?: [];
     ?>
-      <article class="card" style="padding:0;overflow:hidden;">
+      <article id="facility-<?= (int)$fac['id'] ?>" class="card" style="padding:0;overflow:hidden;">
         <div class="grid-2" style="gap:0;">
           <div style="background:#0F172A;min-height:240px;">
             <img src="<?= e(mediaUrl((string)$fac['image_url'], 'assets/images/campus_facilities.jpg')) ?>" alt="<?= e($fac['title']) ?>" style="width:100%;height:100%;max-height:340px;object-fit:cover;display:block;">
@@ -151,6 +151,9 @@ require_once __DIR__ . '/includes/header.php';
                 <a href="<?= e(mediaUrl((string)$fac['brochure_url'])) ?>" target="_blank" rel="noopener noreferrer" class="btn-outline btn-sm" style="text-decoration:none;">Facility Brochure / SOP &darr;</a>
               <?php endif; ?>
             </div>
+            <?php if (!isset($fac['is_shareable']) || !empty($fac['is_shareable'])): ?>
+              <?= renderPhpSocialShareBar($pdo, (string)$fac['title'], (string)($fac['short_summary'] ?? ''), baseUrl('facilities.php#facility-' . (int)$fac['id']), 'portal', true, true) ?>
+            <?php endif; ?>
           </div>
         </div>
       </article>

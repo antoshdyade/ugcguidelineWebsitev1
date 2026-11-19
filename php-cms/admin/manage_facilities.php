@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $incPhone = trim((string)($_POST['incharge_phone'] ?? ''));
         $isFeat = !empty($_POST['is_featured']) ? 1 : 0;
         $isPub = !empty($_POST['is_published']) ? 1 : 0;
+        $isShareable = !empty($_POST['is_shareable']) ? 1 : 0;
         $cfJson = json_encode($decodeCustomFields($_POST['custom_fields_json'] ?? '[]'), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $imgUrl = trim((string)($_POST['existing_image'] ?? 'assets/images/campus_facilities.jpg'));
@@ -81,25 +82,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($title === '') $err = 'Facility title is required.';
         if ($err === '') {
+            $isSuper = cmsIsSuperAdmin($user);
             if ($editId > 0) {
-                $pdo->prepare('UPDATE facilities SET title=?, category=?, short_summary=?, description_html=?, location_block=?, capacity=?, timings=?, incharge_name=?, incharge_email=?, incharge_phone=?, image_url=?, brochure_url=?, custom_fields_json=?, is_featured=?, is_published=? WHERE id=?')
-                    ->execute([$title, $category, $shortSummary, $descHtml, $loc, $cap, $timings, $incName, $incEmail, $incPhone, $imgUrl, $brochureUrl, $cfJson, $isFeat, $isPub, $editId]);
-                $msg = 'Facility "' . $title . '" updated.';
+                $currStmt = $pdo->prepare('SELECT * FROM facilities WHERE id = ? LIMIT 1');
+                $currStmt->execute([$editId]);
+                $curr = $currStmt->fetch();
+                if (!$curr) {
+                    $err = 'Facility record not found.';
+                } else {
+                    $payload = [
+                        'title' => $title,
+                        'category' => $category,
+                        'short_summary' => $shortSummary,
+                        'description_html' => $descHtml,
+                        'location_block' => $loc,
+                        'capacity' => $cap,
+                        'timings' => $timings,
+                        'incharge_name' => $incName,
+                        'incharge_email' => $incEmail,
+                        'incharge_phone' => $incPhone,
+                        'image_url' => $imgUrl,
+                        'brochure_url' => $brochureUrl,
+                        'custom_fields_json' => $cfJson,
+                        'is_featured' => $isFeat,
+                        'is_published' => $isPub,
+                        'is_shareable' => $isShareable,
+                    ];
+                    if ($isSuper) {
+                        $pdo->prepare('UPDATE facilities SET title=?, category=?, short_summary=?, description_html=?, location_block=?, capacity=?, timings=?, incharge_name=?, incharge_email=?, incharge_phone=?, image_url=?, brochure_url=?, custom_fields_json=?, is_featured=?, is_published=?, is_shareable=?, status=? WHERE id=?')
+                            ->execute([$title, $category, $shortSummary, $descHtml, $loc, $cap, $timings, $incName, $incEmail, $incPhone, $imgUrl, $brochureUrl, $cfJson, $isFeat, $isPub, $isShareable, 'published', $editId]);
+                        logAudit($pdo, $user, 'SAVE_FACILITY', 'Campus Facility', $title);
+                        $msg = 'Facility "' . $title . '" updated and published.';
+                    } else {
+                        cmsQueuePendingUpdate($pdo, $user, 'facilities', $editId, $title, $curr, $payload);
+                        $msg = 'Changes to facility "' . $title . '" submitted for Super Admin approval. Existing live entry remains unchanged.';
+                    }
+                }
             } else {
                 $ord = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM facilities')->fetchColumn()) + 1;
-                $pdo->prepare('INSERT INTO facilities (title, category, short_summary, description_html, location_block, capacity, timings, incharge_name, incharge_email, incharge_phone, image_url, brochure_url, custom_fields_json, is_featured, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-                    ->execute([$title, $category, $shortSummary, $descHtml, $loc, $cap, $timings, $incName, $incEmail, $incPhone, $imgUrl, $brochureUrl, $cfJson, $isFeat, $isPub, $ord]);
-                $msg = 'Facility "' . $title . '" added.';
+                $insPub = $isSuper ? $isPub : 0;
+                $insStatus = $isSuper ? 'published' : 'pending_approval';
+                $pdo->prepare('INSERT INTO facilities (title, category, short_summary, description_html, location_block, capacity, timings, incharge_name, incharge_email, incharge_phone, image_url, brochure_url, custom_fields_json, is_featured, is_published, is_shareable, sort_order, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$title, $category, $shortSummary, $descHtml, $loc, $cap, $timings, $incName, $incEmail, $incPhone, $imgUrl, $brochureUrl, $cfJson, $isFeat, $insPub, $isShareable, $ord, $insStatus]);
+                $newId = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'SAVE_FACILITY', 'Campus Facility', $title);
+                    $msg = 'Facility "' . $title . '" added and published.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'facilities', $newId, $title, [
+                        'title' => $title,
+                        'category' => $category,
+                        'short_summary' => $shortSummary,
+                        'description_html' => $descHtml,
+                        'location_block' => $loc,
+                        'capacity' => $cap,
+                        'timings' => $timings,
+                        'incharge_name' => $incName,
+                        'incharge_email' => $incEmail,
+                        'incharge_phone' => $incPhone,
+                        'image_url' => $imgUrl,
+                        'brochure_url' => $brochureUrl,
+                        'custom_fields_json' => $cfJson,
+                        'is_featured' => $isFeat,
+                        'is_published' => $isPub,
+                        'is_shareable' => $isShareable,
+                        'sort_order' => $ord,
+                        'status' => 'pending_approval',
+                    ]);
+                    $msg = 'New facility "' . $title . '" submitted for Super Admin approval before going live.';
+                }
             }
-            logAudit($pdo, $user, 'SAVE_FACILITY', 'Campus Facility', $title);
         }
     } elseif ($action === 'move_facility' && !empty($_POST['id'])) {
         swapSortOrder($pdo, 'facilities', (int)$_POST['id'], ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up');
         $msg = 'Facility display order updated.';
     } elseif ($action === 'delete_facility' && !empty($_POST['id'])) {
-        $pdo->prepare('DELETE FROM facilities WHERE id = ?')->execute([(int)$_POST['id']]);
-        logAudit($pdo, $user, 'DELETE_FACILITY', 'Campus Facility', '#' . (int)$_POST['id']);
-        $msg = 'Facility deleted.';
+        $delId = (int)$_POST['id'];
+        $currStmt = $pdo->prepare('SELECT * FROM facilities WHERE id = ? LIMIT 1');
+        $currStmt->execute([$delId]);
+        $curr = $currStmt->fetch();
+        if (!$curr) {
+            $err = 'Facility record not found.';
+        } elseif (cmsIsSuperAdmin($user)) {
+            $pdo->prepare('DELETE FROM facilities WHERE id = ?')->execute([$delId]);
+            logAudit($pdo, $user, 'DELETE_FACILITY', 'Campus Facility', (string)($curr['title'] ?? '#' . $delId));
+            $msg = 'Facility deleted.';
+        } else {
+            cmsQueuePendingDelete($pdo, $user, 'facilities', $delId, (string)($curr['title'] ?? 'Facility #' . $delId), $curr);
+            $msg = 'Delete request for facility "' . ($curr['title'] ?? '#' . $delId) . '" submitted for Super Admin approval.';
+        }
     }
 }
 
@@ -208,9 +279,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
   </div>
   <div id="fac-cf-list" style="display:flex;flex-direction:column;gap:0.4rem;margin-bottom:0.75rem;"></div>
 
-  <div style="display:flex;gap:1.25rem;margin-bottom:0.75rem;font-size:0.84rem;font-weight:600;">
+  <div style="display:flex;gap:1.25rem;flex-wrap:wrap;margin-bottom:0.75rem;font-size:0.84rem;font-weight:600;">
     <label><input type="checkbox" name="is_published" value="1" <?= (!isset($editingFac['is_published']) || !empty($editingFac['is_published'])) ? 'checked' : '' ?>> Published</label>
     <label><input type="checkbox" name="is_featured" value="1" <?= !empty($editingFac['is_featured']) ? 'checked' : '' ?>> Highlight as Featured</label>
+    <label><input type="checkbox" name="is_shareable" value="1" <?= (!isset($editingFac) || !array_key_exists('is_shareable', (array)$editingFac) || !empty($editingFac['is_shareable'])) ? 'checked' : '' ?>> Enable Social Share Buttons</label>
   </div>
 
   <div style="display:flex;gap:0.6rem;">
@@ -248,8 +320,11 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <div style="display:flex;align-items:center;gap:0.75rem;">
         <img src="<?= e(mediaUrl((string)$it['image_url'], 'assets/images/campus_facilities.jpg')) ?>" alt="" style="width:68px;height:46px;object-fit:cover;border-radius:8px;">
         <div>
-          <strong><?= e($it['title']) ?></strong>
-          <div style="font-size:0.78rem;color:#78716C;"><?= e($it['category']) ?> · <?= e((string)$it['location_block']) ?> · <?= !empty($it['is_published']) ? 'Published' : 'Draft' ?></div>
+          <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+            <strong><?= e($it['title']) ?></strong>
+            <?= cmsModerationStatusBadge((string)($it['status'] ?? 'published')) ?>
+          </div>
+          <div style="font-size:0.78rem;color:#78716C;"><?= e($it['category']) ?> · <?= e((string)$it['location_block']) ?> · <?= !empty($it['is_published']) ? 'Published' : 'Draft' ?><?= isset($it['is_shareable']) && empty($it['is_shareable']) ? ' · Share Off' : '' ?></div>
         </div>
       </div>
       <div style="display:flex;gap:0.4rem;">

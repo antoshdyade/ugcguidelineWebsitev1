@@ -14,6 +14,7 @@ import type {
   GrievanceTicket,
   HeaderPortalMenuItem,
   HitCounterStats,
+  PendingContentRevision,
   PlacementsData,
   PlacementNotice,
   PlacementStory,
@@ -29,6 +30,7 @@ import type {
   SocialSharingConfig,
   SportsData,
   FacilitiesData,
+  UserRole,
   VisitorLogEntry,
 } from '../types/cms';
 import {
@@ -38,7 +40,7 @@ import {
   createSeedVisitorLogs,
 } from './securityAndSeoLogic';
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 export const SOCIAL_PLATFORM_PRESETS: { value: string; label: string }[] = [
   { value: 'facebook', label: 'Facebook' },
@@ -1099,12 +1101,45 @@ export function migrateDatabaseInPlace(
     ? existing.emailDispatchLogs
     : ((upgraded = true), structuredClone(seed.emailDispatchLogs || []));
 
+  const pendingContentRevisions: PendingContentRevision[] = Array.isArray(existing.pendingContentRevisions)
+    ? existing.pendingContentRevisions
+    : ((upgraded = true), []);
+
+  const normalizedPages = (Array.isArray(existing.pages) ? existing.pages : seed.pages).map((p) => {
+    const shareable = p.isShareable ?? p.showShareBar ?? true;
+    return {
+      ...p,
+      showShareBar: p.showShareBar ?? shareable,
+      isShareable: shareable,
+      status: p.status || 'published',
+    };
+  });
+
+  const normalizedDepts = (Array.isArray(existing.departments) ? existing.departments : seed.departments).map((d) => ({
+    ...d,
+    isShareable: d.isShareable ?? true,
+    status: d.status || 'published',
+    subPages: (d.subPages || []).map((sp) => ({
+      ...sp,
+      isShareable: sp.isShareable ?? true,
+      status: sp.status || 'published',
+    })),
+  }));
+
+  const normalizedConferences = conferences.map((c) => ({
+    ...c,
+    isShareable: c.isShareable ?? true,
+    status: c.status || 'published',
+  }));
+
   const mergedDb: CmsDatabase = {
     ...seed,
     ...existing,
     schemaVersion: CURRENT_SCHEMA_VERSION,
     categories,
-    conferences,
+    pages: normalizedPages,
+    departments: normalizedDepts,
+    conferences: normalizedConferences,
     conferenceSubmissions,
     conferenceRegistrations,
     placements: mergedPlacements,
@@ -1116,6 +1151,7 @@ export function migrateDatabaseInPlace(
     feedbackEntries,
     emailPushConfig,
     emailDispatchLogs,
+    pendingContentRevisions,
     alumni: existingAlumni
       ? {
           ...existingAlumni,
@@ -1330,4 +1366,77 @@ export function computeFeedbackMetrics(entries: FeedbackEntry[]) {
     avgRating,
     resolutionRatePct: total > 0 ? Math.round((resolved / total) * 100) : 100,
   };
+}
+
+export function canPublishDirectly(role?: UserRole | string | null): boolean {
+  return role === 'super_admin';
+}
+
+export function isRecordPublished(
+  item?: { status?: string; moderationStatus?: string } | null,
+  statusField: 'status' | 'moderationStatus' = 'status',
+): boolean {
+  if (!item) return false;
+  const val = statusField === 'moderationStatus' ? item.moderationStatus : item.status;
+  return !val || val === 'published';
+}
+
+export function isEntityShareable(
+  item?: { isShareable?: boolean; showShareBar?: boolean } | null,
+): boolean {
+  if (!item) return true;
+  if (item.isShareable === false) return false;
+  if (item.showShareBar === false) return false;
+  return true;
+}
+
+export function nextRevisionId(revisions?: PendingContentRevision[]): number {
+  if (!revisions || revisions.length === 0) return 1;
+  return Math.max(...revisions.map((r) => r.id)) + 1;
+}
+
+export function queuePendingRevision(
+  revisions: PendingContentRevision[] | undefined,
+  entry: Omit<PendingContentRevision, 'id' | 'status' | 'submittedAt'>,
+): { revisions: PendingContentRevision[]; created: PendingContentRevision } {
+  const list = [...(revisions || [])];
+  const created: PendingContentRevision = {
+    ...entry,
+    id: nextRevisionId(list),
+    status: 'pending_approval',
+    submittedAt: new Date().toISOString(),
+  };
+  list.unshift(created);
+  return { revisions: list, created };
+}
+
+export function buildRevisionDiffRows(
+  rev: Pick<PendingContentRevision, 'actionType' | 'currentSnapshot' | 'proposedPayload'>,
+): { field: string; before: string; after: string; changed: boolean }[] {
+  const curr = (rev.currentSnapshot || {}) as Record<string, unknown>;
+  const prop = (rev.proposedPayload || {}) as Record<string, unknown>;
+  const keys = Array.from(new Set([...Object.keys(curr), ...Object.keys(prop)])).filter(
+    (k) => !['id', 'sortOrder', 'updatedAt', 'updatedBy'].includes(k),
+  );
+  const fmt = (val: unknown): string => {
+    if (val === undefined || val === null) return '—';
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    if (typeof val === 'string') return val.length > 260 ? `${val.slice(0, 260)}…` : val;
+    try {
+      const s = JSON.stringify(val);
+      return s.length > 260 ? `${s.slice(0, 260)}…` : s;
+    } catch {
+      return String(val);
+    }
+  };
+  return keys.map((field) => {
+    const before = rev.actionType === 'create' ? '— (New)' : fmt(curr[field]);
+    const after = rev.actionType === 'delete' ? '— (Delete)' : fmt(prop[field]);
+    return {
+      field,
+      before,
+      after,
+      changed: rev.actionType !== 'update' || before !== after,
+    };
+  });
 }

@@ -14,6 +14,7 @@ $eventCategories = ['Event', 'Notice', 'Achievement', 'Circular', 'Placement', '
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
     $action = $_POST['action'] ?? '';
+    $isSuper = cmsIsSuperAdmin($user);
     if ($action === 'add_slide' || $action === 'update_slide') {
         $imgUrl = trim($_POST['image_url'] ?? 'assets/images/hero_campus.jpg');
         if (!empty($_FILES['slide_image']['name'])) {
@@ -22,16 +23,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else $err = $up['error'];
         }
         if ($err === '') {
+            $slTitle = trim((string)$_POST['title']);
+            $slPayload = [
+                'title'     => $slTitle,
+                'caption'   => trim((string)$_POST['caption']),
+                'image_url' => $imgUrl,
+                'cta_label' => trim((string)$_POST['cta_label']),
+                'cta_link'  => trim((string)$_POST['cta_link']),
+                'is_active' => 1,
+            ];
             if ($action === 'update_slide' && !empty($_POST['slide_id'])) {
-                $stmt = $pdo->prepare('UPDATE sliders SET title = ?, caption = ?, image_url = ?, cta_label = ?, cta_link = ? WHERE id = ?');
-                $stmt->execute([trim($_POST['title']), trim($_POST['caption']), $imgUrl, trim($_POST['cta_label']), trim($_POST['cta_link']), (int)$_POST['slide_id']]);
-                logAudit($pdo, $user, 'UPDATE_SLIDE', 'Slider', $_POST['title']);
-                $msg = 'Hero slide updated.';
+                $sid = (int)$_POST['slide_id'];
+                if ($isSuper) {
+                    $stmt = $pdo->prepare("UPDATE sliders SET title = ?, caption = ?, image_url = ?, cta_label = ?, cta_link = ?, status = 'published' WHERE id = ?");
+                    $stmt->execute([$slPayload['title'], $slPayload['caption'], $slPayload['image_url'], $slPayload['cta_label'], $slPayload['cta_link'], $sid]);
+                    logAudit($pdo, $user, 'UPDATE_SLIDE', 'Slider', $slTitle);
+                    $msg = 'Hero slide updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM sliders WHERE id = ? LIMIT 1');
+                    $stCur->execute([$sid]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'sliders', $sid, $slTitle, $cur, $slPayload);
+                    $msg = 'Hero slide update submitted for Super Admin approval.';
+                }
             } else {
-                $stmt = $pdo->prepare('INSERT INTO sliders (title, caption, image_url, cta_label, cta_link) VALUES (?, ?, ?, ?, ?)');
-                $stmt->execute([trim($_POST['title']), trim($_POST['caption']), $imgUrl, trim($_POST['cta_label']), trim($_POST['cta_link'])]);
-                logAudit($pdo, $user, 'CREATE_SLIDE', 'Slider', $_POST['title']);
-                $msg = 'Hero slide added.';
+                $stmt = $pdo->prepare('INSERT INTO sliders (title, caption, image_url, cta_label, cta_link, is_active, status) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$slPayload['title'], $slPayload['caption'], $slPayload['image_url'], $slPayload['cta_label'], $slPayload['cta_link'], $isSuper ? 1 : 0, $isSuper ? 'published' : 'pending_approval']);
+                $newSid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'CREATE_SLIDE', 'Slider', $slTitle);
+                    $msg = 'Hero slide added.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'sliders', $newSid, $slTitle, $slPayload);
+                    $msg = 'Hero slide submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($action === 'move_slide' && !empty($_POST['id'])) {
@@ -40,19 +65,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Slide order updated.';
         }
     } elseif ($action === 'delete_slide') {
-        $pdo->prepare('DELETE FROM sliders WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Slide removed.';
-    } elseif ($action === 'add_ticker' || $action === 'update_ticker') {
-        if ($action === 'update_ticker' && !empty($_POST['ticker_id'])) {
-            $stmt = $pdo->prepare('UPDATE ticker_items SET text = ?, link_url = ?, badge_text = ? WHERE id = ?');
-            $stmt->execute([trim($_POST['text']), trim($_POST['link_url']), trim($_POST['badge_text']), (int)$_POST['ticker_id']]);
-            logAudit($pdo, $user, 'UPDATE_TICKER', 'Ticker', $_POST['text']);
-            $msg = 'Ticker item updated.';
+        $sid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM sliders WHERE id = ?')->execute([$sid]);
+            $msg = 'Slide removed.';
         } else {
-            $stmt = $pdo->prepare('INSERT INTO ticker_items (text, link_url, badge_text) VALUES (?, ?, ?)');
-            $stmt->execute([trim($_POST['text']), trim($_POST['link_url']), trim($_POST['badge_text'])]);
-            logAudit($pdo, $user, 'CREATE_TICKER', 'Ticker', $_POST['text']);
-            $msg = 'Ticker item added.';
+            $stCur = $pdo->prepare('SELECT * FROM sliders WHERE id = ? LIMIT 1');
+            $stCur->execute([$sid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'sliders', $sid, (string)$cur['title'], $cur);
+                $msg = 'Slide deletion submitted for Super Admin approval.';
+            }
+        }
+    } elseif ($action === 'add_ticker' || $action === 'update_ticker') {
+        $tkText = trim((string)$_POST['text']);
+        $tkPayload = [
+            'text'       => $tkText,
+            'link_url'   => trim((string)$_POST['link_url']),
+            'badge_text' => trim((string)$_POST['badge_text']),
+            'is_active'  => 1,
+        ];
+        if ($action === 'update_ticker' && !empty($_POST['ticker_id'])) {
+            $tid = (int)$_POST['ticker_id'];
+            if ($isSuper) {
+                $stmt = $pdo->prepare("UPDATE ticker_items SET text = ?, link_url = ?, badge_text = ?, status = 'published' WHERE id = ?");
+                $stmt->execute([$tkPayload['text'], $tkPayload['link_url'], $tkPayload['badge_text'], $tid]);
+                logAudit($pdo, $user, 'UPDATE_TICKER', 'Ticker', $tkText);
+                $msg = 'Ticker item updated.';
+            } else {
+                $stCur = $pdo->prepare('SELECT * FROM ticker_items WHERE id = ? LIMIT 1');
+                $stCur->execute([$tid]);
+                $cur = $stCur->fetch() ?: [];
+                cmsQueuePendingUpdate($pdo, $user, 'ticker_items', $tid, $tkText, $cur, $tkPayload);
+                $msg = 'Ticker update submitted for Super Admin approval.';
+            }
+        } else {
+            $stmt = $pdo->prepare('INSERT INTO ticker_items (text, link_url, badge_text, is_active, status) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$tkPayload['text'], $tkPayload['link_url'], $tkPayload['badge_text'], $isSuper ? 1 : 0, $isSuper ? 'published' : 'pending_approval']);
+            $newTid = (int)$pdo->lastInsertId();
+            if ($isSuper) {
+                logAudit($pdo, $user, 'CREATE_TICKER', 'Ticker', $tkText);
+                $msg = 'Ticker item added.';
+            } else {
+                cmsQueuePendingCreate($pdo, $user, 'ticker_items', $newTid, $tkText, $tkPayload);
+                $msg = 'Ticker item submitted for Super Admin approval.';
+            }
         }
     } elseif ($action === 'move_ticker' && !empty($_POST['id'])) {
         $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
@@ -60,8 +118,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Ticker order updated.';
         }
     } elseif ($action === 'delete_ticker') {
-        $pdo->prepare('DELETE FROM ticker_items WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Ticker item removed.';
+        $tid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM ticker_items WHERE id = ?')->execute([$tid]);
+            $msg = 'Ticker item removed.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM ticker_items WHERE id = ? LIMIT 1');
+            $stCur->execute([$tid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'ticker_items', $tid, (string)$cur['text'], $cur);
+                $msg = 'Ticker deletion submitted for Super Admin approval.';
+            }
+        }
     } elseif ($action === 'add_event' || $action === 'update_event') {
         $imgUrl = trim($_POST['existing_event_image'] ?? '');
         if (!empty($_FILES['event_image']['name'])) {
@@ -70,17 +139,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             else $err = $up['error'];
         }
         $evCat = trim((string)($_POST['category'] ?? 'Event')) ?: 'Event';
+        $isShareable = isset($_POST['is_shareable']) ? 1 : 0;
         if ($err === '') {
+            $evTitle = trim((string)$_POST['title']);
+            $evPayload = [
+                'title'        => $evTitle,
+                'event_date'   => $_POST['event_date'],
+                'category'     => $evCat,
+                'summary'      => trim((string)$_POST['summary']),
+                'image_url'    => $imgUrl,
+                'is_shareable' => $isShareable,
+            ];
             if ($action === 'update_event' && !empty($_POST['event_id'])) {
-                $stmt = $pdo->prepare('UPDATE campus_events SET title = ?, event_date = ?, category = ?, summary = ?, image_url = ? WHERE id = ?');
-                $stmt->execute([trim($_POST['title']), $_POST['event_date'], $evCat, trim($_POST['summary']), $imgUrl, (int)$_POST['event_id']]);
-                logAudit($pdo, $user, 'UPDATE_EVENT', 'Event', $_POST['title']);
-                $msg = 'Event/Notice updated.';
+                $eid = (int)$_POST['event_id'];
+                if ($isSuper) {
+                    $stmt = $pdo->prepare("UPDATE campus_events SET title = ?, event_date = ?, category = ?, summary = ?, image_url = ?, is_shareable = ?, status = 'published' WHERE id = ?");
+                    $stmt->execute([$evPayload['title'], $evPayload['event_date'], $evPayload['category'], $evPayload['summary'], $evPayload['image_url'], $isShareable, $eid]);
+                    logAudit($pdo, $user, 'UPDATE_EVENT', 'Event', $evTitle);
+                    $msg = 'Event/Notice updated.';
+                } else {
+                    $stCur = $pdo->prepare('SELECT * FROM campus_events WHERE id = ? LIMIT 1');
+                    $stCur->execute([$eid]);
+                    $cur = $stCur->fetch() ?: [];
+                    cmsQueuePendingUpdate($pdo, $user, 'campus_events', $eid, $evTitle, $cur, $evPayload);
+                    $msg = 'Event/Notice update submitted for Super Admin approval.';
+                }
             } else {
-                $stmt = $pdo->prepare('INSERT INTO campus_events (title, event_date, category, summary, image_url) VALUES (?, ?, ?, ?, ?)');
-                $stmt->execute([trim($_POST['title']), $_POST['event_date'], $evCat, trim($_POST['summary']), $imgUrl]);
-                logAudit($pdo, $user, 'CREATE_EVENT', 'Event', $_POST['title']);
-                $msg = 'Event/Notice published.';
+                $stmt = $pdo->prepare('INSERT INTO campus_events (title, event_date, category, summary, image_url, is_shareable, status) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                $stmt->execute([$evPayload['title'], $evPayload['event_date'], $evPayload['category'], $evPayload['summary'], $evPayload['image_url'], $isShareable, $isSuper ? 'published' : 'pending_approval']);
+                $newEid = (int)$pdo->lastInsertId();
+                if ($isSuper) {
+                    logAudit($pdo, $user, 'CREATE_EVENT', 'Event', $evTitle);
+                    $msg = 'Event/Notice published.';
+                } else {
+                    cmsQueuePendingCreate($pdo, $user, 'campus_events', $newEid, $evTitle, $evPayload);
+                    $msg = 'Event/Notice submitted for Super Admin approval.';
+                }
             }
         }
     } elseif ($action === 'move_event' && !empty($_POST['id'])) {
@@ -89,8 +183,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Event display order updated.';
         }
     } elseif ($action === 'delete_event') {
-        $pdo->prepare('DELETE FROM campus_events WHERE id = ?')->execute([(int)$_POST['id']]);
-        $msg = 'Event/Notice deleted.';
+        $eid = (int)$_POST['id'];
+        if ($isSuper) {
+            $pdo->prepare('DELETE FROM campus_events WHERE id = ?')->execute([$eid]);
+            $msg = 'Event/Notice deleted.';
+        } else {
+            $stCur = $pdo->prepare('SELECT * FROM campus_events WHERE id = ? LIMIT 1');
+            $stCur->execute([$eid]);
+            $cur = $stCur->fetch();
+            if ($cur) {
+                cmsQueuePendingDelete($pdo, $user, 'campus_events', $eid, (string)$cur['title'], $cur);
+                $msg = 'Event deletion submitted for Super Admin approval.';
+            }
+        }
     }
 }
 
@@ -166,6 +271,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       </div>
       <textarea name="summary" rows="2" required placeholder="Summary..." style="width:100%;padding:0.5rem;margin-bottom:0.5rem;"><?= e($editEvent['summary'] ?? '') ?></textarea>
       <label style="display:block;font-size:0.82rem;margin-bottom:0.5rem;">Thumbnail Photo (Optional): <input type="file" name="event_image" accept="image/jpeg,image/png,image/webp" data-aspect="4:3"></label>
+      <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.55rem;"><input type="checkbox" name="is_shareable" value="1" <?= (!$editEvent || !isset($editEvent['is_shareable']) || !empty($editEvent['is_shareable'])) ? 'checked' : '' ?>> Enable Social Share Buttons</label>
       <button type="submit" class="btn-primary"><?= $editEvent ? 'Update Event' : 'Publish Event' ?></button>
       <?php if ($editEvent): ?><a href="manage_sliders.php" class="btn-secondary" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
     </form>
@@ -176,7 +282,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <h3 style="margin-top:0;">Active Hero Slides</h3>
       <?php foreach ($sliders as $sl): ?>
         <div style="padding:0.5rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
-          <span><strong><?= e($sl['title']) ?></strong></span>
+          <span><strong><?= e($sl['title']) ?></strong> <?= cmsModerationStatusBadge((string)($sl['status'] ?? 'published')) ?></span>
           <div style="white-space:nowrap;">
             <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_slide"><input type="hidden" name="id" value="<?= (int)$sl['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
             <a href="?edit_slide=<?= (int)$sl['id'] ?>" class="btn-primary" style="padding:2px 8px;font-size:0.78rem;">Edit</a>
@@ -189,7 +295,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <h3 style="margin-top:0;">Active Events &amp; Ticker Items</h3>
       <?php foreach ($ticker as $tk): ?>
         <div style="padding:0.4rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
-          <span>[Ticker] <?= e($tk['text']) ?></span>
+          <span>[Ticker] <?= e($tk['text']) ?> <?= cmsModerationStatusBadge((string)($tk['status'] ?? 'published')) ?></span>
           <div style="white-space:nowrap;">
             <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_ticker"><input type="hidden" name="id" value="<?= (int)$tk['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
             <a href="?edit_ticker=<?= (int)$tk['id'] ?>" class="btn-primary" style="padding:2px 8px;font-size:0.78rem;">Edit</a>
@@ -199,7 +305,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <?php endforeach; ?>
       <?php foreach ($events as $ev): ?>
         <div style="padding:0.4rem 0;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;gap:0.5rem;">
-          <span>[<?= e($ev['category']) ?>] <?= e($ev['title']) ?></span>
+          <span>[<?= e($ev['category']) ?>] <?= e($ev['title']) ?> <?= cmsModerationStatusBadge((string)($ev['status'] ?? 'published')) ?></span>
           <div style="white-space:nowrap;">
             <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_event"><input type="hidden" name="id" value="<?= (int)$ev['id'] ?>"><button type="submit" name="dir" value="up" class="btn-secondary" style="padding:2px 6px;">&uarr;</button><button type="submit" name="dir" value="down" class="btn-secondary" style="padding:2px 6px;">&darr;</button></form>
             <a href="?edit_event=<?= (int)$ev['id'] ?>" class="btn-primary" style="padding:2px 8px;font-size:0.78rem;">Edit</a>

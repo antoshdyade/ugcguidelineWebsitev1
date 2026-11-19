@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { FacilitiesData, SiteSettings } from '../types/cms';
 import { sortByOrder } from '../lib/cmsLogic';
+import { isEntityShareable, isRecordPublished } from '../lib/collegeFeaturesLogic';
 import { CmsHtmlContent } from './CmsHtmlContent';
 import { SocialShareBar } from './SocialMediaWidgets';
 
@@ -31,7 +32,10 @@ export function FacilitiesPortal({ facilities, settings, initialCategory, onNavi
   }, [initialCategory]);
 
   const publishedItems = useMemo(
-    () => sortByOrder((facilities.items || []).filter((item) => item.isPublished)),
+    () =>
+      sortByOrder(
+        (facilities.items || []).filter((item) => item.isPublished && isRecordPublished(item)),
+      ),
     [facilities.items],
   );
 
@@ -257,6 +261,14 @@ export function FacilitiesPortal({ facilities, settings, initialCategory, onNavi
                     </a>
                   )}
                 </div>
+                <SocialShareBar
+                  compact
+                  isShareable={isEntityShareable(item)}
+                  title={item.title}
+                  summary={item.shortSummary}
+                  settings={settings}
+                  location="portal"
+                />
               </div>
             </article>
           ))}
