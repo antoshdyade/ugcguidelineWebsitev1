@@ -9,10 +9,83 @@ ensureCmsSchemaUpgraded($pdo);
 $msg = '';
 $err = '';
 $s = getSiteSettings($pdo);
+$tab = (($_GET['tab'] ?? 'general') === 'social' || isset($_GET['edit_social'])) ? 'social' : 'general';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
-    $logoUrl = $s['logo_url'] ?? '';
+    $action = (string)($_POST['action'] ?? 'save_site_settings');
+
+    if ($action === 'save_social_link') {
+        $tab = 'social';
+        $sid = (int)($_POST['social_id'] ?? 0);
+        $platform = strtolower(trim((string)($_POST['platform'] ?? 'custom')));
+        if (!array_key_exists($platform, socialPlatformCatalog())) {
+            $platform = 'custom';
+        }
+        $label = trim((string)($_POST['label'] ?? ''));
+        $url = trim((string)($_POST['url'] ?? ''));
+        $handle = trim((string)($_POST['handle'] ?? ''));
+        $customSvg = trim((string)($_POST['custom_svg'] ?? ''));
+        $isActive = isset($_POST['is_active']) ? 1 : 0;
+
+        if ($label === '' || ($url !== '' && !validateExternalUrl($url))) {
+            $err = 'Please provide a valid Social Channel Label and a valid https:// / http:// profile URL.';
+        } else {
+            if ($sid > 0) {
+                $pdo->prepare('UPDATE social_media_links SET platform = ?, label = ?, url = ?, handle = ?, custom_svg = ?, is_active = ? WHERE id = ?')
+                    ->execute([$platform, $label, $url, $handle, $customSvg, $isActive, $sid]);
+                logAudit($pdo, $user, 'UPDATE_SOCIAL_LINK', 'Social Media', $label);
+                $msg = 'Social media profile link updated.';
+            } else {
+                $nextOrder = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM social_media_links')->fetchColumn()) + 1;
+                $pdo->prepare('INSERT INTO social_media_links (platform, label, url, handle, custom_svg, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$platform, $label, $url, $handle, $customSvg, $isActive, $nextOrder]);
+                logAudit($pdo, $user, 'ADD_SOCIAL_LINK', 'Social Media', $label);
+                $msg = 'Social media profile link added.';
+            }
+        }
+    } elseif ($action === 'move_social_link' && !empty($_POST['id'])) {
+        $tab = 'social';
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up';
+        if (swapSortOrder($pdo, 'social_media_links', (int)$_POST['id'], $dir, null, null, 'id ASC')) {
+            $msg = 'Social icon order updated.';
+        }
+    } elseif ($action === 'toggle_social_link' && !empty($_POST['id'])) {
+        $tab = 'social';
+        $pdo->prepare('UPDATE social_media_links SET is_active = 1 - is_active WHERE id = ?')->execute([(int)$_POST['id']]);
+        logAudit($pdo, $user, 'TOGGLE_SOCIAL_LINK', 'Social Media', 'ID #' . (int)$_POST['id']);
+        $msg = 'Social icon visibility toggled.';
+    } elseif ($action === 'delete_social_link' && !empty($_POST['id'])) {
+        $tab = 'social';
+        $pdo->prepare('DELETE FROM social_media_links WHERE id = ?')->execute([(int)$_POST['id']]);
+        logAudit($pdo, $user, 'DELETE_SOCIAL_LINK', 'Social Media', 'ID #' . (int)$_POST['id']);
+        $msg = 'Social media profile link deleted.';
+    } elseif ($action === 'save_social_sharing') {
+        $tab = 'social';
+        $platformsPosted = $_POST['platforms'] ?? [];
+        $platKeys = ['whatsapp', 'linkedin', 'twitter', 'facebook', 'telegram', 'email', 'copyLink', 'nativeShare'];
+        $platMap = [];
+        foreach ($platKeys as $pk) {
+            $platMap[$pk] = !empty($platformsPosted[$pk]);
+        }
+        saveSocialSharingConfig($pdo, [
+            'enabled'           => isset($_POST['sharing_enabled']),
+            'showIconsInHeader' => isset($_POST['show_icons_header']),
+            'showIconsInFooter' => isset($_POST['show_icons_footer']),
+            'showOnPages'       => isset($_POST['show_on_pages']),
+            'showOnResearch'    => isset($_POST['show_on_research']),
+            'showOnConferences' => isset($_POST['show_on_conferences']),
+            'showOnPortals'     => isset($_POST['show_on_portals']),
+            'shareHeading'      => trim((string)($_POST['share_heading'] ?? 'Share this update')) ?: 'Share this update',
+            'defaultHashtags'   => trim((string)($_POST['default_hashtags'] ?? '')),
+            'twitterHandle'     => trim(ltrim((string)($_POST['twitter_handle'] ?? ''), '@')),
+            'platforms'         => $platMap,
+        ]);
+        logAudit($pdo, $user, 'UPDATE_SOCIAL_SHARING', 'Social Sharing', 'Updated global sharing settings');
+        $msg = 'Social sharing & OpenGraph governance settings saved.';
+    } else {
+        $tab = 'general';
+        $logoUrl = $s['logo_url'] ?? '';
     if (!empty($_FILES['logo_file']['name'])) {
         $up = handleCmsUpload($pdo, $_FILES['logo_file'], __DIR__ . '/../uploads', 'photo');
         if ($up['ok']) $logoUrl = $up['file_url'];
@@ -119,16 +192,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = 'Site settings, design presets, upload limits & homepage layout saved.';
         $s = getSiteSettings($pdo);
     }
+    }
 }
 $hs = $s['home_sections'] ?? [];
 $stats = $s['highlights_stats'] ?? [];
 $approvedBodies = $s['approved_bodies'] ?? [];
-$adminPageTitle = 'Site Settings, Branding, Design Studio & Homepage Charter';
+$socialLinks = getSocialMediaLinks($pdo, false);
+$socialShareCfg = getSocialSharingConfig($pdo);
+$editingSocial = null;
+if (!empty($_GET['edit_social'])) {
+    foreach ($socialLinks as $slRow) {
+        if ((int)$slRow['id'] === (int)$_GET['edit_social']) {
+            $editingSocial = $slRow;
+            break;
+        }
+    }
+}
+$adminPageTitle = 'Site Settings, Social Media, Branding & Theme Studio';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
 
+<div class="admin-subtabs" style="margin-bottom:1.1rem;">
+  <a href="?tab=general" class="admin-subtab <?= $tab === 'general' ? 'is-active' : '' ?>">1. Institution Branding, Theme &amp; Homepage</a>
+  <a href="?tab=social" class="admin-subtab <?= $tab === 'social' ? 'is-active' : '' ?>">2. Social Media Icons, Sharing &amp; Broadcast (<?= count($socialLinks) ?>)</a>
+</div>
+
+<?php if ($tab === 'general'): ?>
   <form method="post" enctype="multipart/form-data" class="card" style="max-width:860px;">
     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+    <input type="hidden" name="action" value="save_site_settings">
     <div class="grid-2" style="margin-bottom:0.65rem;">
       <label>Trust / Society Name <input type="text" name="trust_name" value="<?= e($s['trust_name'] ?? '') ?>" style="width:100%;padding:0.5rem;"></label>
       <label>Short Code <input type="text" name="short_code" value="<?= e($s['short_code'] ?? 'SVCOER') ?>" style="width:100%;padding:0.5rem;"></label>
@@ -334,4 +426,210 @@ function addApprovedBodyRow() {
   list.appendChild(div);
 }
 </script>
+<?php else: ?>
+  <?php
+    $pubPagesList = $pdo->query('SELECT slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC, id ASC LIMIT 60')->fetchAll() ?: [];
+    $canonBase = rtrim(resolvePhpCanonicalBase(function_exists('getSeoSettings') ? getSeoSettings($pdo) : []), '/');
+  ?>
+  <div class="grid-2" style="gap:1.25rem;align-items:start;">
+    <!-- Left Column: Social Media Profile Links CRUD -->
+    <div class="card">
+      <h2 style="margin-top:0;"><?= $editingSocial ? 'Edit Social Channel: ' . e((string)$editingSocial['label']) : 'Add Official Social Media Profile Link' ?></h2>
+      <form method="post" style="background:#FAFAF9;border:1px solid var(--border-color);border-radius:10px;padding:0.9rem;margin-bottom:1.1rem;">
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="save_social_link">
+        <input type="hidden" name="social_id" value="<?= (int)($editingSocial['id'] ?? 0) ?>">
+
+        <div class="grid-2" style="margin-bottom:0.55rem;">
+          <label style="font-size:0.8rem;font-weight:600;">Platform Icon *
+            <select name="platform" style="width:100%;padding:0.45rem;margin-top:3px;">
+              <?php foreach (socialPlatformCatalog() as $pKey => $pLbl): ?>
+                <option value="<?= e($pKey) ?>" <?= ($editingSocial['platform'] ?? 'linkedin') === $pKey ? 'selected' : '' ?>><?= e($pLbl) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Display Label *
+            <input type="text" name="label" required value="<?= e((string)($editingSocial['label'] ?? '')) ?>" placeholder="e.g. LinkedIn Official" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:0.55rem;">
+          <label style="font-size:0.8rem;font-weight:600;">Profile URL (https://...) *
+            <input type="url" name="url" required value="<?= e((string)($editingSocial['url'] ?? '')) ?>" placeholder="https://linkedin.com/school/..." style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Handle / Username
+            <input type="text" name="handle" value="<?= e((string)($editingSocial['handle'] ?? '')) ?>" placeholder="@svcoer_official" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.55rem;">Custom SVG Icon Markup (Optional, used when Platform = Custom Social Link)
+          <textarea name="custom_svg" rows="2" placeholder="<svg width='16' height='16' viewBox='0 0 24 24'>...</svg>" style="width:100%;padding:0.45rem;font-family:monospace;font-size:0.78rem;margin-top:3px;"><?= e((string)($editingSocial['custom_svg'] ?? '')) ?></textarea>
+        </label>
+
+        <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:600;margin-bottom:0.65rem;">
+          <input type="checkbox" name="is_active" value="1" <?= ($editingSocial === null || !empty($editingSocial['is_active'])) ? 'checked' : '' ?>>
+          Visible in Header, Footer &amp; Contact Page
+        </label><br>
+
+        <button type="submit" class="btn-primary btn-sm"><?= $editingSocial ? 'Update Social Channel' : 'Add Social Channel' ?></button>
+        <?php if ($editingSocial): ?><a href="?tab=social" class="btn-outline btn-sm" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
+      </form>
+
+      <h3 style="margin-top:0;">Configured Social Media Icons (<?= count($socialLinks) ?>)</h3>
+      <?php foreach ($socialLinks as $lk): ?>
+        <div class="admin-list-row">
+          <div style="display:flex;align-items:center;gap:0.65rem;">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--surface-bg);border:1px solid var(--border-color);color:var(--primary-color);">
+              <?= socialPlatformSvg((string)$lk['platform'], (string)($lk['custom_svg'] ?? '')) ?>
+            </span>
+            <div>
+              <strong><?= e((string)$lk['label']) ?></strong>
+              <?php if (!empty($lk['handle'])): ?><small style="color:#78716C;">(<?= e((string)$lk['handle']) ?>)</small><?php endif; ?>
+              <span class="badge <?= !empty($lk['is_active']) ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:4px;">
+                <?= !empty($lk['is_active']) ? 'Visible' : 'Hidden' ?>
+              </span>
+              <div style="font-size:0.75rem;color:#57534E;word-break:break-all;"><?= e((string)$lk['url']) ?></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_social_link"><input type="hidden" name="id" value="<?= (int)$lk['id'] ?>"><button type="submit" name="dir" value="up" class="btn-outline btn-sm">&uarr;</button><button type="submit" name="dir" value="down" class="btn-outline btn-sm">&darr;</button></form>
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="toggle_social_link"><input type="hidden" name="id" value="<?= (int)$lk['id'] ?>"><button type="submit" class="btn-secondary btn-sm"><?= !empty($lk['is_active']) ? 'Hide' : 'Show' ?></button></form>
+            <a href="?tab=social&edit_social=<?= (int)$lk['id'] ?>" class="btn-primary btn-sm">Edit</a>
+            <form method="post" style="display:inline;" onsubmit="return confirm('Delete this social channel?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_social_link"><input type="hidden" name="id" value="<?= (int)$lk['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+
+    <!-- Right Column: Social Sharing Governance & Broadcast Composer -->
+    <div style="display:flex;flex-direction:column;gap:1.25rem;">
+      <form method="post" class="card">
+        <h2 style="margin-top:0;">Social Sharing &amp; OpenGraph Controls</h2>
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="save_social_sharing">
+
+        <div style="display:grid;gap:0.45rem;font-size:0.84rem;margin-bottom:0.85rem;">
+          <label style="font-weight:700;color:var(--primary-color);"><input type="checkbox" name="sharing_enabled" <?= !empty($socialShareCfg['enabled']) ? 'checked' : '' ?>> Master Toggle: Enable Social Share Buttons Across Website</label>
+          <label><input type="checkbox" name="show_icons_header" <?= !empty($socialShareCfg['showIconsInHeader']) ? 'checked' : '' ?>> Show Official Social Icons in Top Utility Header</label>
+          <label><input type="checkbox" name="show_icons_footer" <?= !empty($socialShareCfg['showIconsInFooter']) ? 'checked' : '' ?>> Show Official Social Icons in Website Footer</label>
+          <label><input type="checkbox" name="show_on_pages" <?= !empty($socialShareCfg['showOnPages']) ? 'checked' : '' ?>> Enable Share Bar on Autonomous Micro-Pages</label>
+          <label><input type="checkbox" name="show_on_research" <?= !empty($socialShareCfg['showOnResearch']) ? 'checked' : '' ?>> Enable Share Bar on Research Grants &amp; Patents Portal</label>
+          <label><input type="checkbox" name="show_on_conferences" <?= !empty($socialShareCfg['showOnConferences']) ? 'checked' : '' ?>> Enable Share Bar on Conferences, Workshops &amp; FDPs</label>
+          <label><input type="checkbox" name="show_on_portals" <?= !empty($socialShareCfg['showOnPortals']) ? 'checked' : '' ?>> Enable Share Bar on Placements, Sports, Facilities &amp; Feedback Portals</label>
+        </div>
+
+        <strong style="display:block;font-size:0.82rem;margin-bottom:0.4rem;">Enabled Sharing Platforms:</strong>
+        <div class="grid-3" style="font-size:0.82rem;margin-bottom:0.85rem;">
+          <?php
+            $platNames = [
+              'whatsapp' => 'WhatsApp', 'linkedin' => 'LinkedIn', 'twitter' => 'X / Twitter',
+              'facebook' => 'Facebook', 'telegram' => 'Telegram', 'email' => 'Email',
+              'copyLink' => 'Copy Link', 'nativeShare' => 'Native Web Share',
+            ];
+            $curPlats = $socialShareCfg['platforms'] ?? [];
+            foreach ($platNames as $pk => $pn):
+          ?>
+            <label><input type="checkbox" name="platforms[<?= e($pk) ?>]" value="1" <?= !empty($curPlats[$pk]) ? 'checked' : '' ?>> <?= e($pn) ?></label>
+          <?php endforeach; ?>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:0.75rem;">
+          <label style="font-size:0.8rem;font-weight:600;">Share Strip Heading
+            <input type="text" name="share_heading" value="<?= e((string)($socialShareCfg['shareHeading'] ?? 'Share this update')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">X / Twitter @Handle
+            <input type="text" name="twitter_handle" value="<?= e((string)($socialShareCfg['twitterHandle'] ?? 'svcoer_edu')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.75rem;">Default Hashtags (comma-separated)
+          <input type="text" name="default_hashtags" value="<?= e((string)($socialShareCfg['defaultHashtags'] ?? 'SVCOER,SVERI,Engineering')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+
+        <button type="submit" class="btn-primary">Save Social Sharing Settings</button>
+      </form>
+
+      <!-- Direct Social Post & Broadcast Composer -->
+      <div class="card">
+        <h2 style="margin-top:0;">Direct Social Post &amp; Broadcast Composer</h2>
+        <p style="font-size:0.82rem;color:#57534E;margin-top:-0.25rem;margin-bottom:0.75rem;">
+          Draft a campus announcement or research milestone once and publish directly to LinkedIn, X, Facebook, WhatsApp, or Telegram with OpenGraph URL preview.
+        </p>
+        <div style="display:grid;gap:0.55rem;">
+          <label style="font-size:0.8rem;font-weight:600;">Pick Published Page / Portal Link
+            <select id="sc-page-picker" style="width:100%;padding:0.45rem;margin-top:3px;">
+              <option value="<?= e($canonBase . '/index.php') ?>">Institution Homepage</option>
+              <option value="<?= e($canonBase . '/conferences.php') ?>">Conferences &amp; Workshops Hub</option>
+              <option value="<?= e($canonBase . '/placements.php') ?>">Training &amp; Placements Portal</option>
+              <option value="<?= e($canonBase . '/feedback.php') ?>">Complaint &amp; Feedback Cell</option>
+              <?php foreach ($pubPagesList as $pp): ?>
+                <option value="<?= e($canonBase . '/page.php?slug=' . urlencode((string)$pp['slug'])) ?>"><?= e((string)$pp['title']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Target URL
+            <input type="url" id="sc-url" value="<?= e($canonBase . '/index.php') ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Announcement Headline
+            <input type="text" id="sc-headline" value="<?= e((string)($s['institution_name'] ?? 'SVCOER Pandharpur')) ?> — Institutional Update" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Summary / Caption
+            <textarea id="sc-summary" rows="3" style="width:100%;padding:0.45rem;margin-top:3px;" placeholder="Key highlights, dates, or accreditation achievement..."></textarea>
+          </label>
+          <label style="font-size:0.8rem;font-weight:600;">Hashtags
+            <input type="text" id="sc-tags" value="<?= e((string)($socialShareCfg['defaultHashtags'] ?? 'SVCOER,SVERI')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-top:0.25rem;" id="sc-actions">
+            <a id="sc-btn-wa" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm">Post to WhatsApp</a>
+            <a id="sc-btn-li" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm">Post to LinkedIn</a>
+            <a id="sc-btn-tw" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm">Post to X</a>
+            <a id="sc-btn-fb" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm">Post to Facebook</a>
+            <a id="sc-btn-tg" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm">Post to Telegram</a>
+            <button type="button" id="sc-btn-copy" class="btn-primary btn-sm">Copy Post Text</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var pick = document.getElementById('sc-page-picker');
+    var urlEl = document.getElementById('sc-url');
+    var headEl = document.getElementById('sc-headline');
+    var sumEl = document.getElementById('sc-summary');
+    var tagsEl = document.getElementById('sc-tags');
+    if (!urlEl || !headEl) return;
+
+    function buildText() {
+      var tags = (tagsEl.value || '').split(',').map(function (t) { return t.trim().replace(/^#/, ''); }).filter(Boolean).map(function (t) { return '#' + t; }).join(' ');
+      return [headEl.value.trim(), sumEl.value.trim(), tags, urlEl.value.trim()].filter(Boolean).join('\n\n');
+    }
+    function syncLinks() {
+      var u = encodeURIComponent(urlEl.value.trim());
+      var txt = encodeURIComponent(buildText());
+      var ttl = encodeURIComponent(headEl.value.trim());
+      var ht = encodeURIComponent((tagsEl.value || '').replace(/#/g, '').trim());
+      document.getElementById('sc-btn-wa').href = 'https://api.whatsapp.com/send?text=' + txt;
+      document.getElementById('sc-btn-li').href = 'https://www.linkedin.com/sharing/share-offsite/?url=' + u;
+      document.getElementById('sc-btn-tw').href = 'https://twitter.com/intent/tweet?text=' + ttl + '&url=' + u + (ht ? '&hashtags=' + ht : '');
+      document.getElementById('sc-btn-fb').href = 'https://www.facebook.com/sharer/sharer.php?u=' + u;
+      document.getElementById('sc-btn-tg').href = 'https://t.me/share/url?url=' + u + '&text=' + ttl;
+    }
+    if (pick) {
+      pick.addEventListener('change', function () { urlEl.value = pick.value; syncLinks(); });
+    }
+    [urlEl, headEl, sumEl, tagsEl].forEach(function (el) { el.addEventListener('input', syncLinks); });
+    document.getElementById('sc-btn-copy').addEventListener('click', function () {
+      var btn = this;
+      var text = buildText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          btn.textContent = 'Copied Post!';
+          setTimeout(function () { btn.textContent = 'Copy Post Text'; }, 1600);
+        });
+      }
+    });
+    syncLinks();
+  })();
+  </script>
+<?php endif; ?>
 <?php require_once __DIR__ . '/../includes/admin_layout_bottom.php'; ?>

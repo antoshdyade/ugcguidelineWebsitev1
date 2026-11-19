@@ -109,4 +109,6 @@ require_once __DIR__ . '/includes/header.php';
   <?php endif; ?>
 </section>
 
+<?= renderPhpSocialShareBar($pdo, 'Conferences, Workshops, FDPs & Events — SVCOER Pandharpur', 'Explore upcoming national and international conferences, research workshops, FDPs, and poster tracks.', baseUrl('conferences.php'), 'conference', true) ?>
+
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

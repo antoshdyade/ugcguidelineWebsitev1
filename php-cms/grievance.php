@@ -47,6 +47,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare(
                     'INSERT INTO grievances (ticket_code, complainant_name, email, phone, reporter_role, category, subject, description, urgency, is_anonymous, attachment_url, status, submitted_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 )->execute([$ticketCode, $name, $email, $phone, $role, $category, $subject, $description, $urgency, $isAnon, $attachmentUrl, 'Open', $now, $now]);
+                try {
+                    $epCfg = getEmailPushConfig($pdo);
+                    if (!empty($epCfg['enabled']) && !empty($epCfg['pushOnNewGrievance'])) {
+                        $body = "New Grievance / Anti-Ragging Ticket Filed\n"
+                            . "Tracking Code: {$ticketCode}\n"
+                            . "Urgency: {$urgency}\n"
+                            . "Category: {$category}\n"
+                            . "Role: {$role}\n"
+                            . "Subject: {$subject}\n"
+                            . "Complainant: " . ($isAnon ? 'Anonymous / Confidential' : "{$name} ({$email})") . "\n\n"
+                            . "Summary:\n{$description}\n";
+                        cms_dispatch_and_log_email(
+                            $pdo,
+                            'grievance_alert',
+                            (string)($epCfg['alertRecipientEmails'] ?? ''),
+                            "[{$urgency} Grievance] {$ticketCode}: {$subject}",
+                            $body,
+                            'Ticket: ' . $ticketCode,
+                            '',
+                            $epCfg
+                        );
+                    }
+                } catch (Throwable $ignoredMail) {
+                }
                 $msg = 'Grievance logged confidentially! Please save your Ticket Tracking Code: ' . $ticketCode;
             }
         }

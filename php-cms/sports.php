@@ -301,4 +301,6 @@ require_once __DIR__ . '/includes/header.php';
   </section>
 <?php endif; ?>
 
+<?= renderPhpSocialShareBar($pdo, $pageTitle, (string)$config['heroSubtitle'], baseUrl('sports.php'), 'portal', true) ?>
+
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

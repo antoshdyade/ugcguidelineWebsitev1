@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/analytics_security.php';
+require_once __DIR__ . '/mail_helper.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     $svcoerDirWritable = static function (string $dir): bool {
@@ -459,10 +460,11 @@ function defaultPortalMenuItems(): array
         ['id' => 'facilities',  'label' => 'Facilities',  'href' => 'facilities.php',  'matchScripts' => ['facilities.php'], 'menuLocation' => 'main', 'sortOrder' => 2, 'isSystem' => true, 'openInNewTab' => false],
         ['id' => 'placements',  'label' => 'Placements',  'href' => 'placements.php',  'matchScripts' => ['placements.php'], 'menuLocation' => 'main', 'sortOrder' => 3, 'isSystem' => true, 'openInNewTab' => false],
         ['id' => 'grievance',   'label' => 'Grievance & Anti-Ragging', 'href' => 'grievance.php', 'matchScripts' => ['grievance.php'], 'menuLocation' => 'main', 'sortOrder' => 4, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'alumni',      'label' => 'Alumni',      'href' => 'alumni.php',      'matchScripts' => ['alumni.php'], 'menuLocation' => 'main', 'sortOrder' => 5, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'gallery',     'label' => 'Gallery',     'href' => 'gallery.php',     'matchScripts' => ['gallery.php'], 'menuLocation' => 'more', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'contact',     'label' => 'Contact Us',  'href' => 'contact.php',     'matchScripts' => ['contact.php'], 'menuLocation' => 'more', 'sortOrder' => 7, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'quick-links', 'label' => 'Quick Links & Disclosures', 'href' => 'quick-links.php', 'matchScripts' => ['quick-links.php'], 'menuLocation' => 'more', 'sortOrder' => 8, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'feedback',    'label' => 'Feedback Cell', 'href' => 'feedback.php', 'matchScripts' => ['feedback.php'], 'menuLocation' => 'more', 'sortOrder' => 5, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'alumni',      'label' => 'Alumni',      'href' => 'alumni.php',      'matchScripts' => ['alumni.php'], 'menuLocation' => 'main', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'gallery',     'label' => 'Gallery',     'href' => 'gallery.php',     'matchScripts' => ['gallery.php'], 'menuLocation' => 'more', 'sortOrder' => 7, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'contact',     'label' => 'Contact Us',  'href' => 'contact.php',     'matchScripts' => ['contact.php'], 'menuLocation' => 'more', 'sortOrder' => 8, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'quick-links', 'label' => 'Quick Links & Disclosures', 'href' => 'quick-links.php', 'matchScripts' => ['quick-links.php'], 'menuLocation' => 'more', 'sortOrder' => 9, 'isSystem' => true, 'openInNewTab' => false],
     ];
 }
 
@@ -995,6 +997,444 @@ function getFacilitiesPortalConfig(PDO $pdo): array
     } catch (Throwable $ignored) {
     }
     return $def;
+}
+
+function normalizePhpSlug(string $raw): string
+{
+    $decoded = rawurldecode(trim($raw));
+    $decoded = str_replace('&', ' and ', $decoded);
+    $s = strtolower($decoded);
+    $s = preg_replace('/[^a-z0-9]+/', '-', $s) ?? '';
+    return trim($s, '-');
+}
+
+function extractPlainTextExcerpt(string $html, int $maxLen = 165): string
+{
+    $txt = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $txt = trim((string)(preg_replace('/\s+/', ' ', $txt) ?? ''));
+    if (strlen($txt) <= $maxLen) {
+        return $txt;
+    }
+    return rtrim(substr($txt, 0, $maxLen - 1)) . '…';
+}
+
+function resolvePageBySlugWithAliases(PDO $pdo, string $rawSlug): ?array
+{
+    $candidates = [];
+    $trimRaw = trim($rawSlug);
+    if ($trimRaw !== '') {
+        $candidates[] = $trimRaw;
+    }
+    $norm = normalizePhpSlug($rawSlug);
+    if ($norm !== '' && !in_array($norm, $candidates, true)) {
+        $candidates[] = $norm;
+    }
+    $aliasMap = [
+        'incubation-center'                         => 'incubation-cell',
+        'incubation-centre'                         => 'incubation-cell',
+        'startups-iic-cell'                         => 'incubation-cell',
+        'start-ups-and-iic-cell'                    => 'incubation-cell',
+        'incubation-center-start-ups-and-iic-cell'  => 'incubation-cell',
+        'central-research-facilities'               => 'central-facilities',
+        'central-research-and-computing-facilities' => 'central-facilities',
+        'research-and-development-cell'             => 'research-development-cell',
+        'conferences-and-workshops'                 => 'conferences-workshops-events',
+        'national-international-conferences'        => 'conferences-workshops-events',
+    ];
+    if ($norm !== '' && isset($aliasMap[$norm])) {
+        $candidates[] = $aliasMap[$norm];
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.ugc_code
+         FROM pages p
+         JOIN categories c ON p.category_id = c.id
+         WHERE p.slug = ? AND p.is_published = 1
+         LIMIT 1'
+    );
+    foreach (array_values(array_unique($candidates)) as $cand) {
+        $stmt->execute([$cand]);
+        $found = $stmt->fetch();
+        if ($found) {
+            return $found;
+        }
+    }
+    return null;
+}
+
+function socialPlatformCatalog(): array
+{
+    return [
+        'facebook'  => 'Facebook',
+        'linkedin'  => 'LinkedIn',
+        'instagram' => 'Instagram',
+        'youtube'   => 'YouTube',
+        'twitter'   => 'X (Twitter)',
+        'whatsapp'  => 'WhatsApp Channel',
+        'telegram'  => 'Telegram Channel',
+        'github'    => 'GitHub',
+        'custom'    => 'Custom Social Link',
+    ];
+}
+
+function defaultSocialMediaLinks(): array
+{
+    return [
+        ['id' => 1, 'platform' => 'facebook',  'label' => 'Facebook',    'url' => 'https://facebook.com',  'handle' => '@svcoer',           'custom_svg' => '', 'is_active' => 1, 'sort_order' => 1],
+        ['id' => 2, 'platform' => 'linkedin',  'label' => 'LinkedIn',    'url' => 'https://linkedin.com',  'handle' => 'svcoer-pandharpur', 'custom_svg' => '', 'is_active' => 1, 'sort_order' => 2],
+        ['id' => 3, 'platform' => 'instagram', 'label' => 'Instagram',   'url' => 'https://instagram.com', 'handle' => '@svcoer_official',  'custom_svg' => '', 'is_active' => 1, 'sort_order' => 3],
+        ['id' => 4, 'platform' => 'youtube',   'label' => 'YouTube',     'url' => 'https://youtube.com',   'handle' => '@svcoer_edu',       'custom_svg' => '', 'is_active' => 1, 'sort_order' => 4],
+        ['id' => 5, 'platform' => 'twitter',   'label' => 'X (Twitter)', 'url' => 'https://x.com',         'handle' => '@svcoer_edu',       'custom_svg' => '', 'is_active' => 1, 'sort_order' => 5],
+    ];
+}
+
+function getSocialMediaLinks(PDO $pdo, bool $onlyActive = false): array
+{
+    try {
+        $sql = 'SELECT * FROM social_media_links' . ($onlyActive ? ' WHERE is_active = 1' : '') . ' ORDER BY sort_order ASC, id ASC';
+        $rows = $pdo->query($sql)->fetchAll();
+        if (is_array($rows) && count($rows) > 0) {
+            return $rows;
+        }
+        if ($onlyActive) {
+            $cnt = (int)$pdo->query('SELECT COUNT(*) FROM social_media_links')->fetchColumn();
+            if ($cnt > 0) {
+                return [];
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return defaultSocialMediaLinks();
+}
+
+function defaultSocialSharingConfig(): array
+{
+    return [
+        'enabled'           => true,
+        'showIconsInHeader' => true,
+        'showIconsInFooter' => true,
+        'showOnPages'       => true,
+        'showOnResearch'    => true,
+        'showOnConferences' => true,
+        'showOnPortals'     => true,
+        'shareHeading'      => 'Share this update',
+        'defaultHashtags'   => 'SVCOER,SVERI,Engineering,NEP2020,Pandharpur',
+        'twitterHandle'     => 'svcoer_edu',
+        'platforms'         => [
+            'whatsapp'    => true,
+            'linkedin'    => true,
+            'twitter'     => true,
+            'facebook'    => true,
+            'telegram'    => true,
+            'email'       => true,
+            'copyLink'    => true,
+            'nativeShare' => true,
+        ],
+    ];
+}
+
+function getSocialSharingConfig(PDO $pdo): array
+{
+    $def = defaultSocialSharingConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'social_sharing_config' LIMIT 1")->fetchColumn();
+        if (is_string($raw) && $raw !== '') {
+            $dec = json_decode($raw, true);
+            if (is_array($dec)) {
+                $merged = array_replace_recursive($def, $dec);
+                foreach (['enabled', 'showIconsInHeader', 'showIconsInFooter', 'showOnPages', 'showOnResearch', 'showOnConferences', 'showOnPortals'] as $bk) {
+                    $merged[$bk] = !empty($merged[$bk]);
+                }
+                return $merged;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function saveSocialSharingConfig(PDO $pdo, array $next): array
+{
+    $def = defaultSocialSharingConfig();
+    $merged = array_replace_recursive($def, $next);
+    foreach (['enabled', 'showIconsInHeader', 'showIconsInFooter', 'showOnPages', 'showOnResearch', 'showOnConferences', 'showOnPortals'] as $bk) {
+        $merged[$bk] = !empty($merged[$bk]);
+    }
+    foreach (array_keys($def['platforms']) as $pk) {
+        $merged['platforms'][$pk] = !empty($merged['platforms'][$pk]);
+    }
+    try {
+        $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('social_sharing_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+            ->execute([json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+    } catch (Throwable $ignored) {
+    }
+    return $merged;
+}
+
+function socialPlatformSvg(string $platform, string $customSvg = ''): string
+{
+    $p = strtolower(trim($platform));
+    if ($p === 'custom' && trim($customSvg) !== '' && stripos($customSvg, '<svg') !== false && stripos($customSvg, '<script') === false) {
+        return $customSvg;
+    }
+    switch ($p) {
+        case 'facebook':
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 9H16V6h-2.5C11.6 6 10 7.6 10 9.5V11H8v3h2v7h3v-7h2.3l.7-3H13v-1.5c0-.3.2-.5.5-.5z"/></svg>';
+        case 'linkedin':
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.9 8.5A1.9 1.9 0 1 1 6.9 4.7a1.9 1.9 0 0 1 0 3.8zM5.3 10h3.2v9.5H5.3V10zm5.2 0h3.1v1.3h.1c.4-.8 1.5-1.6 3.1-1.6 3.3 0 3.9 2.1 3.9 4.9v4.9h-3.2v-4.4c0-1 0-2.4-1.5-2.4s-1.7 1.1-1.7 2.3v4.5h-3.2V10z"/></svg>';
+        case 'instagram':
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>';
+        case 'youtube':
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.6 7.2a2.8 2.8 0 0 0-2-2C17.8 4.7 12 4.7 12 4.7s-5.8 0-7.6.5a2.8 2.8 0 0 0-2 2C2 9 2 12 2 12s0 3 .4 4.8a2.8 2.8 0 0 0 2 2c1.8.5 7.6.5 7.6.5s5.8 0 7.6-.5a2.8 2.8 0 0 0 2-2C22 15 22 12 22 12s0-3-.4-4.8zM10 15.2V8.8l5.5 3.2-5.5 3.2z"/></svg>';
+        case 'twitter':
+            return '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.3 3H21l-6.6 7.5L22 21h-6l-4.7-6.1L6 21H3.2l7-8L2.8 3h6.1l4.2 5.6L18.3 3z"/></svg>';
+        case 'whatsapp':
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.6 14.1c-.2.7-1.4 1.3-1.9 1.4-.5.1-1.1.1-1.8-.1-.4-.1-1-.3-1.7-.7-3-1.3-5-4.3-5.1-4.5-.2-.2-1.2-1.6-1.2-3.1s.8-2.2 1.1-2.5c.3-.3.6-.4.8-.4h.6c.2 0 .5 0 .7.5.3.7.9 2.1 1 2.3.1.2.1.4 0 .6-.1.2-.2.4-.4.6l-.4.5c-.2.2-.3.4-.1.7.2.3.9 1.5 2 2.4 1.4 1.2 2.5 1.6 2.8 1.8.3.1.5.1.7-.1.2-.2.8-.9 1-1.3.2-.3.4-.3.7-.2.3.1 1.9.9 2.2 1.1.3.2.5.3.6.4.1.2.1.8-.1 1.5z"/></svg>';
+        case 'telegram':
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.4 4.2L2.9 11.4c-1.2.5-1.2 1.2-.2 1.5l4.7 1.5 11-6.9c.5-.3 1-.1.6.2L10.1 15.8l-.4 5c.6 0 .8-.3 1.1-.6l2.6-2.5 5.4 4c1 .5 1.7.3 1.9-.9l3.3-15.4c.3-1.4-.5-2-1.6-1.2z"/></svg>';
+        case 'github':
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.5 2 2 6.5 2 12c0 4.4 2.9 8.2 6.8 9.5.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1 1.6 1 .9 1.6 2.4 1.1 3 .8.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.2-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c2-1.3 2.8-1 2.8-1 .5 1.4.2 2.5.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 22 12c0-5.5-4.5-10-10-10z"/></svg>';
+        default:
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>';
+    }
+}
+
+function renderPhpSocialIcons(PDO $pdo, string $variant = 'header'): string
+{
+    $cfg = getSocialSharingConfig($pdo);
+    if ($variant === 'header' && empty($cfg['showIconsInHeader'])) {
+        return '';
+    }
+    if ($variant === 'footer' && empty($cfg['showIconsInFooter'])) {
+        return '';
+    }
+    $links = getSocialMediaLinks($pdo, true);
+    if (empty($links)) {
+        return '';
+    }
+
+    if ($variant === 'contact') {
+        $out = '<div class="card" style="margin-top:1.25rem;"><h3 style="margin-top:0;">Official Social Media Channels</h3><div style="display:flex;flex-wrap:wrap;gap:0.65rem;">';
+        foreach ($links as $lk) {
+            $svg = socialPlatformSvg((string)$lk['platform'], (string)($lk['custom_svg'] ?? ''));
+            $handle = trim((string)($lk['handle'] ?? ''));
+            $out .= '<a href="' . e((string)$lk['url']) . '" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:0.5rem;padding:0.55rem 0.9rem;border:1px solid var(--border-color);border-radius:8px;text-decoration:none;color:var(--primary-color);background:var(--surface-bg);font-weight:600;font-size:0.86rem;">'
+                . $svg
+                . '<span>' . e((string)$lk['label']) . ($handle !== '' ? ' <small style="color:var(--text-muted);font-weight:500;">(' . e($handle) . ')</small>' : '') . '</span>'
+                . '</a>';
+        }
+        $out .= '</div></div>';
+        return $out;
+    }
+
+    if ($variant === 'footer') {
+        $out = '<div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-top:0.75rem;" aria-label="Social Media Channels">';
+        foreach ($links as $lk) {
+            $svg = socialPlatformSvg((string)$lk['platform'], (string)($lk['custom_svg'] ?? ''));
+            $out .= '<a href="' . e((string)$lk['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e((string)$lk['label']) . '" aria-label="' . e((string)$lk['label']) . '" style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;border:1px solid #334155;background:rgba(255,255,255,0.06);color:#e2e8f0;text-decoration:none;">' . $svg . '</a>';
+        }
+        $out .= '</div>';
+        return $out;
+    }
+
+    // Compact header ribbon icons
+    $out = '<div class="a11y-social-group" style="display:inline-flex;align-items:center;gap:0.35rem;" aria-label="Official Social Channels">';
+    foreach ($links as $lk) {
+        $svg = socialPlatformSvg((string)$lk['platform'], (string)($lk['custom_svg'] ?? ''));
+        $out .= '<a href="' . e((string)$lk['url']) . '" target="_blank" rel="noopener noreferrer" title="' . e((string)$lk['label']) . '" aria-label="' . e((string)$lk['label']) . '" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:5px;background:rgba(255,255,255,0.12);color:#fff;text-decoration:none;">' . $svg . '</a>';
+    }
+    $out .= '</div>';
+    return $out;
+}
+
+function renderPhpSocialShareBar(PDO $pdo, string $title, string $summary = '', string $url = '', string $location = 'page', bool $pageEnabled = true): string
+{
+    if (!$pageEnabled) {
+        return '';
+    }
+    $cfg = getSocialSharingConfig($pdo);
+    if (empty($cfg['enabled'])) {
+        return '';
+    }
+    if ($location === 'page' && empty($cfg['showOnPages'])) {
+        return '';
+    }
+    if ($location === 'research' && empty($cfg['showOnResearch'])) {
+        return '';
+    }
+    if ($location === 'conference' && empty($cfg['showOnConferences'])) {
+        return '';
+    }
+    if ($location === 'portal' && empty($cfg['showOnPortals'])) {
+        return '';
+    }
+
+    $shareUrl = trim($url);
+    if ($shareUrl === '') {
+        $scheme = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off') ? 'https' : 'http';
+        $host = (string)($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $uri = (string)($_SERVER['REQUEST_URI'] ?? '/index.php');
+        $shareUrl = $scheme . '://' . $host . $uri;
+    } elseif (!preg_match('#^https?://#i', $shareUrl)) {
+        $shareUrl = rtrim(resolvePhpCanonicalBase(function_exists('getSeoSettings') ? getSeoSettings($pdo) : []), '/') . '/' . ltrim($shareUrl, '/');
+    }
+
+    $p = $cfg['platforms'] ?? [];
+    $heading = trim((string)($cfg['shareHeading'] ?? 'Share this update')) ?: 'Share this update';
+    $encUrl = rawurlencode($shareUrl);
+    $encTitle = rawurlencode($title);
+    $encText = rawurlencode(trim($title . ($summary !== '' ? ' — ' . $summary : '')));
+    $via = trim(ltrim((string)($cfg['twitterHandle'] ?? ''), '@'));
+    $hashtags = trim((string)($cfg['defaultHashtags'] ?? ''));
+
+    $buttons = '';
+    if (!empty($p['whatsapp'])) {
+        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://api.whatsapp.com/send?text=' . $encText . '%20' . $encUrl . '">WhatsApp</a>';
+    }
+    if (!empty($p['linkedin'])) {
+        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://www.linkedin.com/sharing/share-offsite/?url=' . $encUrl . '">LinkedIn</a>';
+    }
+    if (!empty($p['twitter'])) {
+        $tw = 'https://twitter.com/intent/tweet?text=' . $encTitle . '&url=' . $encUrl
+            . ($via !== '' ? '&via=' . rawurlencode($via) : '')
+            . ($hashtags !== '' ? '&hashtags=' . rawurlencode($hashtags) : '');
+        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="' . e($tw) . '">X / Twitter</a>';
+    }
+    if (!empty($p['facebook'])) {
+        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://www.facebook.com/sharer/sharer.php?u=' . $encUrl . '">Facebook</a>';
+    }
+    if (!empty($p['telegram'])) {
+        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=' . $encUrl . '&text=' . $encTitle . '">Telegram</a>';
+    }
+    if (!empty($p['email'])) {
+        $mailBody = rawurlencode(($summary !== '' ? $summary . "\n\n" : '') . $shareUrl);
+        $buttons .= '<a class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" href="mailto:?subject=' . $encTitle . '&body=' . $mailBody . '">Email</a>';
+    }
+    if (!empty($p['copyLink'])) {
+        $buttons .= '<button type="button" class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" onclick="svcoerCopyShareUrl(' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . ', this)">Copy Link</button>';
+    }
+    if (!empty($p['nativeShare'])) {
+        $buttons .= '<button type="button" class="btn-secondary" style="font-size:0.8rem;padding:0.42rem 0.72rem;" onclick="if(navigator.share){navigator.share({title:' . htmlspecialchars(json_encode($title), ENT_QUOTES, 'UTF-8') . ',text:' . htmlspecialchars(json_encode($summary ?: $title), ENT_QUOTES, 'UTF-8') . ',url:' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . '}).catch(function(){});}else{svcoerCopyShareUrl(' . htmlspecialchars(json_encode($shareUrl), ENT_QUOTES, 'UTF-8') . ', this);}">Share…</button>';
+    }
+
+    if ($buttons === '') {
+        return '';
+    }
+
+    $script = '<script>if(typeof window.svcoerCopyShareUrl!=="function"){window.svcoerCopyShareUrl=function(u,btn){var done=function(){if(btn){var prev=btn.textContent;btn.textContent="Copied!";setTimeout(function(){btn.textContent=prev;},1800);}};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(done).catch(function(){});}else{var ta=document.createElement("textarea");ta.value=u;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");done();}catch(e){}document.body.removeChild(ta);}};}</script>';
+
+    return '<div class="card" style="margin-top:1.25rem;background:var(--surface-bg);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.75rem;">'
+        . '<strong style="font-size:0.88rem;color:var(--primary-color);">' . e($heading) . '</strong>'
+        . '<div style="display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;">' . $buttons . '</div>'
+        . '</div>' . $script;
+}
+
+function researchPatentTypePresets(): array
+{
+    return [
+        'Patent Granted',
+        'Patent Published',
+        'Patent Filed',
+        'Copyright / Design',
+        'Journal / Conference Publication',
+        'Industry Consultancy',
+        'Incubated Start-up',
+        'Industry / Academic MoU',
+    ];
+}
+
+function defaultResearchPortfolioConfig(): array
+{
+    return [
+        'heroBadge'            => 'UGC Section 5(e) · Sponsored R&D, IPR & Innovation Ecosystem',
+        'heroTitle'            => 'Research, Funded Grants, Patents & Incubation Cell',
+        'heroSubtitle'         => 'Autonomous R&D ecosystem driving DST-SERB, AICTE-MODROBS, MSME Design Clinic grants, filed/granted Indian patents, industry consultancy, and AICTE IDEA Lab hardware startups.',
+        'deanName'             => 'Dr. M. S. Kadam',
+        'deanTitle'            => 'Dean Research & Development (R&D) & IPR Cell',
+        'deanEmail'            => 'dean.rd@coe.sveri.ac.in',
+        'deanPhone'            => '+91-02186-216066',
+        'totalGrantsHighlight' => 'Rs. 3.85 Cr+ Sponsored Grants',
+        'activeLabsHighlight'  => '4 Approved Ph.D. Centres & 18+ Active Labs',
+        'consultancyPolicyUrl' => 'quick-links.php',
+    ];
+}
+
+function getResearchPortfolioConfig(PDO $pdo): array
+{
+    $def = defaultResearchPortfolioConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'research_portfolio_config' LIMIT 1")->fetchColumn();
+        if (is_string($raw) && $raw !== '') {
+            $dec = json_decode($raw, true);
+            if (is_array($dec)) {
+                return array_merge($def, $dec);
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function saveResearchPortfolioConfig(PDO $pdo, array $cfg): void
+{
+    $merged = array_merge(defaultResearchPortfolioConfig(), $cfg);
+    $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('research_portfolio_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+        ->execute([json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+}
+
+function getResearchPortfolioData(PDO $pdo, bool $onlyPublished = true): array
+{
+    $cfg = getResearchPortfolioConfig($pdo);
+    $projects = [];
+    $patents = [];
+    try {
+        $pSql = 'SELECT * FROM research_projects' . ($onlyPublished ? ' WHERE is_published = 1' : '') . ' ORDER BY sort_order ASC, id ASC';
+        $projects = $pdo->query($pSql)->fetchAll() ?: [];
+    } catch (Throwable $ignored) {
+    }
+    try {
+        $iSql = 'SELECT * FROM research_patents' . ($onlyPublished ? ' WHERE is_published = 1' : '') . ' ORDER BY sort_order ASC, id ASC';
+        $patents = $pdo->query($iSql)->fetchAll() ?: [];
+    } catch (Throwable $ignored) {
+    }
+    return ['config' => $cfg, 'projects' => $projects, 'patents' => $patents];
+}
+
+function feedbackSubmissionTypePresets(): array
+{
+    return ['Suggestion', 'Complaint', 'Appreciation', 'Service Request'];
+}
+
+function defaultFeedbackSections(): array
+{
+    return [
+        ['id' => 1, 'slug' => 'academics', 'section_name' => 'Academics & Classroom Teaching', 'subsections' => ['Curriculum & OBE Syllabus', 'Faculty Teaching & Mentoring', 'Laboratory Equipment & Practicals', 'Academic Timetable & Workload'], 'recipient_emails' => 'dean.academics@coe.sveri.ac.in, principal@coe.sveri.ac.in', 'cc_emails' => 'iqac@coe.sveri.ac.in', 'incharge_name' => 'Dr. S. B. Kulkarni (Dean Academics)', 'incharge_designation' => 'Dean Academics & IQAC', 'sla_days' => 5, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 1],
+        ['id' => 2, 'slug' => 'examination', 'section_name' => 'Examination & Evaluation Cell', 'subsections' => ['Exam Form & Hall Ticket', 'Result & Grade Card Verification', 'Photocopy / Revaluation', 'Transcripts & Migration'], 'recipient_emails' => 'coe@coe.sveri.ac.in', 'cc_emails' => 'principal@coe.sveri.ac.in', 'incharge_name' => 'Dr. M. S. Kumbhar (Controller of Examinations)', 'incharge_designation' => 'Autonomous Examination Cell', 'sla_days' => 4, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 2],
+        ['id' => 3, 'slug' => 'infrastructure', 'section_name' => 'Infrastructure & Campus Maintenance', 'subsections' => ['Classroom & Auditorium Facilities', 'Power Supply, AC & Lighting', 'Cleanliness & Restrooms', 'Campus Security & Parking'], 'recipient_emails' => 'estate@coe.sveri.ac.in', 'cc_emails' => 'registrar@coe.sveri.ac.in', 'incharge_name' => 'Prof. S. D. Jadhav (Estate Officer)', 'incharge_designation' => 'Campus Estate & Works', 'sla_days' => 3, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 3],
+        ['id' => 4, 'slug' => 'hostel-mess', 'section_name' => 'Hostel, Mess & Health Centre', 'subsections' => ['Boys / Girls Hostel Allotment & Rooms', 'Dining Mess Hygiene & Menu', 'Drinking Water & Solar Hot Water', 'Medical & Ambulance Support'], 'recipient_emails' => 'hostel@coe.sveri.ac.in', 'cc_emails' => 'antiragging@coe.sveri.ac.in', 'incharge_name' => 'Dr. P. K. Deshmukh (Chief Rector)', 'incharge_designation' => 'Hostel & Residential Care', 'sla_days' => 2, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 4],
+        ['id' => 5, 'slug' => 'library-it', 'section_name' => 'Library, Wi-Fi & IT Services', 'subsections' => ['Central Library & E-Journals', 'Campus Wi-Fi & Network Speed', 'ERP / LMS Account Access', 'Central Computing Lab'], 'recipient_emails' => 'library@coe.sveri.ac.in, itadmin@coe.sveri.ac.in', 'cc_emails' => '', 'incharge_name' => 'Mrs. S. P. Joshi & Mr. R. K. Pawar', 'incharge_designation' => 'Library & IT Systems', 'sla_days' => 3, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 5],
+        ['id' => 6, 'slug' => 'transport-canteen', 'section_name' => 'Transport & Campus Canteen', 'subsections' => ['Bus Routes & Timings', 'Bus Pass & Safety', 'Canteen Food Quality & Pricing', 'On-Campus Stationery & Store'], 'recipient_emails' => 'transport@coe.sveri.ac.in, estate@coe.sveri.ac.in', 'cc_emails' => '', 'incharge_name' => 'Mr. V. S. More (Transport Officer)', 'incharge_designation' => 'Campus Transport & Hospitality', 'sla_days' => 3, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 6],
+        ['id' => 7, 'slug' => 'accounts-scholarship', 'section_name' => 'Accounts, Fees & Scholarships', 'subsections' => ['Tuition Fee Receipt & Ledger', 'MahaDBT / EBC / Minority Scholarship', 'Caution Money Refund', 'Education Loan Bonafide Letter'], 'recipient_emails' => 'accounts@coe.sveri.ac.in, registrar@coe.sveri.ac.in', 'cc_emails' => '', 'incharge_name' => 'Mr. A. P. Deshmukh (Accounts Officer)', 'incharge_designation' => 'Finance & Scholarship Cell', 'sla_days' => 5, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 7],
+        ['id' => 8, 'slug' => 'placement-alumni', 'section_name' => 'Training, Placement & Alumni Relations', 'subsections' => ['Campus Recruitment Drives', 'Aptitude & Soft Skills Training', 'Industry Internship NOC', 'Alumni Networking & Mentorship'], 'recipient_emails' => 'tnp@coe.sveri.ac.in, alumni@coe.sveri.ac.in', 'cc_emails' => '', 'incharge_name' => 'Dr. S. B. Kulkarni (Dean T&P)', 'incharge_designation' => 'Training & Placement Cell', 'sla_days' => 4, 'auto_email_enabled' => 1, 'is_active' => 1, 'sort_order' => 8],
+    ];
+}
+
+function getFeedbackSections(PDO $pdo, bool $onlyActive = false): array
+{
+    try {
+        $sql = 'SELECT * FROM feedback_sections' . ($onlyActive ? ' WHERE is_active = 1' : '') . ' ORDER BY sort_order ASC, id ASC';
+        $rows = $pdo->query($sql)->fetchAll() ?: [];
+        foreach ($rows as &$r) {
+            $subs = json_decode((string)($r['subsections_json'] ?? '[]'), true);
+            $r['subsections'] = is_array($subs) ? $subs : [];
+        }
+        unset($r);
+        if (count($rows) > 0) {
+            return $rows;
+        }
+    } catch (Throwable $ignored) {
+    }
+    return defaultFeedbackSections();
 }
 
 function ensureCmsSchemaUpgraded(PDO $pdo): void
@@ -1972,12 +2412,246 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
         } catch (Throwable $ignoredPosters) {
         }
 
+        // Schema v8: Pages parity + Social Media + Research Portfolio + Stakeholder Feedback & Email Push (non-destructive)
+        foreach ([
+            "ALTER TABLE pages ADD COLUMN meta_description VARCHAR(320) DEFAULT '' AFTER content_html",
+            "ALTER TABLE pages ADD COLUMN show_share_bar TINYINT(1) DEFAULT 1 AFTER is_published",
+        ] as $pgAlter) {
+            try {
+                $pdo->exec($pgAlter);
+            } catch (Throwable $ignoredCol) {
+            }
+        }
+
+        // Backfill all 17 missing UGC & Research micro-pages safely once (fixes Research subpages 404 after Webmin import)
+        $pgParityChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'pages_parity_seeded_v2' LIMIT 1");
+        $pgParityChk->execute();
+        if (!$pgParityChk->fetchColumn()) {
+            try {
+                $insMissingPage = $pdo->prepare(
+                    'INSERT IGNORE INTO pages (category_id, slug, title, subtitle, content_html, is_published, sort_order, updated_at) VALUES (?,?,?,?,?,?,?,?)'
+                );
+                $missingPagesSeed = [
+                    [1, 'affiliating-university', 'Constituent Units & Affiliating University', 'UGC Section 5(a) · University Affiliation & Campus Units', '<h2>Affiliating University</h2><p>All undergraduate, postgraduate, and doctoral degrees are awarded by <strong>Punyashlok Ahilyadevi Holkar Solapur University (PAHSUS), Solapur</strong>, with autonomous curriculum design, continuous internal assessment, and end-semester examinations conducted by SVCOER.</p><h2>Sister &amp; Constituent Academic Units</h2><ul><li>Shri Vithal College of Engineering &amp; Research (Autonomous), Pandharpur — Main Campus</li><li>SVCOER Polytechnic Wing (Diploma in Engineering — MSBTE Affiliated)</li><li>Centre for Executive Management &amp; Innovation Studies (CEMIS)</li></ul>', 1, 4, '2026-08-18'],
+                    [1, 'recognition-approval', 'Recognition & Regulatory Approvals (UGC 2(f), 12B, AICTE)', 'UGC Section 5(a) · Statutory Extensions of Approval', '<h2>Regulatory Approvals</h2><p>SVERI&rsquo;s College of Engineering, Pandharpur holds continuous statutory approvals from all apex regulatory bodies:</p><ul><li><strong>UGC 2(f), 12(B) &amp; Autonomous Status:</strong> Conferred Autonomous Status effective from AY 2024&ndash;25 under Punyashlok Ahilyadevi Holkar Solapur University, Solapur.</li><li><strong>AICTE Approval:</strong> Approved by All India Council for Technical Education (AICTE), New Delhi (Permanent ID: 1-49281724).</li><li><strong>Government of Maharashtra &amp; DTE:</strong> DTE Institute Code <strong>06220</strong>.</li></ul>', 1, 6, '2026-09-12'],
+                    [1, 'annual-reports', 'Annual Reports', 'UGC Section 5(a) · Yearly Academic, Research & Governance Reports', '<h2>Published Institutional Annual Reports</h2><p>In compliance with UGC Public Self-Disclosure norms, complete institutional annual reports detailing admissions, examination outcomes, faculty publications, placement records, and extension activities are published openly below:</p><table><thead><tr><th>Academic Year</th><th>Document Title</th><th>Approval Date</th></tr></thead><tbody><tr><td>2025–26</td><td>28th Institutional Annual Report (IQAC Verified)</td><td>2026-08-20</td></tr><tr><td>2024–25</td><td>27th Institutional Annual Report</td><td>2025-08-18</td></tr><tr><td>2023–24</td><td>26th Institutional Annual Report</td><td>2024-08-14</td></tr></tbody></table>', 1, 7, '2026-08-25'],
+                    [1, 'sponsoring-body', 'Sponsoring Body Details', 'UGC Section 5(a) · Shri Vitthal Education & Research Institute (SVERI)', '<h2>Shri Vitthal Education &amp; Research Institute (SVERI)</h2><p>Established as a charitable educational trust, <strong>Shri Vitthal Education &amp; Research Institute (SVERI)</strong> founded its flagship Engineering College in 1998 to deliver accessible, high-calibre technical and management education rooted in innovation and ethics.</p><p><strong>Registered Office:</strong> Gopalpur-Ranjani Road, P.B. No. 54, Gopalpur, Pandharpur &ndash; 413304, Dist. Solapur, Maharashtra · Tel: +91-02186-216063.</p>', 1, 9, '2026-07-15'],
+                    [2, 'internal-complaint-committee', 'Internal Complaint Committee (ICC)', 'UGC Section 5(b) & 5(f) · POSH Act Compliance & Zero-Tolerance Mechanism', '<h2>Internal Complaint Committee (ICC)</h2><p>Constituted under the Sexual Harassment of Women at Workplace (Prevention, Prohibition and Redressal) Act, 2013 and UGC Regulations 2015:</p><table><thead><tr><th>Name</th><th>Designation</th><th>Role in ICC</th><th>Contact</th></tr></thead><tbody><tr><td>Dr. Meenakshi S. Pawar</td><td>Professor &amp; Dean Student Affairs</td><td>Presiding Officer</td><td>icc@svcoer.edu.in</td></tr><tr><td>Prof. Snehal R. Jadhav</td><td>Associate Professor, E&amp;TC</td><td>Faculty Member</td><td>+91 2186 225088</td></tr><tr><td>Adv. Vandana Kulkarni</td><td>District Legal Services Authority</td><td>External NGO / Legal Member</td><td>legal.icc@svcoer.edu.in</td></tr><tr><td>Ms. Rutuja Bhosale</td><td>Final Year B.Tech CSE</td><td>Student Representative</td><td>icc.student@svcoer.edu.in</td></tr></tbody></table>', 1, 3, '2026-09-14'],
+                    [3, 'academic-calendar', 'Academic Calendar (2026–27)', 'UGC Section 5(c) · Semester Schedule, Examinations & Co-Curricular Dates', '<h2>Odd &amp; Even Semester Schedule (AY 2026–27)</h2><table><thead><tr><th>Academic Milestone</th><th>Odd Semester</th><th>Even Semester</th></tr></thead><tbody><tr><td>Commencement of Classes</td><td>15 July 2026</td><td>05 January 2027</td></tr><tr><td>In-Semester Evaluation (ISE-I)</td><td>07–12 September 2026</td><td>22–27 February 2027</td></tr><tr><td>End-Semester Theory Examinations</td><td>18 Nov – 05 Dec 2026</td><td>03–22 May 2027</td></tr><tr><td>Declaration of Results</td><td>22 December 2026</td><td>08 June 2027</td></tr></tbody></table>', 1, 2, '2026-07-02'],
+                    [3, 'academic-statutes', 'Academic & Examination Ordinances', 'UGC Section 5(c) · Credit Framework, Grading System & ABC Guidelines', '<h2>Autonomous Examination &amp; Grading Ordinances</h2><p>SVCOER follows a 160-credit Outcome-Based Education (OBE) curriculum integrated with the National Credit Framework (NCrF) and Academic Bank of Credits (ABC). Continuous evaluation accounts for 40% weightage and End-Semester Examinations account for 60%.</p>', 1, 3, '2026-08-10'],
+                    [3, 'central-library', 'Central Library & Digital Knowledge Centre', 'UGC Section 5(c) · Print Volumes, IEEE/Springer Access & 24x7 Reading Hall', '<h2>Library Resources at a Glance</h2><table><thead><tr><th>Resource Category</th><th>Holding / Subscription</th></tr></thead><tbody><tr><td>Total Print Volumes</td><td>68,450 Books (14,200+ Titles)</td></tr><tr><td>E-Journals &amp; Databases</td><td>IEEE Xplore, SpringerLink, ASME, Elsevier ScienceDirect, DELNET</td></tr><tr><td>Seating Capacity</td><td>450 Seats (Air-conditioned Digital &amp; Reference Halls)</td></tr><tr><td>Library Automation</td><td>KOHA Integrated LMS with RFID Self-Check-In</td></tr></tbody></table>', 1, 5, '2026-08-30'],
+                    [3, 'odl-online-programs', 'UGC-Recognized ODL / Online & Swayam-NPTEL Courses', 'UGC Section 5(c) · Credit Transfer & MOOC Integration', '<h2>ODL &amp; Online Learning Compliance</h2><p>SVCOER currently offers full-time on-campus regular degree programs and does not run standalone ODL degree programs. However, up to 40% credit transfer is facilitated via <strong>SWAYAM-NPTEL</strong> Local Chapter (rated AA National Top 50) under UGC Credit Framework for Online Learning Courses.</p>', 1, 6, '2026-08-19'],
+                    [3, 'academic-collaborations', 'Academic & Industry Collaborations (MoUs)', 'UGC Section 5(c) & 5(e) · Active Domestic & International Partnerships', '<h2>Active Academic MoUs</h2><table><thead><tr><th>Partner Institution / Industry</th><th>Scope of Collaboration</th><th>Valid Until</th></tr></thead><tbody><tr><td>IIT Bombay (FOSSEE &amp; Spoken Tutorial)</td><td>Open-Source Robotics &amp; Faculty FDP</td><td>2028</td></tr><tr><td>Tata Technologies Ltd.</td><td>Centre for Invention, Innovation &amp; Incubation (CIII)</td><td>2029</td></tr><tr><td>TU Dresden, Germany (Summer Exchange)</td><td>Sustainable Manufacturing Student Exchange</td><td>2027</td></tr><tr><td>Persistent Systems &amp; Zensar</td><td>Industry-Certified Cloud &amp; AI Electives</td><td>2028</td></tr></tbody></table>', 1, 7, '2026-09-18'],
+                    [4, 'admission-process', 'Admission Process & Eligibility Guidelines', 'UGC Section 5(d) · CAP Centralized Admissions & Institute Level Quota', '<h2>Admission Procedure</h2><p>Admissions to First Year B.Tech and Direct Second Year (Lateral Entry) are conducted transparently through the Centralized Admission Process (CAP) of the State CET Cell, Government of Maharashtra, based on MHT-CET / JEE (Main) merit.</p><ul><li><strong>Step 1:</strong> Register on Maharashtra State CET Cell CAP Portal (DTE Code: 06220).</li><li><strong>Step 2:</strong> Document Verification at Scrutiny Centre &amp; Option Form submission.</li><li><strong>Step 3:</strong> Seat Allotment confirmation &amp; reporting at SVERI Admission Cell with original certificates.</li></ul>', 1, 2, '2026-09-01'],
+                    [5, 'incubation-cell', 'Incubation Centre, Start-ups & IIC Cell', 'UGC Section 5(e) · SVCOER Technology Business Incubator (TBI)', '<h2>Entrepreneurship &amp; Start-up Ecosystem</h2><p>Recognized with a <strong>4-Star Rating by MoE\'s Innovation Cell (IIC)</strong>, the SVCOER Technology Business Incubator provides seed funding up to INR 5 Lakhs, co-working prototyping labs, and IP filing support. Over 18 student-led start-ups have been incubated since 2021.</p>', 1, 2, '2026-09-05'],
+                    [5, 'central-facilities', 'Central Research & Computing Facilities', 'UGC Section 5(e) · HPC GPU Cluster, Material Testing & Central Workshop', '<h2>Central Instrumentation &amp; Shared Labs</h2><ul><li><strong>NVIDIA DGX / High-Performance Computing Node:</strong> 4x A100 GPUs for Deep Learning &amp; CFD simulations.</li><li><strong>Central Material Testing Laboratory:</strong> 1000 kN Universal Testing Machine &amp; Scanning Electron Microscope access.</li><li><strong>FabLab &amp; Rapid Prototyping Studio:</strong> Industrial 3D Printers, Laser Cutters &amp; PCB Milling.</li></ul>', 1, 3, '2026-08-29'],
+                    [5, 'conferences-workshops-events', 'National & International Conferences, Workshops & Symposia', 'UGC Section 5(e) · Dedicated Microsites, Call for Papers, Keynotes & Research Events', '<div class="cms-block cms-slider" data-block="custom-slider" data-autoplay="5" data-height="380"><div class="cms-slider-viewport" style="height:380px;"><div class="cms-slide is-active" data-slide-index="0"><img src="assets/images/hero_campus.jpg" alt="ICAEST-2026: International Conference on Smart Technology" /><div class="cms-slide-overlay"><h3 class="cms-slide-title">ICAEST-2026: International Conference on Smart Technology</h3><p class="cms-slide-caption">Annual Flagship International Conference with IEEE/Springer proceedings and hybrid tracks.</p><p class="cms-slide-cta-row"><a class="cms-btn cms-btn-amber cms-slide-cta" href="conference.php?slug=icaest-2026">Open ICAEST-2026 Microsite</a></p></div></div><div class="cms-slide" data-slide-index="1"><img src="assets/images/hero_lab.jpg" alt="National Workshops, FDPs &amp; Edge AI Symposia" /><div class="cms-slide-overlay"><h3 class="cms-slide-title">National Workshops, FDPs &amp; Edge AI Symposia</h3><p class="cms-slide-caption">Hands-on research workshops, STTPs, and patent filing clinics hosted year-round.</p><p class="cms-slide-cta-row"><a class="cms-btn cms-btn-amber cms-slide-cta" href="conferences.php">Browse All Programs</a></p></div></div></div><button type="button" class="cms-slider-prev" aria-label="Previous slide">&#8249;</button><button type="button" class="cms-slider-next" aria-label="Next slide">&#8250;</button><div class="cms-slider-dots"><button type="button" class="cms-slider-dot is-active" data-slide-to="0" aria-label="Go to slide 1"></button><button type="button" class="cms-slider-dot" data-slide-to="1" aria-label="Go to slide 2"></button></div></div><p></p><h2>Academic Conferences, Workshops &amp; Technical Events</h2><p>SVCOER regularly hosts National &amp; International Conferences, AICTE/ISTE Faculty Development Programs (FDPs), Research Workshops, and Technical Symposia. Use the interactive portals below to inspect tracks, schedules, organizing committee profiles, or submit manuscripts online.</p>', 1, 4, '2026-11-12'],
+                    [6, 'sports-ncc-nss', 'Sports Facilities, NCC, NSS & Hostels', 'UGC Section 5(f) · Athletics, Community Service & Residential Campus', '<h2>Sports, NCC/NSS &amp; Residential Facilities</h2><ul><li><strong>Sports Complex:</strong> 400m synthetic athletic track, floodlit basketball/volleyball courts, cricket ground, and indoor badminton stadium.</li><li><strong>NCC &amp; NSS:</strong> 200-cadet NCC Army Wing Unit and 250-volunteer NSS Unit conducting annual rural water-conservation camps.</li><li><strong>Hostels:</strong> Separate Boys (650 beds) &amp; Girls (480 beds) hostels with solar hot water, Wi-Fi, and hygienic dining halls.</li><li><strong>Health Centre:</strong> 10-bed campus clinic with resident medical officer and 24x7 ambulance.</li></ul>', 1, 4, '2026-08-12'],
+                    [6, 'equal-opportunity-sedg-barrier-free', 'Equal Opportunity, SEDG Cell & Barrier-Free Campus', 'UGC Section 5(f) · Divyangjan Accessibility & Inclusive Support Systems', '<h2>Inclusivity &amp; Accessibility Commitment</h2><ul><li><strong>Equal Opportunity &amp; SC/ST/OBC Cell:</strong> Facilitates post-matric scholarships, remedial coaching, and competitive exam mentorship.</li><li><strong>Socio-Economically Disadvantaged Groups (SEDG) Cell:</strong> Implements NEP 2020 equity initiatives, earn-while-learn schemes, and book-bank grants.</li><li><strong>Facilities for Differently-Abled (Divyangjan):</strong> Ramps with railings across all academic blocks, elevators in every building, tactile paving, accessible washrooms, and screen-reader equipped library workstations.</li></ul>', 1, 5, '2026-09-03'],
+                    [8, 'reservation-roster-study-india', 'Reservation Roster & Study in India (International Cell)', 'UGC Section 5(h) · Statutory Roster & International Student Admissions', '<h2>Reservation Roster Compliance</h2><p>Faculty recruitment and student admissions strictly adhere to the Government of Maharashtra &amp; UGC Reservation Roster norms (SC, ST, VJNT, OBC, EWS, and PwD categories). Verified annual roster statements are published in the Document Center.</p><h2>Study in India &amp; International Students Cell</h2><p>SVCOER is registered on the Government of India <strong>Study in India (SII)</strong> portal with dedicated hostel wing, FRRO visa assistance, English bridge modules, and cultural orientation for international scholars.</p>', 1, 3, '2026-09-20'],
+                ];
+                foreach ($missingPagesSeed as $mp) {
+                    $insMissingPage->execute($mp);
+                }
+            } catch (Throwable $ignoredParity) {
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('pages_parity_seeded_v2', '1') ON DUPLICATE KEY UPDATE val_json = '1'")
+                ->execute();
+        }
+
+        // Social Media Links table & default seed
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS social_media_links (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                platform VARCHAR(40) NOT NULL DEFAULT 'custom',
+                label VARCHAR(80) NOT NULL,
+                url VARCHAR(500) NOT NULL,
+                handle VARCHAR(120) DEFAULT '',
+                custom_svg TEXT NULL,
+                is_active TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $socChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'social_seeded_v1' LIMIT 1");
+        $socChk->execute();
+        if (!$socChk->fetchColumn()) {
+            if ((int)$pdo->query('SELECT COUNT(*) FROM social_media_links')->fetchColumn() === 0) {
+                $insSoc = $pdo->prepare('INSERT INTO social_media_links (platform, label, url, handle, is_active, sort_order) VALUES (?,?,?,?,?,?)');
+                foreach (defaultSocialMediaLinks() as $sl) {
+                    $insSoc->execute([$sl['platform'], $sl['label'], $sl['url'], $sl['handle'], $sl['is_active'], $sl['sort_order']]);
+                }
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('social_sharing_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+                ->execute([json_encode(defaultSocialSharingConfig(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('social_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")->execute();
+        }
+
+        // Research Projects & Patents/Publications/MoUs tables + seed
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS research_projects (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(280) NOT NULL,
+                funding_agency VARCHAR(180) NOT NULL,
+                principal_investigator VARCHAR(160) NOT NULL,
+                co_investigator VARCHAR(200) DEFAULT '',
+                department_code VARCHAR(32) NOT NULL DEFAULT 'ALL',
+                grant_amount_lakhs VARCHAR(80) DEFAULT '',
+                sanction_year VARCHAR(30) DEFAULT '2025-26',
+                duration VARCHAR(80) DEFAULT '24 Months',
+                status ENUM('Ongoing','Completed','Sanctioned','Submitted') DEFAULT 'Ongoing',
+                project_code VARCHAR(120) DEFAULT '',
+                summary TEXT NULL,
+                document_url VARCHAR(500) DEFAULT '',
+                is_published TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS research_patents (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                item_type VARCHAR(80) NOT NULL DEFAULT 'Patent Granted',
+                title VARCHAR(280) NOT NULL,
+                inventors_or_lead VARCHAR(240) NOT NULL,
+                department_code VARCHAR(32) NOT NULL DEFAULT 'ALL',
+                reference_number VARCHAR(140) DEFAULT '',
+                filing_or_grant_date VARCHAR(40) DEFAULT '',
+                status VARCHAR(120) DEFAULT '',
+                partner_or_agency VARCHAR(180) DEFAULT '',
+                summary TEXT NULL,
+                external_url VARCHAR(500) DEFAULT '',
+                is_published TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $resChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'research_portfolio_seeded_v1' LIMIT 1");
+        $resChk->execute();
+        if (!$resChk->fetchColumn()) {
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('research_portfolio_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+                ->execute([json_encode(defaultResearchPortfolioConfig(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+            if ((int)$pdo->query('SELECT COUNT(*) FROM research_projects')->fetchColumn() === 0) {
+                $insRp = $pdo->prepare('INSERT INTO research_projects (title, funding_agency, principal_investigator, co_investigator, department_code, grant_amount_lakhs, sanction_year, duration, status, project_code, summary, document_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+                $insRp->execute(['AI-Assisted Solar Microgrid Fault Prediction & Edge Relay Controller for Rural Feeders', 'DST-SERB (Govt. of India)', 'Dr. M. R. Joshi', 'Dr. A. K. Kulkarni', 'ELEC', 'Rs. 28.50 Lakhs', '2025-26', '36 Months (Ongoing)', 'Ongoing', 'SERB/CRG/2025/001942', 'Edge-deployed TinyML relay controller protecting rural 11 kV solar feeders with sub-cycle harmonic isolation.', 'quick-links.php', 1, 1]);
+                $insRp->execute(['Modernization of Autonomous GPU & Embedded Vision Research Laboratory (MODROBS)', 'AICTE-MODROBS / RPS', 'Dr. Anjali K. Deshpande', 'Dr. Siddharth R. Mane', 'CSE', 'Rs. 19.40 Lakhs', '2024-25', '24 Months (Completed)', 'Completed', 'AICTE/MODROBS/2024/CSE-118', 'Established high-throughput NVIDIA A5000 compute nodes and ROS-2 edge camera rigs for M.Tech/Ph.D. scholars.', 'quick-links.php', 1, 2]);
+                $insRp->execute(['Autonomous Precision Cotton-Pod Harvester Mechanism for Smallholder Farmers', 'RGSTC Maharashtra', 'Dr. Rajendra B. Kulkarni', 'Prof. P. S. Sawant', 'MECH', 'Rs. 16.25 Lakhs', '2025-26', '24 Months (Ongoing)', 'Ongoing', 'RGSTC/SOL/2025/AGRI-44', 'Vision-guided pneumatic picker head tested across Solapur district agrarian clusters.', '', 1, 3]);
+                $insRp->execute(['RISC-V Hardware Cryptography Co-Processor for Low-Power Industrial IoT Nodes', 'DRDO / ISRO Extramural', 'Dr. Vandana P. Chavan', 'Dr. R. B. Patwardhan', 'ENTC', 'Rs. 24.80 Lakhs', '2026-27', '30 Months (Sanctioned)', 'Sanctioned', 'ERIPR/DFT/2026/VLSI-09', 'Side-channel resistant AES-GCM hardware macro taped out in 45nm CMOS node.', '', 1, 4]);
+                $insRp->execute(['High-Early-Strength Sugarcane Bagasse Ash Geopolymer Concrete for Canal Linings', 'MSME Design Clinic', 'Dr. Suhas V. Patwardhan', 'Prof. V. M. Jadhav', 'CIVIL', 'Rs. 11.60 Lakhs', '2024-25', '18 Months (Completed)', 'Completed', 'MSME/DC/2024/MAT-72', 'Reduced cement carbon footprint by 48% while meeting M40 sulfate resistance benchmarks.', '', 1, 5]);
+            }
+            if ((int)$pdo->query('SELECT COUNT(*) FROM research_patents')->fetchColumn() === 0) {
+                $insRi = $pdo->prepare('INSERT INTO research_patents (item_type, title, inventors_or_lead, department_code, reference_number, filing_or_grant_date, status, partner_or_agency, summary, external_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+                $insRi->execute(['Patent Granted', 'Smart Self-Calibrating Soil Moisture & NPK Drip Fertigation Controller', 'Dr. Vandana P. Chavan, Prof. P. S. Sawant, S. R. Mane', 'ENTC', 'IN-PAT-518942', '2026-03-14', 'Granted (20 Years)', 'Indian Patent Office, Mumbai', 'Autonomous closed-loop valve telemetry reducing sugarcane water consumption by 34%.', '', 1, 1]);
+                $insRi->execute(['Patent Granted', 'Regenerative Eddy-Current Braking Actuator for Light Electric Three-Wheelers', 'Dr. Rajendra B. Kulkarni, Dr. M. R. Joshi', 'MECH', 'IN-PAT-492107', '2025-11-22', 'Granted', 'Indian Patent Office', 'Compact dual-stator auxiliary retarder recovering up to 14% kinetic energy on gradients.', '', 1, 2]);
+                $insRi->execute(['Patent Published', 'Federated Privacy-Preserving Medical MRI Triage Appliance on Edge TPU', 'Dr. Anjali K. Deshpande, Dr. Siddharth R. Mane', 'CSE', 'APP-202621018442', '2026-06-19', 'Published · FER Under Examination', 'Journal of the Patent Office', 'Enables district hospitals to train diagnostic models without exporting patient DICOM records.', '', 1, 3]);
+                $insRi->execute(['Incubated Start-up', 'KrishiPulse Agro-Robotics Pvt. Ltd. (SVERI-IIC Cohort 2026)', 'Rohan Patil (B.Tech Mech), Pranav Deshmukh (CSE)', 'MECH', 'CIN-U29200PN2026PTC', '2026-02-05', 'MSME Seed Funded (Rs. 15 Lakhs)', 'SVERI IIC & AICTE IDEA Lab', 'Commercializing solar-powered inter-row weeders for pomegranate and grape orchards across Solapur.', '', 1, 4]);
+                $insRi->execute(['Industry Consultancy', 'Non-Destructive Structural Audit & Mix-Design Testing for Pandharpur PWD Division', 'Dr. Suhas V. Patwardhan & Civil Testing Cell', 'CIVIL', 'SVCOER/CON/2026/114', '2026-08-11', 'Rs. 9.80 Lakhs Consultancy Realized', 'Public Works Department, Solapur', 'NABL-calibrated Rebound Hammer, Ultrasonic Pulse Velocity, and core strength certification.', '', 1, 5]);
+                $insRi->execute(['Journal / Conference Publication', 'Sub-Cycle Harmonic Protection for Solar-Integrated Rural Microgrids using Edge TinyML', 'Dr. M. R. Joshi, Dr. A. K. Kulkarni', 'ELEC', 'IEEE Trans. Ind. Appl. (SCI Q1)', '2026-05-18', 'Published (SCIE / Scopus Q1 · IF 4.4)', 'IEEE Industry Applications Society', 'Demonstrated 98.6% arc-fault detection accuracy under 4ms latency on ARM Cortex-M7 relay hardware.', 'https://ieeexplore.ieee.org/', 1, 6]);
+                $insRi->execute(['Industry / Academic MoU', 'Center of Excellence in Industrial Robotics, Digital Twin & Smart Manufacturing', 'Dr. Rajendra B. Kulkarni & Tata Technologies CIII Team', 'MECH', 'MOU/SVCOER/TTL/2025-08', '2025-09-10', 'Active Collaboration (5 Years)', 'Tata Technologies & Dassault Systemes', 'Joint certified training tracks, live industrial capstone projects, and sponsored EV & cobot workstations.', '', 1, 7]);
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('research_portfolio_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")->execute();
+        }
+
+        // Feedback Sections, Tickets & Email Dispatch Audit Logs
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS feedback_sections (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                slug VARCHAR(80) NOT NULL UNIQUE,
+                section_name VARCHAR(160) NOT NULL,
+                subsections_json TEXT NULL,
+                recipient_emails VARCHAR(400) NOT NULL,
+                cc_emails VARCHAR(400) DEFAULT '',
+                incharge_name VARCHAR(160) DEFAULT '',
+                incharge_designation VARCHAR(160) DEFAULT '',
+                sla_days INT DEFAULT 5,
+                auto_email_enabled TINYINT(1) DEFAULT 1,
+                is_active TINYINT(1) DEFAULT 1,
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS feedback_entries (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                tracking_code VARCHAR(40) NOT NULL UNIQUE,
+                section_id INT NOT NULL DEFAULT 1,
+                section_name VARCHAR(160) NOT NULL,
+                subsection VARCHAR(180) DEFAULT 'General',
+                submission_type ENUM('Complaint','Suggestion','Appreciation','Service Request') DEFAULT 'Suggestion',
+                stakeholder_role VARCHAR(100) NOT NULL DEFAULT 'Student',
+                sender_name VARCHAR(160) NOT NULL,
+                sender_email VARCHAR(160) NOT NULL,
+                sender_phone VARCHAR(60) DEFAULT '',
+                department_or_batch VARCHAR(120) DEFAULT '',
+                rating TINYINT UNSIGNED DEFAULT 5,
+                subject VARCHAR(240) NOT NULL,
+                message TEXT NOT NULL,
+                is_anonymous TINYINT(1) DEFAULT 0,
+                attachment_url VARCHAR(300) DEFAULT '',
+                routed_to_emails VARCHAR(400) DEFAULT '',
+                email_dispatch_status ENUM('sent','queued','disabled','failed') DEFAULT 'queued',
+                email_dispatch_detail VARCHAR(400) DEFAULT '',
+                status ENUM('New','Acknowledged','In Progress','Resolved','Closed') DEFAULT 'New',
+                action_taken_note TEXT NULL,
+                submitted_at VARCHAR(32) NOT NULL,
+                updated_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB"
+        );
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS email_dispatch_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                category VARCHAR(80) NOT NULL,
+                recipients VARCHAR(500) NOT NULL,
+                subject VARCHAR(260) NOT NULL,
+                transport_mode VARCHAR(32) DEFAULT 'php_mail',
+                status ENUM('sent','queued','failed') DEFAULT 'queued',
+                detail VARCHAR(480) DEFAULT '',
+                sent_at VARCHAR(32) NOT NULL
+            ) ENGINE=InnoDB"
+        );
+        $fbChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'feedback_seeded_v1' LIMIT 1");
+        $fbChk->execute();
+        if (!$fbChk->fetchColumn()) {
+            if ((int)$pdo->query('SELECT COUNT(*) FROM feedback_sections')->fetchColumn() === 0) {
+                $insFb = $pdo->prepare('INSERT IGNORE INTO feedback_sections (slug, section_name, subsections_json, recipient_emails, cc_emails, incharge_name, incharge_designation, sla_days, auto_email_enabled, is_active, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+                foreach (defaultFeedbackSections() as $fs) {
+                    $insFb->execute([
+                        $fs['slug'], $fs['section_name'], json_encode($fs['subsections'], JSON_UNESCAPED_UNICODE),
+                        $fs['recipient_emails'], $fs['cc_emails'], $fs['incharge_name'], $fs['incharge_designation'],
+                        $fs['sla_days'], $fs['auto_email_enabled'], $fs['is_active'], $fs['sort_order'],
+                    ]);
+                }
+            }
+            $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('feedback_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")->execute();
+        }
+
+        // Ensure Feedback appears cleanly in saved portal_menu_items even on already-seeded DBs
+        try {
+            $pmRaw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'portal_menu_items' LIMIT 1")->fetchColumn();
+            if (is_string($pmRaw) && $pmRaw !== '') {
+                $pmArr = json_decode($pmRaw, true);
+                if (is_array($pmArr)) {
+                    $hasFb = false;
+                    foreach ($pmArr as $pmRow) {
+                        if (($pmRow['id'] ?? '') === 'feedback') {
+                            $hasFb = true;
+                            break;
+                        }
+                    }
+                    if (!$hasFb) {
+                        $pmArr[] = ['id' => 'feedback', 'label' => 'Feedback Cell', 'href' => 'feedback.php', 'menuLocation' => 'more', 'sortOrder' => 5, 'isSystem' => true, 'openInNewTab' => false];
+                        savePortalMenuItems($pdo, $pmArr);
+                    }
+                }
+            }
+        } catch (Throwable $ignoredPm) {
+        }
+
         // Analytics, SEO, Hit Counter & Security WAF tables + firewall execution
         if (function_exists('ensureAnalyticsTables')) {
             ensureAnalyticsTables($pdo);
         }
         if (function_exists('runPhpSecurityFirewall')) {
             runPhpSecurityFirewall($pdo);
+        }
+        if (function_exists('cms_maybe_run_scheduled_digest')) {
+            cms_maybe_run_scheduled_digest($pdo);
         }
     } catch (Throwable $ignoredSchema) {
     }
@@ -2014,6 +2688,10 @@ function swapSortOrder(PDO $pdo, string $table, int $id, string $dir, ?string $s
         'sports_gallery',
         'sports_notices',
         'facilities',
+        'social_media_links',
+        'research_projects',
+        'research_patents',
+        'feedback_sections',
     ];
     $allowedScopes = [null, 'category_id', 'department_id'];
     $allowedTies   = ['id ASC', 'id DESC', 'event_date DESC, id DESC', 'uploaded_at DESC, id DESC'];

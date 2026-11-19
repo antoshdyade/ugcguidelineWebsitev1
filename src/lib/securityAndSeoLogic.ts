@@ -81,6 +81,14 @@ export const DEFAULT_SEO_SETTINGS: SeoSettings = {
       keywords: 'SVCOER Campus Facilities, Infrastructure, IT Facilities, Hostels, Central Library',
       ogImageUrl: '/src/assets/images/campus_facilities_1794991331724.jpg',
     },
+    {
+      id: 'seo-feedback',
+      routePattern: '/feedback',
+      title: 'Stakeholder Complaint & Feedback Portal | SVCOER Pandharpur',
+      description:
+        'Submit academic, examination, hostel, infrastructure, IT, or placement feedback and complaints routed directly to concerned campus section heads.',
+      keywords: 'SVCOER Feedback, Campus Complaint Portal, Student Suggestions, Section Email Routing',
+    },
   ],
 };
 
@@ -977,6 +985,7 @@ export function buildSitemapXml(baseUrl: string, db: CmsDatabase): string {
     { loc: `${origin}/quick-links`, priority: '0.8', changefreq: 'weekly' },
     { loc: `${origin}/gallery`, priority: '0.7', changefreq: 'monthly' },
     { loc: `${origin}/grievance`, priority: '0.7', changefreq: 'monthly' },
+    { loc: `${origin}/feedback`, priority: '0.75', changefreq: 'weekly' },
     { loc: `${origin}/contact`, priority: '0.7', changefreq: 'monthly' },
   ];
 

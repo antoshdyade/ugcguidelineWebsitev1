@@ -95,9 +95,11 @@ CREATE TABLE IF NOT EXISTS pages (
   title VARCHAR(255) NOT NULL,
   subtitle VARCHAR(255) DEFAULT '',
   content_html MEDIUMTEXT NOT NULL,
+  meta_description VARCHAR(320) DEFAULT '',
   attached_pdf_url VARCHAR(500) NULL,
   attached_pdf_label VARCHAR(255) NULL,
   is_published TINYINT(1) DEFAULT 1,
+  show_share_bar TINYINT(1) DEFAULT 1,
   sort_order INT DEFAULT 1,
   updated_by VARCHAR(120) DEFAULT 'Super Admin',
   updated_at DATE NOT NULL,
@@ -461,25 +463,42 @@ INSERT INTO categories (id, slug, name, short_label, ugc_code, description, show
 (7, 'alumni', 'Alumni', 'Alumni', 'Section 5(g)', 'Alumni Association details, registration and notable alumni.', 1, 1, 8),
 (8, 'information-corner', 'Information Corner', 'Info Corner', 'Section 5(h)', 'RTI CPIO/Appellate, Circulars, Announcements, Newsletters, Events, Jobs, Reservation Roster & Study in India.', 1, 1, 9);
 
-INSERT INTO pages (category_id, slug, title, subtitle, content_html, is_published, sort_order, updated_at) VALUES
+INSERT IGNORE INTO pages (category_id, slug, title, subtitle, content_html, is_published, sort_order, updated_at) VALUES
 (1, 'about-overview', 'About Us: Institutional Overview', 'UGC Section 5(a)', '<h2>Institutional Profile</h2><p>SVERI''s College of Engineering, Pandharpur (Autonomous), established in 1998 under Shri Vitthal Education &amp; Research Institute (SVERI), holds NAAC A+ (CGPA 3.46 / 4.00), Autonomous status from AY 2024&ndash;25, and DTE Institute Code 06220 under Punyashlok Ahilyadevi Holkar Solapur University, Solapur.</p>', 1, 1, '2026-10-15'),
 (1, 'act-statutes-moa', 'Act, Statutes & MoA', 'UGC Section 5(a)', '<h2>Statutory Governance Instruments</h2><p>Governed by UGC Autonomous Colleges Regulations 2023 and Maharashtra Public Trust Act under Shri Vitthal Education &amp; Research Institute (SVERI).</p>', 1, 2, '2026-10-10'),
 (1, 'institutional-development-plan', 'Institutional Development Plan (IDP)', 'UGC Section 5(a)', '<h2>NEP 2020 Strategic Roadmap</h2><p>10-year roadmap covering Academic Bank of Credits, Interdisciplinary Minors, and Research Incubation.</p>', 1, 3, '2026-09-22'),
-(1, 'accreditation-ranking', 'Accreditation & Ranking (NAAC, NBA, NIRF)', 'UGC Section 5(a)', '<h2>NAAC A+ (CGPA 3.46) · NBA Accredited · NIRF 151-200</h2><p>Institutional quality benchmarks verified by IQAC.</p>', 1, 4, '2026-10-02'),
-(1, 'annual-accounts-audit', 'Annual Accounts & Audit Reports', 'UGC Section 5(a)', '<h2>Audited Financial Statements</h2><p>Balance Sheet, Income &amp; Expenditure, and Receipts &amp; Payments certified by Statutory Auditors.</p>', 1, 5, '2026-09-30'),
+(1, 'affiliating-university', 'Constituent Units & Affiliating University', 'UGC Section 5(a) · University Affiliation & Campus Units', '<h2>Affiliating University</h2><p>All undergraduate, postgraduate, and doctoral degrees are awarded by <strong>Punyashlok Ahilyadevi Holkar Solapur University (PAHSUS), Solapur</strong>, with autonomous curriculum design, continuous internal assessment, and end-semester examinations conducted by SVCOER.</p><h2>Sister &amp; Constituent Academic Units</h2><ul><li>Shri Vithal College of Engineering &amp; Research (Autonomous), Pandharpur — Main Campus</li><li>SVCOER Polytechnic Wing (Diploma in Engineering — MSBTE Affiliated)</li><li>Centre for Executive Management &amp; Innovation Studies (CEMIS)</li></ul>', 1, 4, '2026-08-18'),
+(1, 'accreditation-ranking', 'Accreditation & Ranking (NAAC, NBA, NIRF)', 'UGC Section 5(a)', '<h2>NAAC A+ (CGPA 3.46) · NBA Accredited · NIRF 151-200</h2><p>Institutional quality benchmarks verified by IQAC.</p>', 1, 5, '2026-10-02'),
+(1, 'recognition-approval', 'Recognition & Regulatory Approvals (UGC 2(f), 12B, AICTE)', 'UGC Section 5(a) · Statutory Extensions of Approval', '<h2>Regulatory Approvals</h2><p>SVERI&rsquo;s College of Engineering, Pandharpur holds continuous statutory approvals from all apex regulatory bodies:</p><ul><li><strong>UGC 2(f), 12(B) &amp; Autonomous Status:</strong> Conferred Autonomous Status effective from AY 2024&ndash;25 under Punyashlok Ahilyadevi Holkar Solapur University, Solapur.</li><li><strong>AICTE Approval:</strong> Approved by All India Council for Technical Education (AICTE), New Delhi (Permanent ID: 1-49281724).</li><li><strong>Government of Maharashtra &amp; DTE:</strong> DTE Institute Code <strong>06220</strong>.</li></ul>', 1, 6, '2026-09-12'),
+(1, 'annual-reports', 'Annual Reports', 'UGC Section 5(a) · Yearly Academic, Research & Governance Reports', '<h2>Published Institutional Annual Reports</h2><p>In compliance with UGC Public Self-Disclosure norms, complete institutional annual reports detailing admissions, examination outcomes, faculty publications, placement records, and extension activities are published openly below:</p><table><thead><tr><th>Academic Year</th><th>Document Title</th><th>Approval Date</th></tr></thead><tbody><tr><td>2025–26</td><td>28th Institutional Annual Report (IQAC Verified)</td><td>2026-08-20</td></tr><tr><td>2024–25</td><td>27th Institutional Annual Report</td><td>2025-08-18</td></tr><tr><td>2023–24</td><td>26th Institutional Annual Report</td><td>2024-08-14</td></tr></tbody></table>', 1, 7, '2026-08-25'),
+(1, 'annual-accounts-audit', 'Annual Accounts & Audit Reports', 'UGC Section 5(a)', '<h2>Audited Financial Statements</h2><p>Balance Sheet, Income &amp; Expenditure, and Receipts &amp; Payments certified by Statutory Auditors.</p>', 1, 8, '2026-09-30'),
+(1, 'sponsoring-body', 'Sponsoring Body Details', 'UGC Section 5(a) · Shri Vitthal Education & Research Institute (SVERI)', '<h2>Shri Vitthal Education &amp; Research Institute (SVERI)</h2><p>Established as a charitable educational trust, <strong>Shri Vitthal Education &amp; Research Institute (SVERI)</strong> founded its flagship Engineering College in 1998 to deliver accessible, high-calibre technical and management education rooted in innovation and ethics.</p><p><strong>Registered Office:</strong> Gopalpur-Ranjani Road, P.B. No. 54, Gopalpur, Pandharpur &ndash; 413304, Dist. Solapur, Maharashtra · Tel: +91-02186-216063.</p>', 1, 9, '2026-07-15'),
 (2, 'statutory-officers', 'Statutory Officers & Administrative Leadership', 'UGC Section 5(b)', '<h2>Key Statutory Officers</h2><p>Complete profiles of Principal, Registrar, Finance Officer, Controller of Examinations, CVO, and Ombudsperson.</p>', 1, 1, '2026-10-05'),
 (2, 'governing-bodies', 'Governing Body, Academic Council & Committees', 'UGC Section 5(b)', '<h2>Governing Body Composition</h2><p>Includes Trust Chairperson, Principal, UGC Nominee, State Govt Nominee, and Industry Representatives.</p>', 1, 2, '2026-09-28'),
+(2, 'internal-complaint-committee', 'Internal Complaint Committee (ICC)', 'UGC Section 5(b) & 5(f) · POSH Act Compliance & Zero-Tolerance Mechanism', '<h2>Internal Complaint Committee (ICC)</h2><p>Constituted under the Sexual Harassment of Women at Workplace (Prevention, Prohibition and Redressal) Act, 2013 and UGC Regulations 2015:</p><table><thead><tr><th>Name</th><th>Designation</th><th>Role in ICC</th><th>Contact</th></tr></thead><tbody><tr><td>Dr. Meenakshi S. Pawar</td><td>Professor &amp; Dean Student Affairs</td><td>Presiding Officer</td><td>icc@svcoer.edu.in</td></tr><tr><td>Prof. Snehal R. Jadhav</td><td>Associate Professor, E&amp;TC</td><td>Faculty Member</td><td>+91 2186 225088</td></tr><tr><td>Adv. Vandana Kulkarni</td><td>District Legal Services Authority</td><td>External NGO / Legal Member</td><td>legal.icc@svcoer.edu.in</td></tr><tr><td>Ms. Rutuja Bhosale</td><td>Final Year B.Tech CSE</td><td>Student Representative</td><td>icc.student@svcoer.edu.in</td></tr></tbody></table>', 1, 3, '2026-09-14'),
 (3, 'academic-programs', 'Details of Academic Programs', 'UGC Section 5(c)', '<h2>UG, PG &amp; Doctoral Programs</h2><p>B.Tech: CSE (180), E&amp;TC (120), Mechanical (120), Civil (120), Electrical (60), ECS (60); M.Tech, MBA (60), MCA (60) &amp; Ph.D. Research Centres (CSE, E&amp;TC, Mechanical Design, Civil).</p>', 1, 1, '2026-10-08'),
-(3, 'iqac', 'Internal Quality Assurance Cell (IQAC)', 'UGC Section 5(c)', '<h2>IQAC Quality Mandate</h2><p>Coordinator: Dr. M. M. Pawar. AQAR &amp; Academic Audit reports published in Document Repository.</p>', 1, 2, '2026-09-25'),
+(3, 'academic-calendar', 'Academic Calendar (2026–27)', 'UGC Section 5(c) · Semester Schedule, Examinations & Co-Curricular Dates', '<h2>Odd &amp; Even Semester Schedule (AY 2026–27)</h2><table><thead><tr><th>Academic Milestone</th><th>Odd Semester</th><th>Even Semester</th></tr></thead><tbody><tr><td>Commencement of Classes</td><td>15 July 2026</td><td>05 January 2027</td></tr><tr><td>In-Semester Evaluation (ISE-I)</td><td>07–12 September 2026</td><td>22–27 February 2027</td></tr><tr><td>End-Semester Theory Examinations</td><td>18 Nov – 05 Dec 2026</td><td>03–22 May 2027</td></tr><tr><td>Declaration of Results</td><td>22 December 2026</td><td>08 June 2027</td></tr></tbody></table>', 1, 2, '2026-07-02'),
+(3, 'academic-statutes', 'Academic & Examination Ordinances', 'UGC Section 5(c) · Credit Framework, Grading System & ABC Guidelines', '<h2>Autonomous Examination &amp; Grading Ordinances</h2><p>SVCOER follows a 160-credit Outcome-Based Education (OBE) curriculum integrated with the National Credit Framework (NCrF) and Academic Bank of Credits (ABC). Continuous evaluation accounts for 40% weightage and End-Semester Examinations account for 60%.</p>', 1, 3, '2026-08-10'),
+(3, 'iqac', 'Internal Quality Assurance Cell (IQAC)', 'UGC Section 5(c)', '<h2>IQAC Quality Mandate</h2><p>Coordinator: Dr. M. M. Pawar. AQAR &amp; Academic Audit reports published in Document Repository.</p>', 1, 4, '2026-09-25'),
+(3, 'central-library', 'Central Library & Digital Knowledge Centre', 'UGC Section 5(c) · Print Volumes, IEEE/Springer Access & 24x7 Reading Hall', '<h2>Library Resources at a Glance</h2><table><thead><tr><th>Resource Category</th><th>Holding / Subscription</th></tr></thead><tbody><tr><td>Total Print Volumes</td><td>68,450 Books (14,200+ Titles)</td></tr><tr><td>E-Journals &amp; Databases</td><td>IEEE Xplore, SpringerLink, ASME, Elsevier ScienceDirect, DELNET</td></tr><tr><td>Seating Capacity</td><td>450 Seats (Air-conditioned Digital &amp; Reference Halls)</td></tr><tr><td>Library Automation</td><td>KOHA Integrated LMS with RFID Self-Check-In</td></tr></tbody></table>', 1, 5, '2026-08-30'),
+(3, 'odl-online-programs', 'UGC-Recognized ODL / Online & Swayam-NPTEL Courses', 'UGC Section 5(c) · Credit Transfer & MOOC Integration', '<h2>ODL &amp; Online Learning Compliance</h2><p>SVCOER currently offers full-time on-campus regular degree programs and does not run standalone ODL degree programs. However, up to 40% credit transfer is facilitated via <strong>SWAYAM-NPTEL</strong> Local Chapter (rated AA National Top 50) under UGC Credit Framework for Online Learning Courses.</p>', 1, 6, '2026-08-19'),
+(3, 'academic-collaborations', 'Academic & Industry Collaborations (MoUs)', 'UGC Section 5(c) & 5(e) · Active Domestic & International Partnerships', '<h2>Active Academic MoUs</h2><table><thead><tr><th>Partner Institution / Industry</th><th>Scope of Collaboration</th><th>Valid Until</th></tr></thead><tbody><tr><td>IIT Bombay (FOSSEE &amp; Spoken Tutorial)</td><td>Open-Source Robotics &amp; Faculty FDP</td><td>2028</td></tr><tr><td>Tata Technologies Ltd.</td><td>Centre for Invention, Innovation &amp; Incubation (CIII)</td><td>2029</td></tr><tr><td>TU Dresden, Germany (Summer Exchange)</td><td>Sustainable Manufacturing Student Exchange</td><td>2027</td></tr><tr><td>Persistent Systems &amp; Zensar</td><td>Industry-Certified Cloud &amp; AI Electives</td><td>2028</td></tr></tbody></table>', 1, 7, '2026-09-18'),
 (4, 'prospectus-fee-structure', 'Prospectus & FRA Fee Structure (2026-27)', 'UGC Section 5(d)', '<h2>FRA Approved Fee Structure</h2><p>DTE Code 06220 · B.Tech Open Annual Fee: INR 1,13,000 (Tuition INR 98,214 + Development INR 14,786).</p>', 1, 1, '2026-10-12'),
-(4, 'fee-refund-policy', 'UGC Fee Refund Policy', 'UGC Section 5(d)', '<h2>100% Transparent Refund Policy</h2><p>Full refund within 15 working days for cancellations 15+ days prior to admission cutoff.</p>', 1, 2, '2026-08-21'),
+(4, 'admission-process', 'Admission Process & Eligibility Guidelines', 'UGC Section 5(d) · CAP Centralized Admissions & Institute Level Quota', '<h2>Admission Procedure</h2><p>Admissions to First Year B.Tech and Direct Second Year (Lateral Entry) are conducted transparently through the Centralized Admission Process (CAP) of the State CET Cell, Government of Maharashtra, based on MHT-CET / JEE (Main) merit.</p><ul><li><strong>Step 1:</strong> Register on Maharashtra State CET Cell CAP Portal (DTE Code: 06220).</li><li><strong>Step 2:</strong> Document Verification at Scrutiny Centre &amp; Option Form submission.</li><li><strong>Step 3:</strong> Seat Allotment confirmation &amp; reporting at SVERI Admission Cell with original certificates.</li></ul>', 1, 2, '2026-09-01'),
+(4, 'fee-refund-policy', 'UGC Fee Refund Policy', 'UGC Section 5(d)', '<h2>100% Transparent Refund Policy</h2><p>Full refund within 15 working days for cancellations 15+ days prior to admission cutoff.</p>', 1, 3, '2026-08-21'),
 (5, 'research-development-cell', 'Research & Development Cell', 'UGC Section 5(e)', '<h2>Sponsored R&amp;D Projects</h2><p>DST-SERB, AICTE-MODROBS, and MSME Design Clinic funded research projects.</p>', 1, 1, '2026-09-29'),
+(5, 'incubation-cell', 'Incubation Centre, Start-ups & IIC Cell', 'UGC Section 5(e) · SVCOER Technology Business Incubator (TBI)', '<h2>Entrepreneurship &amp; Start-up Ecosystem</h2><p>Recognized with a <strong>4-Star Rating by MoE''s Innovation Cell (IIC)</strong>, the SVCOER Technology Business Incubator provides seed funding up to INR 5 Lakhs, co-working prototyping labs, and IP filing support. Over 18 student-led start-ups have been incubated since 2021.</p>', 1, 2, '2026-09-05'),
+(5, 'central-facilities', 'Central Research & Computing Facilities', 'UGC Section 5(e) · HPC GPU Cluster, Material Testing & Central Workshop', '<h2>Central Instrumentation &amp; Shared Labs</h2><ul><li><strong>NVIDIA DGX / High-Performance Computing Node:</strong> 4x A100 GPUs for Deep Learning &amp; CFD simulations.</li><li><strong>Central Material Testing Laboratory:</strong> 1000 kN Universal Testing Machine &amp; Scanning Electron Microscope access.</li><li><strong>FabLab &amp; Rapid Prototyping Studio:</strong> Industrial 3D Printers, Laser Cutters &amp; PCB Milling.</li></ul>', 1, 3, '2026-08-29'),
+(5, 'conferences-workshops-events', 'National & International Conferences, Workshops & Symposia', 'UGC Section 5(e) · Dedicated Microsites, Call for Papers, Keynotes & Research Events', '<div class="cms-block cms-slider" data-block="custom-slider" data-autoplay="5" data-height="380"><div class="cms-slider-viewport" style="height:380px;"><div class="cms-slide is-active" data-slide-index="0"><img src="assets/images/hero_campus.jpg" alt="ICAEST-2026: International Conference on Smart Technology" /><div class="cms-slide-overlay"><h3 class="cms-slide-title">ICAEST-2026: International Conference on Smart Technology</h3><p class="cms-slide-caption">Annual Flagship International Conference with IEEE/Springer proceedings and hybrid tracks.</p><p class="cms-slide-cta-row"><a class="cms-btn cms-btn-amber cms-slide-cta" href="conference.php?slug=icaest-2026">Open ICAEST-2026 Microsite</a></p></div></div><div class="cms-slide" data-slide-index="1"><img src="assets/images/hero_lab.jpg" alt="National Workshops, FDPs &amp; Edge AI Symposia" /><div class="cms-slide-overlay"><h3 class="cms-slide-title">National Workshops, FDPs &amp; Edge AI Symposia</h3><p class="cms-slide-caption">Hands-on research workshops, STTPs, and patent filing clinics hosted year-round.</p><p class="cms-slide-cta-row"><a class="cms-btn cms-btn-amber cms-slide-cta" href="conferences.php">Browse All Programs</a></p></div></div></div><button type="button" class="cms-slider-prev" aria-label="Previous slide">&#8249;</button><button type="button" class="cms-slider-next" aria-label="Next slide">&#8250;</button><div class="cms-slider-dots"><button type="button" class="cms-slider-dot is-active" data-slide-to="0" aria-label="Go to slide 1"></button><button type="button" class="cms-slider-dot" data-slide-to="1" aria-label="Go to slide 2"></button></div></div><p></p><h2>Academic Conferences, Workshops &amp; Technical Events</h2><p>SVCOER regularly hosts National &amp; International Conferences, AICTE/ISTE Faculty Development Programs (FDPs), Research Workshops, and Technical Symposia. Use the interactive portals below to inspect tracks, schedules, organizing committee profiles, or submit manuscripts online.</p>', 1, 4, '2026-11-12'),
 (6, 'placement-cell', 'Training & Placement Cell', 'UGC Section 5(f)', '<h2>91.1% Placement Track · 250+ Recruiters</h2><p>Supported by Communication Improvement Programs (CIP) and language labs with top recruiters including TCS, Infosys, Accenture, Deloitte, Wipro, Tech Mahindra, Hexaware &amp; Bharat Forge.</p>', 1, 1, '2026-10-14'),
 (6, 'sgrc', 'Student Grievance Redressal Committee (SGRC)', 'UGC Section 5(f)', '<h2>SGRC &amp; Ombudsperson</h2><p>Guaranteed resolution within 15 working days under UGC Redressal of Grievances Regulations 2023.</p>', 1, 2, '2026-09-10'),
 (6, 'anti-ragging-cell', 'Anti-Ragging, ICC, Equal Opportunity & SEDG Cells', 'UGC Section 5(f)', '<h2>Zero Tolerance &amp; Barrier-Free Campus</h2><p>24x7 Anti-Ragging Helpline: 1800-180-5522. Ramps, elevators, tactile paths &amp; assistive tech enabled.</p>', 1, 3, '2026-09-03'),
+(6, 'sports-ncc-nss', 'Sports Facilities, NCC, NSS & Hostels', 'UGC Section 5(f) · Athletics, Community Service & Residential Campus', '<h2>Sports, NCC/NSS &amp; Residential Facilities</h2><ul><li><strong>Sports Complex:</strong> 400m synthetic athletic track, floodlit basketball/volleyball courts, cricket ground, and indoor badminton stadium.</li><li><strong>NCC &amp; NSS:</strong> 200-cadet NCC Army Wing Unit and 250-volunteer NSS Unit conducting annual rural water-conservation camps.</li><li><strong>Hostels:</strong> Separate Boys (650 beds) &amp; Girls (480 beds) hostels with solar hot water, Wi-Fi, and hygienic dining halls.</li><li><strong>Health Centre:</strong> 10-bed campus clinic with resident medical officer and 24x7 ambulance.</li></ul>', 1, 4, '2026-08-12'),
+(6, 'equal-opportunity-sedg-barrier-free', 'Equal Opportunity, SEDG Cell & Barrier-Free Campus', 'UGC Section 5(f) · Divyangjan Accessibility & Inclusive Support Systems', '<h2>Inclusivity &amp; Accessibility Commitment</h2><ul><li><strong>Equal Opportunity &amp; SC/ST/OBC Cell:</strong> Facilitates post-matric scholarships, remedial coaching, and competitive exam mentorship.</li><li><strong>Socio-Economically Disadvantaged Groups (SEDG) Cell:</strong> Implements NEP 2020 equity initiatives, earn-while-learn schemes, and book-bank grants.</li><li><strong>Facilities for Differently-Abled (Divyangjan):</strong> Ramps with railings across all academic blocks, elevators in every building, tactile paving, accessible washrooms, and screen-reader equipped library workstations.</li></ul>', 1, 5, '2026-09-03'),
 (7, 'alumni-association', 'Registered Alumni Association', 'UGC Section 5(g)', '<h2>SVERI Alumni Network</h2><p>11,500+ engineering alumni across global chapters.</p>', 1, 1, '2026-09-19'),
 (8, 'rti-disclosure', 'RTI: CPIO & Appellate Authority', 'UGC Section 5(h)', '<h2>Right to Information Act 2005</h2><p>PIO: Shri S. G. Kulkarni (Registrar) · First Appellate Authority: Dr. B. P. Ronge (Principal, principal@coe.sveri.ac.in, +91-02186-216063).</p>', 1, 1, '2026-09-11'),
 (8, 'circulars-notices', 'Circulars, Notices & Announcements', 'UGC Section 5(h)', '<h2>Official Notices</h2><p>Exam schedules, job openings, reservation roster &amp; Study in India disclosures.</p>', 1, 2, '2026-10-18'),
+(8, 'reservation-roster-study-india', 'Reservation Roster & Study in India (International Cell)', 'UGC Section 5(h) · Statutory Roster & International Student Admissions', '<h2>Reservation Roster Compliance</h2><p>Faculty recruitment and student admissions strictly adhere to the Government of Maharashtra &amp; UGC Reservation Roster norms (SC, ST, VJNT, OBC, EWS, and PwD categories). Verified annual roster statements are published in the Document Center.</p><h2>Study in India &amp; International Students Cell</h2><p>SVCOER is registered on the Government of India <strong>Study in India (SII)</strong> portal with dedicated hostel wing, FRRO visa assistance, English bridge modules, and cultural orientation for international scholars.</p>', 1, 3, '2026-09-20'),
 (9, 'examination-cell-coe', 'Examination Cell & Controller of Examinations', 'Autonomous Examination Section', '<h2>Autonomous Examination Governance</h2><p>Independent Evaluation Cell headed by Dr. M. S. Kumbhar (Controller of Examinations, coe@coe.sveri.ac.in). Publishes End-Semester results within 20 working days and oversees question bank moderation and double-valuation integrity.</p>', 1, 1, '2026-10-18'),
 (9, 'examination-ordinances', 'Autonomous Ordinances, Credit System & 10-Point Grading', 'UGC Autonomous Regulations', '<h2>NEP 2020 Credit &amp; Grading Framework</h2><p>Follows Continuous Internal Evaluation (CIE 40%) + End Semester Examination (ESE 60%) across a 10-point absolute/relative grading scale with ATKT/Grace ordinances.</p>', 1, 2, '2026-10-12'),
 (9, 'exam-timetable-hallticket', 'Exam Time Tables, Forms & Hall Tickets', 'Winter / Summer Sessions', '<h2>Theory &amp; Practical Examination Schedules</h2><p>Exam registration forms, hall ticket download schedules, and scribe/extra-time provisions for Divyangjan candidates.</p>', 1, 3, '2026-10-15'),
@@ -882,5 +901,145 @@ CREATE TABLE IF NOT EXISTS facilities (
   sort_order INT DEFAULT 1
 ) ENGINE=InnoDB;
 
+-- 19. Social Media Links & Sharing Governance
+CREATE TABLE IF NOT EXISTS social_media_links (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  platform VARCHAR(40) NOT NULL DEFAULT 'custom',
+  label VARCHAR(80) NOT NULL,
+  url VARCHAR(500) NOT NULL,
+  handle VARCHAR(120) DEFAULT '',
+  custom_svg TEXT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
 
+INSERT IGNORE INTO social_media_links (id, platform, label, url, handle, is_active, sort_order) VALUES
+(1, 'facebook', 'Facebook', 'https://facebook.com', '@svcoer', 1, 1),
+(2, 'linkedin', 'LinkedIn', 'https://linkedin.com', 'svcoer-pandharpur', 1, 2),
+(3, 'instagram', 'Instagram', 'https://instagram.com', '@svcoer_official', 1, 3),
+(4, 'youtube', 'YouTube', 'https://youtube.com', '@svcoer_edu', 1, 4),
+(5, 'twitter', 'X (Twitter)', 'https://x.com', '@svcoer_edu', 1, 5);
 
+-- 20. Research Projects, Publications, Patents, MoUs & Consultancy
+CREATE TABLE IF NOT EXISTS research_projects (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(280) NOT NULL,
+  funding_agency VARCHAR(180) NOT NULL,
+  principal_investigator VARCHAR(160) NOT NULL,
+  co_investigator VARCHAR(200) DEFAULT '',
+  department_code VARCHAR(32) NOT NULL DEFAULT 'ALL',
+  grant_amount_lakhs VARCHAR(80) DEFAULT '',
+  sanction_year VARCHAR(30) DEFAULT '2025-26',
+  duration VARCHAR(80) DEFAULT '24 Months',
+  status ENUM('Ongoing','Completed','Sanctioned','Submitted') DEFAULT 'Ongoing',
+  project_code VARCHAR(120) DEFAULT '',
+  summary TEXT NULL,
+  document_url VARCHAR(500) DEFAULT '',
+  is_published TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO research_projects (id, title, funding_agency, principal_investigator, co_investigator, department_code, grant_amount_lakhs, sanction_year, duration, status, project_code, summary, document_url, is_published, sort_order) VALUES
+(1, 'AI-Assisted Solar Microgrid Fault Prediction & Edge Relay Controller for Rural Feeders', 'DST-SERB (Govt. of India)', 'Dr. M. R. Joshi', 'Dr. A. K. Kulkarni', 'ELEC', 'Rs. 28.50 Lakhs', '2025-26', '36 Months (Ongoing)', 'Ongoing', 'SERB/CRG/2025/001942', 'Edge-deployed TinyML relay controller protecting rural 11 kV solar feeders with sub-cycle harmonic isolation.', 'quick-links.php', 1, 1),
+(2, 'Modernization of Autonomous GPU & Embedded Vision Research Laboratory (MODROBS)', 'AICTE-MODROBS / RPS', 'Dr. Anjali K. Deshpande', 'Dr. Siddharth R. Mane', 'CSE', 'Rs. 19.40 Lakhs', '2024-25', '24 Months (Completed)', 'Completed', 'AICTE/MODROBS/2024/CSE-118', 'Established high-throughput NVIDIA A5000 compute nodes and ROS-2 edge camera rigs for M.Tech/Ph.D. scholars.', 'quick-links.php', 1, 2),
+(3, 'Autonomous Precision Cotton-Pod Harvester Mechanism for Smallholder Farmers', 'RGSTC Maharashtra', 'Dr. Rajendra B. Kulkarni', 'Prof. P. S. Sawant', 'MECH', 'Rs. 16.25 Lakhs', '2025-26', '24 Months (Ongoing)', 'Ongoing', 'RGSTC/SOL/2025/AGRI-44', 'Vision-guided pneumatic picker head tested across Solapur district agrarian clusters.', '', 1, 3),
+(4, 'RISC-V Hardware Cryptography Co-Processor for Low-Power Industrial IoT Nodes', 'DRDO / ISRO Extramural', 'Dr. Vandana P. Chavan', 'Dr. R. B. Patwardhan', 'ENTC', 'Rs. 24.80 Lakhs', '2026-27', '30 Months (Sanctioned)', 'Sanctioned', 'ERIPR/DFT/2026/VLSI-09', 'Side-channel resistant AES-GCM hardware macro taped out in 45nm CMOS node.', '', 1, 4),
+(5, 'High-Early-Strength Sugarcane Bagasse Ash Geopolymer Concrete for Canal Linings', 'MSME Design Clinic', 'Dr. Suhas V. Patwardhan', 'Prof. V. M. Jadhav', 'CIVIL', 'Rs. 11.60 Lakhs', '2024-25', '18 Months (Completed)', 'Completed', 'MSME/DC/2024/MAT-72', 'Reduced cement carbon footprint by 48% while meeting M40 sulfate resistance benchmarks.', '', 1, 5);
+
+CREATE TABLE IF NOT EXISTS research_patents (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  item_type VARCHAR(80) NOT NULL DEFAULT 'Patent Granted',
+  title VARCHAR(280) NOT NULL,
+  inventors_or_lead VARCHAR(240) NOT NULL,
+  department_code VARCHAR(32) NOT NULL DEFAULT 'ALL',
+  reference_number VARCHAR(140) DEFAULT '',
+  filing_or_grant_date VARCHAR(40) DEFAULT '',
+  status VARCHAR(120) DEFAULT '',
+  partner_or_agency VARCHAR(180) DEFAULT '',
+  summary TEXT NULL,
+  external_url VARCHAR(500) DEFAULT '',
+  is_published TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO research_patents (id, item_type, title, inventors_or_lead, department_code, reference_number, filing_or_grant_date, status, partner_or_agency, summary, external_url, is_published, sort_order) VALUES
+(1, 'Patent Granted', 'Smart Self-Calibrating Soil Moisture & NPK Drip Fertigation Controller', 'Dr. Vandana P. Chavan, Prof. P. S. Sawant, S. R. Mane', 'ENTC', 'IN-PAT-518942', '2026-03-14', 'Granted (20 Years)', 'Indian Patent Office, Mumbai', 'Autonomous closed-loop valve telemetry reducing sugarcane water consumption by 34%.', '', 1, 1),
+(2, 'Patent Granted', 'Regenerative Eddy-Current Braking Actuator for Light Electric Three-Wheelers', 'Dr. Rajendra B. Kulkarni, Dr. M. R. Joshi', 'MECH', 'IN-PAT-492107', '2025-11-22', 'Granted', 'Indian Patent Office', 'Compact dual-stator auxiliary retarder recovering up to 14% kinetic energy on gradients.', '', 1, 2),
+(3, 'Patent Published', 'Federated Privacy-Preserving Medical MRI Triage Appliance on Edge TPU', 'Dr. Anjali K. Deshpande, Dr. Siddharth R. Mane', 'CSE', 'APP-202621018442', '2026-06-19', 'Published · FER Under Examination', 'Journal of the Patent Office', 'Enables district hospitals to train diagnostic models without exporting patient DICOM records.', '', 1, 3),
+(4, 'Incubated Start-up', 'KrishiPulse Agro-Robotics Pvt. Ltd. (SVERI-IIC Cohort 2026)', 'Rohan Patil (B.Tech Mech), Pranav Deshmukh (CSE)', 'MECH', 'CIN-U29200PN2026PTC', '2026-02-05', 'MSME Seed Funded (Rs. 15 Lakhs)', 'SVERI IIC & AICTE IDEA Lab', 'Commercializing solar-powered inter-row weeders for pomegranate and grape orchards across Solapur.', '', 1, 4),
+(5, 'Industry Consultancy', 'Non-Destructive Structural Audit & Mix-Design Testing for Pandharpur PWD Division', 'Dr. Suhas V. Patwardhan & Civil Testing Cell', 'CIVIL', 'SVCOER/CON/2026/114', '2026-08-11', 'Rs. 9.80 Lakhs Consultancy Realized', 'Public Works Department, Solapur', 'NABL-calibrated Rebound Hammer, Ultrasonic Pulse Velocity, and core strength certification.', '', 1, 5),
+(6, 'Journal / Conference Publication', 'Sub-Cycle Harmonic Protection for Solar-Integrated Rural Microgrids using Edge TinyML', 'Dr. M. R. Joshi, Dr. A. K. Kulkarni', 'ELEC', 'IEEE Trans. Ind. Appl. (SCI Q1)', '2026-05-18', 'Published (SCIE / Scopus Q1 · IF 4.4)', 'IEEE Industry Applications Society', 'Demonstrated 98.6% arc-fault detection accuracy under 4ms latency on ARM Cortex-M7 relay hardware.', 'https://ieeexplore.ieee.org/', 1, 6),
+(7, 'Industry / Academic MoU', 'Center of Excellence in Industrial Robotics, Digital Twin & Smart Manufacturing', 'Dr. Rajendra B. Kulkarni & Tata Technologies CIII Team', 'MECH', 'MOU/SVCOER/TTL/2025-08', '2025-09-10', 'Active Collaboration (5 Years)', 'Tata Technologies & Dassault Systemes', 'Joint certified training tracks, live industrial capstone projects, and sponsored EV & cobot workstations.', '', 1, 7);
+
+-- 21. Stakeholder Feedback Sections, Tickets & Email Push Audit Logs
+CREATE TABLE IF NOT EXISTS feedback_sections (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  slug VARCHAR(80) NOT NULL UNIQUE,
+  section_name VARCHAR(160) NOT NULL,
+  subsections_json TEXT NULL,
+  recipient_emails VARCHAR(400) NOT NULL,
+  cc_emails VARCHAR(400) DEFAULT '',
+  incharge_name VARCHAR(160) DEFAULT '',
+  incharge_designation VARCHAR(160) DEFAULT '',
+  sla_days INT DEFAULT 5,
+  auto_email_enabled TINYINT(1) DEFAULT 1,
+  is_active TINYINT(1) DEFAULT 1,
+  sort_order INT DEFAULT 1
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO feedback_sections (id, slug, section_name, subsections_json, recipient_emails, cc_emails, incharge_name, incharge_designation, sla_days, auto_email_enabled, is_active, sort_order) VALUES
+(1, 'academics', 'Academics & Classroom Teaching', '["Curriculum & OBE Syllabus","Faculty Teaching & Mentoring","Laboratory Equipment & Practicals","Academic Timetable & Workload"]', 'dean.academics@coe.sveri.ac.in, principal@coe.sveri.ac.in', 'iqac@coe.sveri.ac.in', 'Dr. S. B. Kulkarni (Dean Academics)', 'Dean Academics & IQAC', 5, 1, 1, 1),
+(2, 'examination', 'Examination & Evaluation Cell', '["Exam Form & Hall Ticket","Result & Grade Card Verification","Photocopy / Revaluation","Transcripts & Migration"]', 'coe@coe.sveri.ac.in', 'principal@coe.sveri.ac.in', 'Dr. M. S. Kumbhar (Controller of Examinations)', 'Autonomous Examination Cell', 4, 1, 1, 2),
+(3, 'infrastructure', 'Infrastructure & Campus Maintenance', '["Classroom & Auditorium Facilities","Power Supply, AC & Lighting","Cleanliness & Restrooms","Campus Security & Parking"]', 'estate@coe.sveri.ac.in', 'registrar@coe.sveri.ac.in', 'Prof. S. D. Jadhav (Estate Officer)', 'Campus Estate & Works', 3, 1, 1, 3),
+(4, 'hostel-mess', 'Hostel, Mess & Health Centre', '["Boys / Girls Hostel Allotment & Rooms","Dining Mess Hygiene & Menu","Drinking Water & Solar Hot Water","Medical & Ambulance Support"]', 'hostel@coe.sveri.ac.in', 'antiragging@coe.sveri.ac.in', 'Dr. P. K. Deshmukh (Chief Rector)', 'Hostel & Residential Care', 2, 1, 1, 4),
+(5, 'library-it', 'Library, Wi-Fi & IT Services', '["Central Library & E-Journals","Campus Wi-Fi & Network Speed","ERP / LMS Account Access","Central Computing Lab"]', 'library@coe.sveri.ac.in, itadmin@coe.sveri.ac.in', '', 'Mrs. S. P. Joshi & Mr. R. K. Pawar', 'Library & IT Systems', 3, 1, 1, 5),
+(6, 'transport-canteen', 'Transport & Campus Canteen', '["Bus Routes & Timings","Bus Pass & Safety","Canteen Food Quality & Pricing","On-Campus Stationery & Store"]', 'transport@coe.sveri.ac.in, estate@coe.sveri.ac.in', '', 'Mr. V. S. More (Transport Officer)', 'Campus Transport & Hospitality', 3, 1, 1, 6),
+(7, 'accounts-scholarship', 'Accounts, Fees & Scholarships', '["Tuition Fee Receipt & Ledger","MahaDBT / EBC / Minority Scholarship","Caution Money Refund","Education Loan Bonafide Letter"]', 'accounts@coe.sveri.ac.in, registrar@coe.sveri.ac.in', '', 'Mr. A. P. Deshmukh (Accounts Officer)', 'Finance & Scholarship Cell', 5, 1, 1, 7),
+(8, 'placement-alumni', 'Training, Placement & Alumni Relations', '["Campus Recruitment Drives","Aptitude & Soft Skills Training","Industry Internship NOC","Alumni Networking & Mentorship"]', 'tnp@coe.sveri.ac.in, alumni@coe.sveri.ac.in', '', 'Dr. S. B. Kulkarni (Dean T&P)', 'Training & Placement Cell', 4, 1, 1, 8);
+
+CREATE TABLE IF NOT EXISTS feedback_entries (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tracking_code VARCHAR(40) NOT NULL UNIQUE,
+  section_id INT NOT NULL DEFAULT 1,
+  section_name VARCHAR(160) NOT NULL,
+  subsection VARCHAR(180) DEFAULT 'General',
+  submission_type ENUM('Complaint','Suggestion','Appreciation','Service Request') DEFAULT 'Suggestion',
+  stakeholder_role VARCHAR(100) NOT NULL DEFAULT 'Student',
+  sender_name VARCHAR(160) NOT NULL,
+  sender_email VARCHAR(160) NOT NULL,
+  sender_phone VARCHAR(60) DEFAULT '',
+  department_or_batch VARCHAR(120) DEFAULT '',
+  rating TINYINT UNSIGNED DEFAULT 5,
+  subject VARCHAR(240) NOT NULL,
+  message TEXT NOT NULL,
+  is_anonymous TINYINT(1) DEFAULT 0,
+  attachment_url VARCHAR(300) DEFAULT '',
+  routed_to_emails VARCHAR(400) DEFAULT '',
+  email_dispatch_status ENUM('sent','queued','disabled','failed') DEFAULT 'queued',
+  email_dispatch_detail VARCHAR(400) DEFAULT '',
+  status ENUM('New','Acknowledged','In Progress','Resolved','Closed') DEFAULT 'New',
+  action_taken_note TEXT NULL,
+  submitted_at VARCHAR(32) NOT NULL,
+  updated_at VARCHAR(32) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS email_dispatch_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  category VARCHAR(80) NOT NULL,
+  recipients VARCHAR(500) NOT NULL,
+  subject VARCHAR(260) NOT NULL,
+  transport_mode VARCHAR(32) DEFAULT 'php_mail',
+  status ENUM('sent','queued','failed') DEFAULT 'queued',
+  detail VARCHAR(480) DEFAULT '',
+  sent_at VARCHAR(32) NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO cms_kv_store (key_name, val_json) VALUES
+('social_sharing_config', '{"enabled":true,"showIconsInHeader":true,"showIconsInFooter":true,"showOnPages":true,"showOnResearch":true,"showOnConferences":true,"showOnPortals":true,"shareHeading":"Share this update","defaultHashtags":"SVCOER,SVERI,Engineering,NEP2020,Pandharpur","twitterHandle":"svcoer_edu","platforms":{"whatsapp":true,"linkedin":true,"twitter":true,"facebook":true,"telegram":true,"email":true,"copyLink":true,"nativeShare":true}}'),
+('research_portfolio_config', '{"heroBadge":"UGC Section 5(e) · Sponsored R&D, IPR & Innovation Ecosystem","heroTitle":"Research, Funded Grants, Patents & Incubation Cell","heroSubtitle":"Autonomous R&D ecosystem driving DST-SERB, AICTE-MODROBS, MSME Design Clinic grants, filed/granted Indian patents, industry consultancy, and AICTE IDEA Lab hardware startups.","deanName":"Dr. M. S. Kadam","deanTitle":"Dean Research & Development (R&D) & IPR Cell","deanEmail":"dean.rd@coe.sveri.ac.in","deanPhone":"+91-02186-216066","totalGrantsHighlight":"Rs. 3.85 Cr+ Sponsored Grants","activeLabsHighlight":"4 Approved Ph.D. Centres & 18+ Active Labs","consultancyPolicyUrl":"quick-links.php"}'),
+('email_push_config', '{"enabled":true,"transportMode":"php_mail","fromName":"SVCOER Pandharpur (Autonomous) Portal","fromEmail":"noreply@coe.sveri.ac.in","replyToEmail":"principal@coe.sveri.ac.in","smtpHost":"smtp.gmail.com","smtpPort":587,"smtpEncryption":"tls","smtpUsername":"","smtpPassword":"","webhookRelayUrl":"","alertRecipientEmails":"principal@coe.sveri.ac.in, itadmin@coe.sveri.ac.in","reportRecipientEmails":"principal@coe.sveri.ac.in, iqac@coe.sveri.ac.in, itadmin@coe.sveri.ac.in","pushOnNewFeedback":true,"pushOnNewGrievance":true,"pushOnSecurityAlert":true,"enableScheduledVisitorDigest":false,"digestFrequency":"daily","lastDigestSentAt":""}'),
+('pages_parity_seeded_v2', '1'),
+('social_seeded_v1', '1'),
+('research_portfolio_seeded_v1', '1'),
+('feedback_seeded_v1', '1')
+ON DUPLICATE KEY UPDATE val_json = VALUES(val_json);

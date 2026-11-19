@@ -6,6 +6,10 @@ import type {
   Conference,
   ConferenceRegistration,
   ConferenceSubmission,
+  EmailDispatchLogEntry,
+  EmailPushConfig,
+  FeedbackEntry,
+  FeedbackSectionConfig,
   GrievancePortalConfig,
   GrievanceTicket,
   HeaderPortalMenuItem,
@@ -34,7 +38,7 @@ import {
   createSeedVisitorLogs,
 } from './securityAndSeoLogic';
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 export const SOCIAL_PLATFORM_PRESETS: { value: string; label: string }[] = [
   { value: 'facebook', label: 'Facebook' },
@@ -90,10 +94,12 @@ export const RESEARCH_AGENCY_PRESETS = [
 ] as const;
 
 export const RESEARCH_PATENT_TYPE_PRESETS = [
+  'Journal / Conference Publication',
   'Patent Granted',
   'Patent Published',
   'Patent Filed',
   'Copyright / Design',
+  'Industry / Academic MoU',
   'Incubated Start-up',
   'Industry Consultancy',
 ] as const;
@@ -134,7 +140,152 @@ export const DEFAULT_PORTAL_MENU_ITEMS: HeaderPortalMenuItem[] = [
   { id: 5, label: 'Gallery', url: '/gallery', menuLocation: 'more', sortOrder: 6 },
   { id: 6, label: 'Contact Us', url: '/contact', menuLocation: 'more', sortOrder: 7 },
   { id: 7, label: 'Quick Links & Disclosures', url: '/quick-links', menuLocation: 'more', sortOrder: 8 },
+  { id: 9, label: 'Complaint & Feedback', url: '/feedback', menuLocation: 'more', sortOrder: 9 },
 ];
+
+export const FEEDBACK_SUBMISSION_TYPE_PRESETS = [
+  'Complaint',
+  'Feedback',
+  'Suggestion',
+  'Appreciation',
+] as const;
+
+export const DEFAULT_FEEDBACK_SECTIONS: FeedbackSectionConfig[] = [
+  {
+    id: 1,
+    slug: 'academics',
+    sectionName: 'Academics & Classroom Teaching',
+    subsections: ['Curriculum & OBE Syllabus', 'Faculty Teaching & Mentoring', 'Laboratory Equipment & Practicals', 'Academic Timetable & Workload'],
+    recipientEmails: 'dean.academics@coe.sveri.ac.in, principal@coe.sveri.ac.in',
+    ccEmails: 'iqac@coe.sveri.ac.in',
+    inchargeName: 'Dr. S. B. Kulkarni (Dean Academics)',
+    inchargeDesignation: 'Dean Academics & IQAC',
+    slaDays: 5,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 1,
+  },
+  {
+    id: 2,
+    slug: 'examination',
+    sectionName: 'Examination & Evaluation Cell',
+    subsections: ['Exam Form & Hall Ticket', 'Result & Grade Card Verification', 'Photocopy / Revaluation', 'Transcripts & Migration'],
+    recipientEmails: 'coe@coe.sveri.ac.in',
+    ccEmails: 'principal@coe.sveri.ac.in',
+    inchargeName: 'Dr. R. B. Patwardhan (Controller of Examinations)',
+    inchargeDesignation: 'Autonomous Examination Cell',
+    slaDays: 4,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 2,
+  },
+  {
+    id: 3,
+    slug: 'infrastructure',
+    sectionName: 'Infrastructure & Campus Maintenance',
+    subsections: ['Classroom & Auditorium Facilities', 'Power Supply, AC & Lighting', 'Cleanliness & Restrooms', 'Campus Security & Parking'],
+    recipientEmails: 'estate@coe.sveri.ac.in',
+    ccEmails: 'registrar@coe.sveri.ac.in',
+    inchargeName: 'Prof. S. D. Jadhav (Estate Officer)',
+    inchargeDesignation: 'Campus Estate & Works',
+    slaDays: 3,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 3,
+  },
+  {
+    id: 4,
+    slug: 'hostel-mess',
+    sectionName: 'Hostel, Mess & Health Centre',
+    subsections: ['Boys / Girls Hostel Allotment & Rooms', 'Dining Mess Hygiene & Menu', 'Drinking Water & Solar Hot Water', 'Medical & Ambulance Support'],
+    recipientEmails: 'hostel@coe.sveri.ac.in',
+    ccEmails: 'antiragging@coe.sveri.ac.in',
+    inchargeName: 'Dr. M. S. Kulkarni (Chief Rector)',
+    inchargeDesignation: 'Hostel & Residential Care',
+    slaDays: 2,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 4,
+  },
+  {
+    id: 5,
+    slug: 'library-it',
+    sectionName: 'Library, Wi-Fi & IT Services',
+    subsections: ['Central Library & E-Journals', 'Campus Wi-Fi & Network Speed', 'ERP / LMS Account Access', 'Central Computing Lab'],
+    recipientEmails: 'library@coe.sveri.ac.in, itadmin@coe.sveri.ac.in',
+    ccEmails: '',
+    inchargeName: 'Mrs. S. P. Joshi & Mr. R. K. Pawar',
+    inchargeDesignation: 'Library & IT Systems',
+    slaDays: 3,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 5,
+  },
+  {
+    id: 6,
+    slug: 'transport-canteen',
+    sectionName: 'Transport & Campus Canteen',
+    subsections: ['Bus Routes & Timings', 'Bus Pass & Safety', 'Canteen Food Quality & Pricing', 'On-Campus Stationery & Store'],
+    recipientEmails: 'transport@coe.sveri.ac.in, estate@coe.sveri.ac.in',
+    ccEmails: '',
+    inchargeName: 'Mr. V. S. More (Transport Officer)',
+    inchargeDesignation: 'Campus Transport & Hospitality',
+    slaDays: 3,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 6,
+  },
+  {
+    id: 7,
+    slug: 'accounts-scholarship',
+    sectionName: 'Accounts, Fees & Scholarships',
+    subsections: ['Tuition Fee Receipt & Ledger', 'MahaDBT / EBC / Minority Scholarship', 'Caution Money Refund', 'Education Loan Bonafide Letter'],
+    recipientEmails: 'accounts@coe.sveri.ac.in, registrar@coe.sveri.ac.in',
+    ccEmails: '',
+    inchargeName: 'Mr. A. P. Deshmukh (Accounts Officer)',
+    inchargeDesignation: 'Finance & Scholarship Cell',
+    slaDays: 5,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 7,
+  },
+  {
+    id: 8,
+    slug: 'placement-alumni',
+    sectionName: 'Training, Placement & Alumni Relations',
+    subsections: ['Campus Recruitment Drives', 'Aptitude & Soft Skills Training', 'Industry Internship NOC', 'Alumni Networking & Mentorship'],
+    recipientEmails: 'tnp@coe.sveri.ac.in, alumni@coe.sveri.ac.in',
+    ccEmails: '',
+    inchargeName: 'Dr. S. B. Kulkarni (Dean T&P)',
+    inchargeDesignation: 'Training & Placement Cell',
+    slaDays: 4,
+    autoEmailEnabled: true,
+    isActive: true,
+    sortOrder: 8,
+  },
+];
+
+export const DEFAULT_EMAIL_PUSH_CONFIG: EmailPushConfig = {
+  enabled: true,
+  transportMode: 'php_mail',
+  fromName: "SVCOER Pandharpur (Autonomous) Portal",
+  fromEmail: 'noreply@coe.sveri.ac.in',
+  replyToEmail: 'principal@coe.sveri.ac.in',
+  smtpHost: 'smtp.gmail.com',
+  smtpPort: 587,
+  smtpEncryption: 'tls',
+  smtpUsername: '',
+  smtpPassword: '',
+  webhookRelayUrl: '',
+  alertRecipientEmails: 'principal@coe.sveri.ac.in, itadmin@coe.sveri.ac.in',
+  reportRecipientEmails: 'principal@coe.sveri.ac.in, iqac@coe.sveri.ac.in, itadmin@coe.sveri.ac.in',
+  pushOnNewFeedback: true,
+  pushOnNewGrievance: true,
+  pushOnSecurityAlert: true,
+  enableScheduledVisitorDigest: false,
+  digestFrequency: 'daily',
+  lastDigestSentAt: '',
+};
 
 export const DEFAULT_GRIEVANCE_PORTAL_CONFIG: GrievancePortalConfig = {
   heroTitle: 'Online Student Grievance Redressal (SGRC) & Anti-Ragging Helpdesk',
@@ -928,6 +1079,26 @@ export function migrateDatabaseInPlace(
         }
       : ((upgraded = true), structuredClone(seed.researchPortfolio!));
 
+  const feedbackSections: FeedbackSectionConfig[] = Array.isArray(existing.feedbackSections)
+    ? existing.feedbackSections
+    : ((upgraded = true), structuredClone(seed.feedbackSections || DEFAULT_FEEDBACK_SECTIONS));
+
+  const feedbackEntries: FeedbackEntry[] = Array.isArray(existing.feedbackEntries)
+    ? existing.feedbackEntries
+    : ((upgraded = true), structuredClone(seed.feedbackEntries || []));
+
+  const emailPushConfig: EmailPushConfig = existing.emailPushConfig
+    ? {
+        ...DEFAULT_EMAIL_PUSH_CONFIG,
+        ...(seed.emailPushConfig || {}),
+        ...existing.emailPushConfig,
+      }
+    : ((upgraded = true), structuredClone(seed.emailPushConfig || DEFAULT_EMAIL_PUSH_CONFIG));
+
+  const emailDispatchLogs: EmailDispatchLogEntry[] = Array.isArray(existing.emailDispatchLogs)
+    ? existing.emailDispatchLogs
+    : ((upgraded = true), structuredClone(seed.emailDispatchLogs || []));
+
   const mergedDb: CmsDatabase = {
     ...seed,
     ...existing,
@@ -941,6 +1112,10 @@ export function migrateDatabaseInPlace(
     facilities: mergedFacilities,
     researchPortfolio: mergedResearchPortfolio,
     grievances,
+    feedbackSections,
+    feedbackEntries,
+    emailPushConfig,
+    emailDispatchLogs,
     alumni: existingAlumni
       ? {
           ...existingAlumni,
@@ -1066,11 +1241,14 @@ export function filterResearchPatents(
   patents: ResearchPatentItem[],
   typeFilter: string,
   query: string,
+  yearFilter = 'All',
 ): ResearchPatentItem[] {
   const q = query.trim().toLowerCase();
+  const yr = (yearFilter || 'All').trim();
   return [...patents]
     .filter((item) => {
       if (typeFilter && typeFilter !== 'All' && item.itemType !== typeFilter) return false;
+      if (yr && yr !== 'All' && !(item.filingOrGrantDate || '').startsWith(yr)) return false;
       if (!q) return true;
       return (
         item.title.toLowerCase().includes(q) ||
@@ -1082,4 +1260,74 @@ export function filterResearchPatents(
       );
     })
     .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+}
+
+export function validateFeedbackInput(input: {
+  senderName?: string;
+  senderEmail?: string;
+  sectionSlug?: string;
+  subsection?: string;
+  subject?: string;
+  message?: string;
+  rating?: number;
+}): { valid: boolean; reason?: string } {
+  if ((input.senderName || '').trim().length < 2) {
+    return { valid: false, reason: 'Sender full name is required (min 2 characters).' };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((input.senderEmail || '').trim())) {
+    return { valid: false, reason: 'A valid contact email address is required.' };
+  }
+  if (!(input.sectionSlug || '').trim()) {
+    return { valid: false, reason: 'Please select a campus section or department.' };
+  }
+  if (!(input.subsection || '').trim()) {
+    return { valid: false, reason: 'Please select or enter a specific subsection.' };
+  }
+  if ((input.subject || '').trim().length < 4) {
+    return { valid: false, reason: 'Feedback subject must be at least 4 characters.' };
+  }
+  if ((input.message || '').trim().length < 15) {
+    return { valid: false, reason: 'Detailed remarks must be at least 15 characters.' };
+  }
+  const rating = Number(input.rating ?? 5);
+  if (Number.isNaN(rating) || rating < 1 || rating > 5) {
+    return { valid: false, reason: 'Rating must be between 1 and 5 stars.' };
+  }
+  return { valid: true };
+}
+
+export function filterFeedbackEntries(
+  entries: FeedbackEntry[],
+  sectionFilter = 'All',
+  typeFilter = 'All',
+  statusFilter = 'All',
+  query = '',
+): FeedbackEntry[] {
+  const q = query.trim().toLowerCase();
+  return [...entries].filter((e) => {
+    if (sectionFilter !== 'All' && e.sectionSlug !== sectionFilter) return false;
+    if (typeFilter !== 'All' && e.submissionType !== typeFilter) return false;
+    if (statusFilter !== 'All' && e.status !== statusFilter) return false;
+    if (!q) return true;
+    const hay = `${e.ticketCode} ${e.subject} ${e.message} ${e.senderName} ${e.senderEmail} ${e.sectionName} ${e.subsection}`.toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+export function computeFeedbackMetrics(entries: FeedbackEntry[]) {
+  const total = entries.length;
+  const resolved = entries.filter((e) => e.status === 'resolved' || e.status === 'closed').length;
+  const complaints = entries.filter((e) => e.submissionType === 'Complaint').length;
+  const avgRating =
+    total > 0
+      ? Number((entries.reduce((sum, e) => sum + Number(e.rating || 0), 0) / total).toFixed(1))
+      : 5.0;
+  return {
+    total,
+    resolved,
+    open: total - resolved,
+    complaints,
+    avgRating,
+    resolutionRatePct: total > 0 ? Math.round((resolved / total) * 100) : 100,
+  };
 }

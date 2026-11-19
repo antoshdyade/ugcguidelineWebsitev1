@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Mail, MapPin, Phone, Search, ShieldAlert, X } from 'lucide-react';
+import { SocialIconLinks } from './SocialMediaWidgets';
 import type { GalleryAlbum, SiteSettings, TelephoneEntry } from '../types/cms';
 
 export function GalleryView({ albums }: { albums: GalleryAlbum[] }) {
@@ -204,6 +205,7 @@ export function ContactView({
               </span>
             </p>
           </div>
+          <SocialIconLinks settings={settings} variant="contact" />
         </div>
 
         <div className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden min-h-[280px]">

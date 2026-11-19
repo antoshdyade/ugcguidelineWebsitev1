@@ -41,6 +41,8 @@ export interface CmsPage {
   contentHtml: string;
   attachedPdfUrl?: string;
   attachedPdfLabel?: string;
+  showShareBar?: boolean;
+  metaDescription?: string;
   isPublished: boolean;
   sortOrder: number;
   updatedAt: string;
@@ -1207,10 +1209,12 @@ export interface ResearchProjectItem {
 }
 
 export type ResearchPatentType =
+  | 'Journal / Conference Publication'
   | 'Patent Granted'
   | 'Patent Published'
   | 'Patent Filed'
   | 'Copyright / Design'
+  | 'Industry / Academic MoU'
   | 'Incubated Start-up'
   | 'Industry Consultancy';
 
@@ -1249,6 +1253,85 @@ export interface ResearchPortfolioData {
   patents: ResearchPatentItem[];
 }
 
+export type FeedbackSubmissionType = 'Complaint' | 'Feedback' | 'Suggestion' | 'Appreciation';
+export type FeedbackStatus = 'new' | 'forwarded' | 'in_review' | 'resolved' | 'closed';
+
+export interface FeedbackSectionConfig {
+  id: number;
+  slug: string;
+  sectionName: string;
+  subsections: string[];
+  recipientEmails: string;
+  ccEmails?: string;
+  inchargeName: string;
+  inchargeDesignation?: string;
+  slaDays: number;
+  autoEmailEnabled: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface FeedbackEntry {
+  id: number;
+  ticketCode: string;
+  submissionType: FeedbackSubmissionType | string;
+  sectionSlug: string;
+  sectionName: string;
+  subsection: string;
+  senderName: string;
+  senderRole: string;
+  senderEmail: string;
+  senderPhone?: string;
+  departmentOrRollNo?: string;
+  rating: number;
+  isConfidential?: boolean;
+  subject: string;
+  message: string;
+  attachmentUrl?: string;
+  routedToEmails: string;
+  emailPushStatus: string;
+  status: FeedbackStatus;
+  actionTakenNote?: string;
+  submittedAt: string;
+  updatedAt: string;
+}
+
+export type MailTransportMode = 'php_mail' | 'smtp' | 'webhook';
+export type SmtpEncryptionType = 'tls' | 'ssl' | 'none';
+
+export interface EmailPushConfig {
+  enabled: boolean;
+  transportMode: MailTransportMode;
+  fromName: string;
+  fromEmail: string;
+  replyToEmail: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpEncryption: SmtpEncryptionType;
+  smtpUsername: string;
+  smtpPassword?: string;
+  webhookRelayUrl?: string;
+  alertRecipientEmails: string;
+  reportRecipientEmails: string;
+  pushOnNewFeedback: boolean;
+  pushOnNewGrievance: boolean;
+  pushOnSecurityAlert: boolean;
+  enableScheduledVisitorDigest: boolean;
+  digestFrequency: 'daily' | 'weekly';
+  lastDigestSentAt?: string;
+}
+
+export interface EmailDispatchLogEntry {
+  id: number;
+  sentAt: string;
+  category: 'feedback' | 'grievance' | 'visitor_report' | 'security_alert' | 'test';
+  recipientEmails: string;
+  subject: string;
+  transport: string;
+  status: 'sent' | 'queued' | 'failed';
+  detail: string;
+}
+
 export interface CmsDatabase {
   schemaVersion?: number;
   categories: CmsCategory[];
@@ -1270,6 +1353,10 @@ export interface CmsDatabase {
   facilities?: FacilitiesData;
   researchPortfolio?: ResearchPortfolioData;
   grievances?: GrievanceTicket[];
+  feedbackSections?: FeedbackSectionConfig[];
+  feedbackEntries?: FeedbackEntry[];
+  emailPushConfig?: EmailPushConfig;
+  emailDispatchLogs?: EmailDispatchLogEntry[];
   seo?: SeoSettings;
   hitCounter?: HitCounterStats;
   visitorLogs?: VisitorLogEntry[];

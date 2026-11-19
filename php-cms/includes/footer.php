@@ -6,6 +6,7 @@
       <p style="font-size:0.85rem;"><?= e($settings['address']) ?></p>
       <p style="font-size:0.85rem;">Phone: <?= e($settings['phone']) ?> · Email: <?= e($settings['email']) ?></p>
       <p style="font-size:0.85rem;">Anti-Ragging Helpline: <?= e($settings['anti_ragging_helpline']) ?></p>
+      <?= renderPhpSocialIcons($pdo, 'footer') ?>
     </div>
     <div>
       <h4 style="color:#fff;">Mandatory Self-Disclosure</h4>
@@ -28,6 +29,7 @@
       <p><a href="<?= e(baseUrl('quick-links.php')) ?>" style="color:#cbd5e1;">Downloadable Repository</a></p>
       <p><a href="<?= e(baseUrl('conferences.php')) ?>" style="color:#cbd5e1;">Conferences &amp; Events</a></p>
       <p><a href="<?= e(baseUrl('placements.php')) ?>" style="color:#cbd5e1;">Training &amp; Placements</a></p>
+      <p><a href="<?= e(baseUrl('feedback.php')) ?>" style="color:#cbd5e1;">Complaint &amp; Feedback Cell</a></p>
       <p><a href="<?= e(baseUrl('alumni.php')) ?>" style="color:#cbd5e1;">Alumni Network &amp; Jobs</a></p>
       <p><a href="<?= e(baseUrl('gallery.php')) ?>" style="color:#cbd5e1;">Picture Gallery</a></p>
       <p><a href="<?= e(baseUrl('contact.php')) ?>" style="color:#cbd5e1;">Telephone Directory</a></p>
@@ -54,6 +56,7 @@
         <a href="<?= e(baseUrl('sitemap.php')) ?>" style="color:#94a3b8;">Sitemap</a> ·
         <a href="<?= e(baseUrl('robots.php')) ?>" style="color:#94a3b8;">Robots.txt</a> ·
         <a href="<?= e(baseUrl('page.php?slug=rti-disclosure')) ?>" style="color:#cbd5e1;">RTI Cell</a> ·
+        <a href="<?= e(baseUrl('feedback.php')) ?>" style="color:#cbd5e1;">Feedback Cell</a> ·
         <a href="<?= e(baseUrl('grievance.php')) ?>" style="color:#cbd5e1;">Grievance Redressal</a>
       </span>
     </span>

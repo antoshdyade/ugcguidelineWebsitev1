@@ -158,4 +158,6 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 <?php endif; ?>
 
+<?= renderPhpSocialShareBar($pdo, $pageTitle, (string)$config['heroSubtitle'], baseUrl('facilities.php'), 'portal', true) ?>
+
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

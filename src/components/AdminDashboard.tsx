@@ -71,6 +71,7 @@ import { ConferenceAdminPanel } from './ConferenceAdminPanel';
 import { CustomSelectInput } from './CustomSelectInput';
 import { EngineeringPortalsAdmin } from './EngineeringPortalsAdmin';
 import { FacilitiesAdminPanel } from './FacilitiesAdminPanel';
+import { EmailPushManagerPanel, FeedbackManagerPanel } from './FeedbackAndEmailAdminPanel';
 import { ImageUploader } from './ImageUploader';
 import { LogSecurityAdminPanel } from './LogSecurityAdminPanel';
 import { PerPageRbacSelector } from './PerPageRbacSelector';
@@ -96,9 +97,13 @@ import type {
   DepartmentSubPagePhoto,
   DepartmentSubPageType,
   DocumentCategory,
+  EmailDispatchLogEntry,
+  EmailPushConfig,
   FacilitiesData,
   FacultyCustomField,
   FacultyMember,
+  FeedbackEntry,
+  FeedbackSectionConfig,
   GalleryAlbum,
   GrievanceTicket,
   HeaderPortalMenuItem,
@@ -140,6 +145,10 @@ interface AdminStatePayload {
   sports?: SportsData;
   facilities?: FacilitiesData;
   researchPortfolio?: ResearchPortfolioData;
+  feedbackSections?: FeedbackSectionConfig[];
+  feedbackEntries?: FeedbackEntry[];
+  emailPushConfig?: EmailPushConfig;
+  emailDispatchLogs?: EmailDispatchLogEntry[];
   settings: SiteSettings;
   seo?: SeoSettings;
   hitCounter?: HitCounterStats;
@@ -352,6 +361,8 @@ export function AdminDashboard({
   const [pagePdfLabel, setPagePdfLabel] = useState('');
   const [pagePdfMode, setPagePdfMode] = useState<'upload' | 'external'>('upload');
   const [pagePublished, setPagePublished] = useState(true);
+  const [pageShowShareBar, setPageShowShareBar] = useState(true);
+  const [pageMetaDescription, setPageMetaDescription] = useState('');
   const [homepageMode, setHomepageMode] = useState<'sliders' | 'sections' | 'components'>('sliders');
   const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics' | 'design' | 'social'>('identity');
 
@@ -938,7 +949,7 @@ export function AdminDashboard({
     { id: 'placements', label: 'Training & Placements', icon: <TrendingUp className="w-4 h-4" />, allowed: canPlacements },
     { id: 'sports', label: 'Sports & Gymkhana', icon: <Trophy className="w-4 h-4" />, allowed: canSports },
     { id: 'facilities', label: 'Campus Facilities', icon: <Landmark className="w-4 h-4" />, allowed: canFacilities },
-    { id: 'grievances', label: 'Grievance & Anti-Ragging', icon: <ShieldAlert className="w-4 h-4" />, allowed: canGrievances },
+    { id: 'grievances', label: 'Grievance, Feedback & Mail', icon: <ShieldAlert className="w-4 h-4" />, allowed: canGrievances },
     { id: 'alumni', label: 'Alumni Network & Jobs', icon: <GraduationCap className="w-4 h-4" />, allowed: canAlumni },
     { id: 'gallery', label: 'Picture Gallery', icon: <ImageIcon className="w-4 h-4" />, allowed: canGallery },
     { id: 'documents', label: 'Document Repository', icon: <FolderOpen className="w-4 h-4" />, allowed: canDocs },
@@ -2077,23 +2088,32 @@ export function AdminDashboard({
                       categorySlug: pageCat,
                       title: pageTitle,
                       subtitle: pageSubtitle,
+                      metaDescription: pageMetaDescription || undefined,
                       sortOrder: pageSortOrder,
                       contentHtml: pageHtml,
                       attachedPdfUrl: pagePdfUrl || undefined,
                       attachedPdfLabel: pagePdfLabel || undefined,
                       isPublished: pagePublished,
+                      showShareBar: pageShowShareBar,
                     });
                     notify('ok', `Updated page "${pageTitle}".`);
                   } else {
+                    const autoSlug = pageTitle
+                      .toLowerCase()
+                      .replace(/&/g, '-and-')
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, '');
                     await adminFetch('/api/admin/pages', 'POST', {
                       categorySlug: activeCreateCategory,
-                      slug: pageSlug || pageTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                      slug: pageSlug || autoSlug,
                       title: pageTitle,
                       subtitle: pageSubtitle,
+                      metaDescription: pageMetaDescription || undefined,
                       contentHtml: pageHtml,
                       attachedPdfUrl: pagePdfUrl || undefined,
                       attachedPdfLabel: pagePdfLabel || undefined,
                       isPublished: pagePublished,
+                      showShareBar: pageShowShareBar,
                     });
                     notify('ok', `Published new page "${pageTitle}".`);
                   }
@@ -2101,10 +2121,13 @@ export function AdminDashboard({
                   setPageTitle('');
                   setPageSlug('');
                   setPageSubtitle('');
+                  setPageMetaDescription('');
                   setPageSortOrder(1);
                   setPagePdfUrl('');
                   setPagePdfLabel('');
                   setPagePdfMode('upload');
+                  setPagePublished(true);
+                  setPageShowShareBar(true);
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -2123,9 +2146,12 @@ export function AdminDashboard({
                       setPageTitle('');
                       setPageSlug('');
                       setPageSubtitle('');
+                      setPageMetaDescription('');
                       setPageSortOrder(1);
                       setPagePdfUrl('');
                       setPagePdfLabel('');
+                      setPagePublished(true);
+                      setPageShowShareBar(true);
                     }}
                     className="text-xs underline"
                   >
@@ -2173,7 +2199,7 @@ export function AdminDashboard({
                     onChange={(e) => {
                       setPageTitle(e.target.value);
                       if (!editingPageId) {
-                        setPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+                        setPageSlug(e.target.value.toLowerCase().replace(/&/g, '-and-').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
                       }
                     }}
                     placeholder="Enter page title"
@@ -2198,6 +2224,16 @@ export function AdminDashboard({
                     value={pageSortOrder}
                     onChange={(e) => setPageSortOrder(Number(e.target.value))}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div className="sm:col-span-12">
+                  <label className="block text-xs font-semibold mb-1">SEO &amp; OpenGraph Meta Description (optional)</label>
+                  <input
+                    type="text"
+                    value={pageMetaDescription}
+                    onChange={(e) => setPageMetaDescription(e.target.value)}
+                    placeholder="Concise summary for Google Search, WhatsApp, and LinkedIn link previews..."
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                   />
                 </div>
               </div>
@@ -2289,15 +2325,25 @@ export function AdminDashboard({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2">
-                <label className="inline-flex items-center gap-2 text-xs font-medium">
-                  <input
-                    type="checkbox"
-                    checked={pagePublished}
-                    onChange={(e) => setPagePublished(e.target.checked)}
-                  />
-                  <span>Publish Immediately</span>
-                </label>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="inline-flex items-center gap-2 text-xs font-medium">
+                    <input
+                      type="checkbox"
+                      checked={pagePublished}
+                      onChange={(e) => setPagePublished(e.target.checked)}
+                    />
+                    <span>Publish Immediately</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs font-medium">
+                    <input
+                      type="checkbox"
+                      checked={pageShowShareBar}
+                      onChange={(e) => setPageShowShareBar(e.target.checked)}
+                    />
+                    <span>Show Social Share Bar</span>
+                  </label>
+                </div>
                 <button
                   type="submit"
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white"
@@ -2390,12 +2436,14 @@ export function AdminDashboard({
                             setPageTitle(pg.title ?? '');
                             setPageSlug(pg.slug ?? '');
                             setPageSubtitle(pg.subtitle ?? '');
+                            setPageMetaDescription(pg.metaDescription || '');
                             setPageSortOrder(pg.sortOrder ?? 1);
                             setPageHtml(pg.contentHtml ?? '');
                             setPagePdfUrl(pg.attachedPdfUrl || '');
                             setPagePdfLabel(pg.attachedPdfLabel || '');
                             setPagePdfMode(pg.attachedPdfUrl && /^https?:\/\//i.test(pg.attachedPdfUrl) ? 'external' : 'upload');
                             setPagePublished(pg.isPublished !== false);
+                            setPageShowShareBar(pg.showShareBar !== false);
                           }}
                           className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
                         >
@@ -7091,28 +7139,36 @@ export function AdminDashboard({
           />
         )}
 
-        {/* 10C. GRIEVANCE & ANTI-RAGGING HELPDESK ADMIN */}
+        {/* 10C. GRIEVANCE, ANTI-RAGGING & STAKEHOLDER FEEDBACK + EMAIL ROUTING */}
         {activeTab === 'grievances' && canGrievances && state && (
-          <EngineeringPortalsAdmin
-            mode="grievances"
-            placements={
-              state.placements || {
-                summaryNote: '',
-                coordinatorName: '',
-                coordinatorEmail: '',
-                coordinatorPhone: '',
-                stats: [],
-                stories: [],
-                upcomingDrives: [],
+          <div className="space-y-8">
+            <EngineeringPortalsAdmin
+              mode="grievances"
+              placements={
+                state.placements || {
+                  summaryNote: '',
+                  coordinatorName: '',
+                  coordinatorEmail: '',
+                  coordinatorPhone: '',
+                  stats: [],
+                  stories: [],
+                  upcomingDrives: [],
+                }
               }
-            }
-            grievances={state.grievances || []}
-            departments={state.departments}
-            settings={state.settings}
-            adminFetch={adminFetch}
-            uploadBinary={uploadBinaryFile}
-            notify={notify}
-          />
+              grievances={state.grievances || []}
+              departments={state.departments}
+              settings={state.settings}
+              adminFetch={adminFetch}
+              uploadBinary={uploadBinaryFile}
+              notify={notify}
+            />
+            <FeedbackManagerPanel
+              sections={state.feedbackSections || []}
+              entries={state.feedbackEntries || []}
+              adminFetch={adminFetch}
+              notify={notify}
+            />
+          </div>
         )}
 
         {/* 10D. ALUMNI NETWORK, REGISTRATION MODERATION & JOB BOARD */}
@@ -7137,13 +7193,23 @@ export function AdminDashboard({
           />
         )}
 
-        {/* 10F. LOG ANALYZER (COUNTRY / STATE / AREA) & HACKPROOF SECURITY SHIELD */}
+        {/* 10F. LOG ANALYZER, SECURITY SHIELD & AUTOMATED EMAIL PUSH REPORTS */}
         {activeTab === 'analytics' && canAnalytics && state && (
-          <LogSecurityAdminPanel
-            adminFetch={adminFetch}
-            sessionToken={sessionToken || getStoredToken()}
-            notify={notify}
-          />
+          <div className="space-y-8">
+            <LogSecurityAdminPanel
+              adminFetch={adminFetch}
+              sessionToken={sessionToken || getStoredToken()}
+              notify={notify}
+            />
+            {state.emailPushConfig && (
+              <EmailPushManagerPanel
+                config={state.emailPushConfig}
+                logs={state.emailDispatchLogs || []}
+                adminFetch={adminFetch}
+                notify={notify}
+              />
+            )}
+          </div>
         )}
 
         {/* 11. WEBSITE BACKUP, INCREMENTAL SNAPSHOTS, SCHEDULED EXPORT & DISASTER RECOVERY (SUPER ADMIN) */}

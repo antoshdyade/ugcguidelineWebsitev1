@@ -32,8 +32,35 @@ DirectoryIndex index.php index.html
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
+
+  # Block direct web access to internal config, includes, and SQL backups
   RewriteRule ^(config|includes|backups)/ - [F,L]
+
+  # SEO Sitemap & Robots endpoints
   RewriteRule ^sitemap\.xml$ sitemap.php [L,QSA]
   RewriteRule ^robots\.txt$ robots.php [L,QSA]
-</IfModule>
 
+  # Preserve relative assets/ and uploads/ references when clean multi-segment URLs are active
+  RewriteRule ^(?:research|page|category|department|conference)/(assets|uploads)/(.*)$ $1/$2 [L,NC]
+
+  # Serve existing physical files and directories directly
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Research micro-page aliases & clean slugs (fixes Incubation Center, Start-ups & IIC, Central Research Facilities 404s)
+  RewriteRule ^research/incubation-cent(er|re)/?$ page.php?slug=incubation-cell [L,QSA,NC]
+  RewriteRule ^research/start-?ups-?(?:and-)?iic-?cell/?$ page.php?slug=incubation-cell [L,QSA,NC]
+  RewriteRule ^research/central-(?:research-(?:and-computing-)?)?facilities/?$ page.php?slug=central-facilities [L,QSA,NC]
+  RewriteRule ^research/([A-Za-z0-9_&-]+)/?$ page.php?slug=$1 [L,QSA]
+
+  # Clean CMS page, category, department & conference URLs
+  RewriteRule ^page/([^/]+)/?$ page.php?slug=$1 [L,QSA]
+  RewriteRule ^category/([^/]+)/?$ page.php?cat=$1 [L,QSA]
+  RewriteRule ^department/([^/]+)/([^/]+)/?$ department.php?dept=$1&sub=$2 [L,QSA]
+  RewriteRule ^department/([^/]+)/?$ department.php?dept=$1 [L,QSA]
+  RewriteRule ^conference/([^/]+)/?$ conference.php?slug=$1 [L,QSA]
+
+  # Clean top-level standalone portal routes
+  RewriteRule ^(conferences|placements|grievance|alumni|gallery|contact|quick-links|sports|facilities|feedback|search)/?$ $1.php [L,QSA]
+</IfModule>

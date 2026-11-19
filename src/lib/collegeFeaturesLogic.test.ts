@@ -497,4 +497,149 @@ test('filterCongratulationsStories prioritizes featured winners and filters by e
   assert.equal(filterCongratulationsStories(stories, 'All', 'microsoft').length, 1);
 });
 
+import {
+  buildSocialShareUrls,
+  computeFeedbackMetrics,
+  filterFeedbackEntries,
+  filterResearchPatents,
+  getActiveSocialLinks,
+  validateFeedbackInput,
+} from './collegeFeaturesLogic';
+
+test('filterResearchPatents filters by type, year, and search query cleanly', () => {
+  const records = [
+    {
+      id: 1,
+      itemType: 'Journal / Conference Publication' as const,
+      title: 'Federated Microgrid Protection',
+      inventorsOrLead: 'Dr. R. Patil',
+      departmentCode: 'EE',
+      referenceNumber: 'DOI-2026',
+      filingOrGrantDate: '2026-02-14',
+      status: 'Published',
+      sortOrder: 1,
+      isPublished: true,
+    },
+    {
+      id: 2,
+      itemType: 'Industry / Academic MoU' as const,
+      title: 'Tata Robotics Lab MoU',
+      inventorsOrLead: 'Prof. S. Shinde',
+      departmentCode: 'MECH',
+      referenceNumber: 'MOU-2025',
+      filingOrGrantDate: '2025-08-01',
+      status: 'Active',
+      sortOrder: 2,
+      isPublished: true,
+    },
+  ];
+  assert.equal(filterResearchPatents(records, 'All', '', 'All').length, 2);
+  assert.equal(filterResearchPatents(records, 'Journal / Conference Publication', '', 'All').length, 1);
+  assert.equal(filterResearchPatents(records, 'All', '', '2025').length, 1);
+  assert.equal(filterResearchPatents(records, 'All', 'microgrid', '2026').length, 1);
+  assert.equal(filterResearchPatents(records, 'All', 'microgrid', '2025').length, 0);
+});
+
+test('validateFeedbackInput, filterFeedbackEntries, and computeFeedbackMetrics enforce valid submissions and calculate averages', () => {
+  assert.equal(
+    validateFeedbackInput({
+      sectionSlug: 'academics-teaching',
+      subsection: 'Academic Teaching',
+      senderName: 'Rohan',
+      senderEmail: 'bad-email',
+      subject: 'Hi',
+      message: 'Too short',
+      rating: 5,
+    }).valid,
+    false,
+  );
+  assert.equal(
+    validateFeedbackInput({
+      sectionSlug: 'academics-teaching',
+      subsection: 'Academic Teaching & Curriculum',
+      senderName: 'Rohan Kulkarni',
+      senderEmail: 'rohan@sveri.ac.in',
+      subject: 'Appreciation for AI Laboratory Upgrades',
+      message: 'The new GPU workstations in the CSE AI Lab significantly helped our final-year project team.',
+      rating: 5,
+    }).valid,
+    true,
+  );
+
+  const entries: import('../types/cms').FeedbackEntry[] = [
+    {
+      id: 1,
+      ticketCode: 'CFB-2026-0001',
+      sectionSlug: 'academics',
+      sectionName: 'Academics',
+      subsection: 'Curriculum',
+      senderRole: 'Student',
+      submissionType: 'Appreciation' as const,
+      senderName: 'Asha',
+      senderEmail: 'asha@sveri.ac.in',
+      rating: 5,
+      subject: 'Great lab',
+      message: 'Excellent lab facilities and guidance.',
+      isConfidential: false,
+      status: 'resolved' as const,
+      submittedAt: '2026-09-01',
+      updatedAt: '2026-09-02',
+      routedToEmails: 'academics@coe.sveri.ac.in',
+      emailPushStatus: 'sent',
+    },
+    {
+      id: 2,
+      ticketCode: 'CFB-2026-0002',
+      sectionSlug: 'hostel',
+      sectionName: 'Hostel',
+      subsection: 'Mess',
+      senderRole: 'Parent',
+      submissionType: 'Complaint' as const,
+      senderName: 'Suresh',
+      senderEmail: 'suresh@example.com',
+      rating: 3,
+      subject: 'Water cooler',
+      message: 'Second floor hostel water cooler needs servicing.',
+      isConfidential: true,
+      status: 'new' as const,
+      submittedAt: '2026-09-05',
+      updatedAt: '2026-09-05',
+      routedToEmails: 'warden@coe.sveri.ac.in',
+      emailPushStatus: 'sent',
+    },
+  ];
+  assert.equal(filterFeedbackEntries(entries, 'academics', 'All', 'All', '').length, 1);
+  assert.equal(filterFeedbackEntries(entries, 'All', 'All', 'new', 'cooler').length, 1);
+  const metrics = computeFeedbackMetrics(entries);
+  assert.equal(metrics.total, 2);
+  assert.equal(metrics.open, 1);
+  assert.equal(metrics.resolved, 1);
+  assert.equal(metrics.complaints, 1);
+  assert.equal(metrics.avgRating, 4.0);
+});
+
+test('buildSocialShareUrls and getActiveSocialLinks generate encoded share URLs and sorted visible links', () => {
+  const urls = buildSocialShareUrls({
+    url: 'https://coe.sveri.ac.in/page/incubation-cell',
+    title: 'Incubation & Start-ups',
+    summary: 'IIC 4.5 Star Rating',
+    hashtags: 'SVCOER,R&D',
+    via: 'SVCOER_Official',
+  });
+  assert.ok(urls.whatsapp.includes('wa.me/?text='));
+  assert.ok(urls.linkedin.includes('linkedin.com/sharing/share-offsite'));
+  assert.ok(urls.twitter.includes('via=SVCOER_Official'));
+  assert.ok(urls.email.startsWith('mailto:?subject='));
+
+  const active = getActiveSocialLinks({
+    socialMediaLinks: [
+      { id: 1, platform: 'facebook', label: 'FB', url: 'https://fb.com/sveri', isActive: false, sortOrder: 1 },
+      { id: 2, platform: 'linkedin', label: 'LinkedIn', url: 'https://linkedin.com/school/sveri', isActive: true, sortOrder: 3 },
+      { id: 3, platform: 'youtube', label: 'YouTube', url: 'https://youtube.com/@sveri', isActive: true, sortOrder: 2 },
+    ],
+  });
+  assert.deepEqual(active.map((a) => a.platform), ['youtube', 'linkedin']);
+});
+
+
 

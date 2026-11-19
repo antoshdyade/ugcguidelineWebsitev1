@@ -15,8 +15,14 @@ $pdo = getDB();
 ensureCmsSchemaUpgraded($pdo);
 
 $tab = (string)($_GET['tab'] ?? ($canPlacements ? 'placements' : 'grievances'));
+if (!in_array($tab, ['placements', 'grievances', 'feedback'], true)) {
+    $tab = $canPlacements ? 'placements' : 'grievances';
+}
 if ($tab === 'placements' && !$canPlacements) $tab = 'grievances';
-if ($tab === 'grievances' && !$canGrievances) $tab = 'placements';
+if (($tab === 'grievances' || $tab === 'feedback') && !$canGrievances) $tab = 'placements';
+if (!empty($_GET['edit_fb_sec'])) {
+    $tab = 'feedback';
+}
 
 $section = (string)($_GET['section'] ?? 'stats');
 $allowedSections = ['stats', 'notices', 'congratulations', 'drives', 'custom_data'];
@@ -29,7 +35,7 @@ if (!empty($_GET['edit_story'])) $section = 'congratulations';
 if (isset($_GET['edit_drive']) && $_GET['edit_drive'] !== '') $section = 'drives';
 if (!empty($_GET['edit_custom'])) $section = 'custom_data';
 
-// CSV Export for Grievance Moderation Log (before any HTML)
+// CSV Export for Grievance Moderation Log or Feedback Inbox (before any HTML)
 if ($canGrievances && $tab === 'grievances' && !empty($_GET['export_csv'])) {
     $rows = $pdo->query('SELECT ticket_code, submitted_at, complainant_name, email, phone, reporter_role, category, urgency, is_anonymous, subject, status, resolution_note, updated_at FROM grievances ORDER BY id DESC')->fetchAll();
     header('Content-Type: text/csv; charset=utf-8');
@@ -50,6 +56,39 @@ if ($canGrievances && $tab === 'grievances' && !empty($_GET['export_csv'])) {
             $r['subject'],
             $r['status'],
             $r['resolution_note'],
+            $r['updated_at'],
+        ]);
+    }
+    fclose($out);
+    exit;
+}
+
+if ($canGrievances && $tab === 'feedback' && !empty($_GET['export_feedback_csv'])) {
+    $rows = $pdo->query('SELECT tracking_code, submitted_at, section_name, subsection, submission_type, stakeholder_role, sender_name, sender_email, sender_phone, department_or_batch, rating, is_anonymous, subject, message, routed_to_emails, email_dispatch_status, status, action_taken_note, updated_at FROM feedback_entries ORDER BY id DESC')->fetchAll();
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="svcoer-feedback-inbox-' . date('Y-m-d') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['Tracking Code', 'Submitted At', 'Section', 'Subsection', 'Type', 'Role', 'Sender Name', 'Email', 'Phone', 'Dept/Batch', 'Rating', 'Anonymous', 'Subject', 'Message', 'Routed Emails', 'Email Status', 'Status', 'Action Taken', 'Updated At']);
+    foreach ($rows as $r) {
+        fputcsv($out, [
+            $r['tracking_code'],
+            $r['submitted_at'],
+            $r['section_name'],
+            $r['subsection'],
+            $r['submission_type'],
+            $r['stakeholder_role'],
+            !empty($r['is_anonymous']) ? '[CONFIDENTIAL]' : $r['sender_name'],
+            $r['sender_email'],
+            $r['sender_phone'],
+            $r['department_or_batch'],
+            $r['rating'],
+            !empty($r['is_anonymous']) ? 'Yes' : 'No',
+            $r['subject'],
+            $r['message'],
+            $r['routed_to_emails'],
+            $r['email_dispatch_status'],
+            $r['status'],
+            $r['action_taken_note'],
             $r['updated_at'],
         ]);
     }
@@ -468,6 +507,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             saveGrievancePortalConfig($pdo, $gCfg);
             $msg = 'Committee member removed.';
         }
+    } elseif ($canGrievances && $action === 'save_feedback_section') {
+        $tab = 'feedback';
+        $fbSecId = (int)($_POST['fb_section_id'] ?? 0);
+        $secName = trim((string)($_POST['section_name'] ?? ''));
+        $slugRaw = trim((string)($_POST['slug'] ?? ''));
+        $slug = normalizePhpSlug($slugRaw !== '' ? $slugRaw : $secName);
+        if ($slug === '') $slug = 'section-' . random_int(100, 999);
+        $subsRaw = trim((string)($_POST['subsections_raw'] ?? ''));
+        $subsArr = array_values(array_filter(array_map('trim', preg_split('/[\r\n,]+/', $subsRaw) ?: [])));
+        $recEmails = trim((string)($_POST['recipient_emails'] ?? ''));
+        $ccEmails = trim((string)($_POST['cc_emails'] ?? ''));
+        $inchargeName = trim((string)($_POST['incharge_name'] ?? ''));
+        $inchargeDesig = trim((string)($_POST['incharge_designation'] ?? ''));
+        $slaDays = max(1, min(60, (int)($_POST['sla_days'] ?? 5)));
+        $autoEmail = isset($_POST['auto_email_enabled']) ? 1 : 0;
+        $isActive = isset($_POST['is_active']) ? 1 : 0;
+
+        if ($secName === '' || $recEmails === '') {
+            $err = 'Section Name and at least one Recipient Email are required.';
+        } elseif ($fbSecId > 0) {
+            $pdo->prepare('UPDATE feedback_sections SET slug=?, section_name=?, subsections_json=?, recipient_emails=?, cc_emails=?, incharge_name=?, incharge_designation=?, sla_days=?, auto_email_enabled=?, is_active=? WHERE id=?')
+                ->execute([$slug, $secName, json_encode($subsArr, JSON_UNESCAPED_UNICODE), $recEmails, $ccEmails, $inchargeName, $inchargeDesig, $slaDays, $autoEmail, $isActive, $fbSecId]);
+            logAudit($pdo, $user, 'UPDATE_FEEDBACK_SECTION', 'Feedback Routing', $secName);
+            $msg = 'Feedback section & email routing updated.';
+        } else {
+            $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM feedback_sections')->fetchColumn()) + 1;
+            $pdo->prepare('INSERT INTO feedback_sections (slug, section_name, subsections_json, recipient_emails, cc_emails, incharge_name, incharge_designation, sla_days, auto_email_enabled, is_active, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$slug, $secName, json_encode($subsArr, JSON_UNESCAPED_UNICODE), $recEmails, $ccEmails, $inchargeName, $inchargeDesig, $slaDays, $autoEmail, $isActive, $next]);
+            logAudit($pdo, $user, 'ADD_FEEDBACK_SECTION', 'Feedback Routing', $secName);
+            $msg = 'Feedback section & email routing added.';
+        }
+    } elseif ($canGrievances && $action === 'move_feedback_section' && !empty($_POST['id'])) {
+        $tab = 'feedback';
+        swapSortOrder($pdo, 'feedback_sections', (int)$_POST['id'], ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up', null, null, 'id ASC');
+        $msg = 'Feedback section order updated.';
+    } elseif ($canGrievances && $action === 'toggle_feedback_section' && !empty($_POST['id'])) {
+        $tab = 'feedback';
+        $pdo->prepare('UPDATE feedback_sections SET is_active = 1 - is_active WHERE id = ?')->execute([(int)$_POST['id']]);
+        $msg = 'Feedback section active status toggled.';
+    } elseif ($canGrievances && $action === 'delete_feedback_section' && !empty($_POST['id'])) {
+        $tab = 'feedback';
+        $pdo->prepare('DELETE FROM feedback_sections WHERE id = ?')->execute([(int)$_POST['id']]);
+        logAudit($pdo, $user, 'DELETE_FEEDBACK_SECTION', 'Feedback Routing', 'ID #' . (int)$_POST['id']);
+        $msg = 'Feedback section deleted.';
+    } elseif ($canGrievances && $action === 'update_feedback_entry' && !empty($_POST['id'])) {
+        $tab = 'feedback';
+        $st = in_array($_POST['status'] ?? 'New', ['New', 'Acknowledged', 'In Progress', 'Resolved', 'Closed'], true) ? (string)$_POST['status'] : 'New';
+        $note = trim((string)($_POST['action_taken_note'] ?? ''));
+        $pdo->prepare('UPDATE feedback_entries SET status = ?, action_taken_note = ?, updated_at = ? WHERE id = ?')
+            ->execute([$st, $note, date('Y-m-d H:i'), (int)$_POST['id']]);
+        logAudit($pdo, $user, 'UPDATE_FEEDBACK_ENTRY', 'Feedback Ticket', 'ID #' . (int)$_POST['id'] . ' -> ' . $st);
+        $msg = 'Feedback ticket status & action remarks updated.';
+    } elseif ($canGrievances && $action === 'repush_feedback_email' && !empty($_POST['id'])) {
+        $tab = 'feedback';
+        $st = $pdo->prepare('SELECT * FROM feedback_entries WHERE id = ? LIMIT 1');
+        $st->execute([(int)$_POST['id']]);
+        $entry = $st->fetch();
+        if ($entry) {
+            $secStmt = $pdo->prepare('SELECT recipient_emails, cc_emails FROM feedback_sections WHERE id = ? LIMIT 1');
+            $secStmt->execute([(int)$entry['section_id']]);
+            $secRow = $secStmt->fetch();
+            $toCsv = $secRow ? (string)$secRow['recipient_emails'] : (string)$entry['routed_to_emails'];
+            $ccCsv = $secRow ? (string)$secRow['cc_emails'] : '';
+            $body = "MANUAL ADMIN RE-DISPATCH — FEEDBACK TICKET {$entry['tracking_code']}\n"
+                . "Section: {$entry['section_name']} -> {$entry['subsection']}\n"
+                . "Type: {$entry['submission_type']} · Rating: {$entry['rating']}/5 · Status: {$entry['status']}\n"
+                . "Subject: {$entry['subject']}\n\n{$entry['message']}\n";
+            $res = cms_dispatch_and_log_email(
+                $pdo,
+                'feedback_repush',
+                $toCsv,
+                "[Re-Dispatched · {$entry['section_name']}] {$entry['tracking_code']}: {$entry['subject']}",
+                $body,
+                'Re-Push Ticket: ' . $entry['tracking_code'],
+                $ccCsv
+            );
+            $dStat = in_array($res['status'] ?? '', ['sent', 'queued', 'failed'], true) ? (string)$res['status'] : 'queued';
+            $pdo->prepare('UPDATE feedback_entries SET email_dispatch_status = ?, email_dispatch_detail = ? WHERE id = ?')
+                ->execute([$dStat, substr((string)($res['detail'] ?? ''), 0, 400), (int)$entry['id']]);
+            if ($res['ok']) $msg = 'Feedback notification email re-sent: ' . $res['detail'];
+            else $err = 'Email dispatch notice: ' . ($res['detail'] ?? 'Check Email Push Config in Log Analyzer & Email Push.');
+        }
+    } elseif ($canGrievances && $action === 'delete_feedback_entry' && !empty($_POST['id'])) {
+        $tab = 'feedback';
+        $pdo->prepare('DELETE FROM feedback_entries WHERE id = ?')->execute([(int)$_POST['id']]);
+        logAudit($pdo, $user, 'DELETE_FEEDBACK_ENTRY', 'Feedback Ticket', 'ID #' . (int)$_POST['id']);
+        $msg = 'Feedback entry deleted.';
     }
 }
 
@@ -492,6 +618,24 @@ $stories = $pdo->query('SELECT * FROM placement_stories ORDER BY sort_order ASC,
 $notices = $pdo->query('SELECT * FROM placement_notices ORDER BY is_pinned DESC, sort_order ASC, id DESC')->fetchAll();
 $customSections = $pdo->query('SELECT * FROM placement_custom_sections ORDER BY sort_order ASC, id ASC')->fetchAll();
 $grievances = $pdo->query('SELECT * FROM grievances ORDER BY id DESC')->fetchAll();
+$feedbackSections = getFeedbackSections($pdo, false);
+$feedbackEntries = $pdo->query('SELECT * FROM feedback_entries ORDER BY id DESC')->fetchAll() ?: [];
+$editingFbSec = null;
+if (!empty($_GET['edit_fb_sec'])) {
+    foreach ($feedbackSections as $fs) {
+        if ((int)$fs['id'] === (int)$_GET['edit_fb_sec']) {
+            $editingFbSec = $fs;
+            break;
+        }
+    }
+}
+$fbStatusFilter = trim((string)($_GET['fb_status'] ?? 'All'));
+$fbSecFilter = (int)($_GET['fb_sec'] ?? 0);
+$filteredFeedback = array_values(array_filter($feedbackEntries, static function (array $fe) use ($fbStatusFilter, $fbSecFilter): bool {
+    if ($fbStatusFilter !== 'All' && ($fe['status'] ?? '') !== $fbStatusFilter) return false;
+    if ($fbSecFilter > 0 && (int)($fe['section_id'] ?? 0) !== $fbSecFilter) return false;
+    return true;
+}));
 
 $gStatusFilter = trim((string)($_GET['g_status'] ?? 'All'));
 $filteredGrievances = $gStatusFilter === 'All'
@@ -555,11 +699,16 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <a href="?tab=placements" class="admin-subtab <?= $tab === 'placements' ? 'is-active' : '' ?>">Placements Portal (T&amp;P)</a>
     <?php endif; ?>
     <?php if ($canGrievances): ?>
-      <a href="?tab=grievances" class="admin-subtab <?= $tab === 'grievances' ? 'is-active' : '' ?>">Grievance &amp; Anti-Ragging Portal (<?= count($grievances) ?>)</a>
+      <a href="?tab=grievances" class="admin-subtab <?= $tab === 'grievances' ? 'is-active' : '' ?>">Grievance &amp; Anti-Ragging (<?= count($grievances) ?>)</a>
+      <a href="?tab=feedback" class="admin-subtab <?= $tab === 'feedback' ? 'is-active' : '' ?>">Feedback Cell &amp; Email Routing (<?= count($feedbackEntries) ?>)</a>
     <?php endif; ?>
   </div>
-  <a href="<?= e(baseUrl($tab === 'grievances' ? 'grievance.php' : 'placements.php')) ?>" target="_blank" rel="noopener noreferrer" class="btn-outline btn-sm">
-    View Live <?= $tab === 'grievances' ? 'Grievance Portal' : 'Placements Portal' ?> &#8599;
+  <?php
+    $livePortalHref = $tab === 'grievances' ? 'grievance.php' : ($tab === 'feedback' ? 'feedback.php' : 'placements.php');
+    $livePortalLbl = $tab === 'grievances' ? 'View Live Grievance Portal' : ($tab === 'feedback' ? 'View Live Feedback Portal' : 'View Live Placements Portal');
+  ?>
+  <a href="<?= e(baseUrl($livePortalHref)) ?>" target="_blank" rel="noopener noreferrer" class="btn-outline btn-sm">
+    <?= e($livePortalLbl) ?> &#8599;
   </a>
 </div>
 
@@ -1334,6 +1483,165 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
           <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_committee_member"><input type="hidden" name="member_idx" value="<?= $idx ?>"><button type="submit" name="dir" value="up" class="btn-outline btn-sm">&uarr;</button><button type="submit" name="dir" value="down" class="btn-outline btn-sm">&darr;</button></form>
           <a href="?tab=grievances&edit_member=<?= $idx ?>" class="btn-primary btn-sm">Edit</a>
           <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_committee_member"><input type="hidden" name="member_idx" value="<?= $idx ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+<?php elseif ($tab === 'feedback' && $canGrievances): ?>
+  <!-- Stakeholder Feedback Inbox + Customizable Section Email Routing -->
+  <div class="card" style="margin-bottom:1.25rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;">
+      <h2 style="margin:0;">Stakeholder Feedback &amp; Complaint Inbox (<?= count($filteredFeedback) ?>)</h2>
+      <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+        <a href="?tab=feedback&export_feedback_csv=1" class="btn-secondary btn-sm">Export Feedback Inbox (CSV) &darr;</a>
+        <a href="<?= e(baseUrl('admin/manage_logs_security.php#email-push')) ?>" class="btn-outline btn-sm">Configure SMTP / Email Push &rarr;</a>
+      </div>
+    </div>
+
+    <form method="get" style="display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;margin-bottom:0.9rem;">
+      <input type="hidden" name="tab" value="feedback">
+      <select name="fb_status" style="padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #D6D3D1;">
+        <option value="All">All Statuses</option>
+        <?php foreach (['New', 'Acknowledged', 'In Progress', 'Resolved', 'Closed'] as $fbs): ?>
+          <option value="<?= e($fbs) ?>" <?= $fbStatusFilter === $fbs ? 'selected' : '' ?>><?= e($fbs) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <select name="fb_sec" style="padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #D6D3D1;">
+        <option value="0">All Campus Sections</option>
+        <?php foreach ($feedbackSections as $fs): ?>
+          <option value="<?= (int)$fs['id'] ?>" <?= $fbSecFilter === (int)$fs['id'] ? 'selected' : '' ?>><?= e((string)$fs['section_name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <button type="submit" class="btn-primary btn-sm">Filter</button>
+    </form>
+
+    <?php if (empty($filteredFeedback)): ?>
+      <p style="color:#78716C;">No feedback or complaint tickets matching the selected filter.</p>
+    <?php else: ?>
+      <div class="cms-table-wrap">
+        <table class="cms-table cms-table-navy">
+          <thead><tr><th>Ticket &amp; Rating</th><th>Section &amp; Sender</th><th>Feedback / Complaint &amp; Email Delivery</th><th>Status, Remarks &amp; Re-Push</th></tr></thead>
+          <tbody>
+            <?php foreach ($filteredFeedback as $fe): ?>
+              <tr>
+                <td>
+                  <strong><?= e((string)$fe['tracking_code']) ?></strong><br>
+                  <span class="badge <?= ($fe['submission_type'] ?? '') === 'Complaint' ? 'badge-warn' : 'badge-ok' ?>"><?= e((string)$fe['submission_type']) ?></span><br>
+                  <small style="font-weight:700;"><?= (int)$fe['rating'] ?>/5 Stars</small><br>
+                  <small><?= e((string)$fe['submitted_at']) ?></small>
+                </td>
+                <td>
+                  <strong><?= e((string)$fe['section_name']) ?></strong><br>
+                  <small style="color:var(--secondary-color);"><?= e((string)$fe['subsection']) ?></small><br>
+                  <strong><?= e((string)$fe['sender_name']) ?></strong>
+                  <?php if (!empty($fe['is_anonymous'])): ?><span class="badge badge-warn">Anonymous</span><?php endif; ?><br>
+                  <small><?= e((string)$fe['stakeholder_role']) ?></small><br>
+                  <small><?= e((string)$fe['sender_email']) ?></small>
+                </td>
+                <td>
+                  <strong><?= e((string)$fe['subject']) ?></strong><br>
+                  <small><?= e((string)$fe['message']) ?></small>
+                  <?php if (!empty($fe['attachment_url'])): ?>
+                    <div style="margin-top:0.35rem;"><a href="<?= e(baseUrl((string)$fe['attachment_url'])) ?>" target="_blank" class="btn-outline btn-sm">Open Attachment &#8599;</a></div>
+                  <?php endif; ?>
+                  <div style="margin-top:0.35rem;font-size:0.74rem;color:#44403C;">
+                    Routed: <code><?= e((string)($fe['routed_to_emails'] ?: 'Admin Inbox')) ?></code> ·
+                    Email: <strong style="text-transform:uppercase;color:<?= ($fe['email_dispatch_status'] ?? '') === 'sent' ? '#047857' : '#B45309' ?>;"><?= e((string)$fe['email_dispatch_status']) ?></strong>
+                  </div>
+                </td>
+                <td>
+                  <form method="post" style="display:flex;flex-direction:column;gap:0.35rem;min-width:210px;">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                    <input type="hidden" name="action" value="update_feedback_entry">
+                    <input type="hidden" name="id" value="<?= (int)$fe['id'] ?>">
+                    <select name="status" style="padding:4px 6px;">
+                      <?php foreach (['New', 'Acknowledged', 'In Progress', 'Resolved', 'Closed'] as $fst): ?>
+                        <option value="<?= e($fst) ?>" <?= ($fe['status'] ?? '') === $fst ? 'selected' : '' ?>><?= e($fst) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                    <input type="text" name="action_taken_note" value="<?= e((string)($fe['action_taken_note'] ?? '')) ?>" placeholder="Action taken / reply..." style="padding:4px 6px;">
+                    <button type="submit" class="btn-primary btn-sm">Update Ticket</button>
+                  </form>
+                  <div style="display:flex;gap:0.35rem;margin-top:0.35rem;">
+                    <form method="post" style="flex:1;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="repush_feedback_email"><input type="hidden" name="id" value="<?= (int)$fe['id'] ?>"><button type="submit" class="btn-outline btn-sm" style="width:100%;">Re-Push Email</button></form>
+                    <form method="post" onsubmit="return confirm('Delete this feedback entry?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_feedback_entry"><input type="hidden" name="id" value="<?= (int)$fe['id'] ?>"><button type="submit" class="btn-danger btn-sm">Del</button></form>
+                  </div>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- Feedback Sections & Department Email Routing Builder -->
+  <div class="card">
+    <h2 style="margin-top:0;"><?= $editingFbSec ? 'Edit Feedback Section Routing: ' . e((string)$editingFbSec['section_name']) : 'Add Customizable Campus Feedback Section & Email Routing' ?></h2>
+    <form method="post" style="background:#FAFAF9;border:1px solid var(--border-color);border-radius:10px;padding:0.9rem;margin-bottom:1.1rem;">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="save_feedback_section">
+      <input type="hidden" name="fb_section_id" value="<?= (int)($editingFbSec['id'] ?? 0) ?>">
+
+      <div class="grid-3" style="margin-bottom:0.55rem;">
+        <label style="font-size:0.8rem;font-weight:600;">Section Name *
+          <input type="text" name="section_name" required value="<?= e((string)($editingFbSec['section_name'] ?? '')) ?>" placeholder="e.g. Hostel, Mess & Health Centre" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+        <label style="font-size:0.8rem;font-weight:600;">URL / Routing Slug
+          <input type="text" name="slug" value="<?= e((string)($editingFbSec['slug'] ?? '')) ?>" placeholder="auto if blank" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+        <label style="font-size:0.8rem;font-weight:600;">Target SLA (Working Days)
+          <input type="number" name="sla_days" min="1" max="60" value="<?= (int)($editingFbSec['sla_days'] ?? 5) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:0.55rem;">
+        <label style="font-size:0.8rem;font-weight:600;">Primary Recipient Emails (comma-separated) *
+          <input type="text" name="recipient_emails" required value="<?= e((string)($editingFbSec['recipient_emails'] ?? '')) ?>" placeholder="dean.academics@coe.sveri.ac.in, principal@coe.sveri.ac.in" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+        <label style="font-size:0.8rem;font-weight:600;">CC Oversight Emails (comma-separated)
+          <input type="text" name="cc_emails" value="<?= e((string)($editingFbSec['cc_emails'] ?? '')) ?>" placeholder="iqac@coe.sveri.ac.in" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:0.55rem;">
+        <label style="font-size:0.8rem;font-weight:600;">Section In-Charge Name
+          <input type="text" name="incharge_name" value="<?= e((string)($editingFbSec['incharge_name'] ?? '')) ?>" placeholder="Dr. S. B. Kulkarni" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+        <label style="font-size:0.8rem;font-weight:600;">In-Charge Designation / Cell
+          <input type="text" name="incharge_designation" value="<?= e((string)($editingFbSec['incharge_designation'] ?? '')) ?>" placeholder="Dean Academics & IQAC" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+      </div>
+
+      <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.55rem;">Subsections / Selectable Topics (1 per line or comma-separated)
+        <textarea name="subsections_raw" rows="2" placeholder="Curriculum & Syllabus, Lab Equipment, Timetable" style="width:100%;padding:0.45rem;margin-top:3px;"><?= e(implode("\n", is_array($editingFbSec['subsections'] ?? null) ? $editingFbSec['subsections'] : [])) ?></textarea>
+      </label>
+
+      <div style="display:flex;gap:1.25rem;flex-wrap:wrap;font-size:0.82rem;font-weight:600;margin-bottom:0.65rem;">
+        <label><input type="checkbox" name="auto_email_enabled" value="1" <?= ($editingFbSec === null || !empty($editingFbSec['auto_email_enabled'])) ? 'checked' : '' ?>> Auto-Dispatch Email Immediately on Submission</label>
+        <label><input type="checkbox" name="is_active" value="1" <?= ($editingFbSec === null || !empty($editingFbSec['is_active'])) ? 'checked' : '' ?>> Active on Public Feedback Portal</label>
+      </div>
+
+      <button type="submit" class="btn-primary btn-sm"><?= $editingFbSec ? 'Update Section Routing' : 'Add Feedback Section' ?></button>
+      <?php if ($editingFbSec): ?><a href="?tab=feedback" class="btn-outline btn-sm" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
+    </form>
+
+    <h3 style="margin-top:0;">Configured Campus Feedback Sections (<?= count($feedbackSections) ?>)</h3>
+    <?php foreach ($feedbackSections as $fs): ?>
+      <div class="admin-list-row">
+        <div>
+          <strong><?= e((string)$fs['section_name']) ?></strong> · <span class="badge <?= !empty($fs['is_active']) ? 'badge-ok' : 'badge-warn' ?>"><?= !empty($fs['is_active']) ? 'Active' : 'Hidden' ?></span>
+          <div style="font-size:0.78rem;color:#57534E;">
+            To: <code><?= e((string)$fs['recipient_emails']) ?></code>
+            <?= !empty($fs['cc_emails']) ? ' · CC: <code>' . e((string)$fs['cc_emails']) . '</code>' : '' ?>
+            · SLA: <?= (int)$fs['sla_days'] ?>d
+          </div>
+        </div>
+        <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_feedback_section"><input type="hidden" name="id" value="<?= (int)$fs['id'] ?>"><button type="submit" name="dir" value="up" class="btn-outline btn-sm">&uarr;</button><button type="submit" name="dir" value="down" class="btn-outline btn-sm">&darr;</button></form>
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="toggle_feedback_section"><input type="hidden" name="id" value="<?= (int)$fs['id'] ?>"><button type="submit" class="btn-secondary btn-sm"><?= !empty($fs['is_active']) ? 'Hide' : 'Show' ?></button></form>
+          <a href="?tab=feedback&edit_fb_sec=<?= (int)$fs['id'] ?>" class="btn-primary btn-sm">Edit</a>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete this feedback section?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_feedback_section"><input type="hidden" name="id" value="<?= (int)$fs['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
         </div>
       </div>
     <?php endforeach; ?>

@@ -59,6 +59,18 @@ if (mb_strlen($q) >= 2) {
         foreach ($cfStmt->fetchAll() as $r) {
             $results[] = ['type' => 'Conference · ' . $r['scope'], 'title' => $r['short_name'] . ' — ' . $r['title'], 'url' => 'conference.php?slug=' . urlencode($r['slug'])];
         }
+
+        $rpStmt = $pdo->prepare('SELECT title, funding_agency, project_code FROM research_projects WHERE is_published = 1 AND (title LIKE ? OR funding_agency LIKE ? OR principal_investigator LIKE ? OR project_code LIKE ?) LIMIT 5');
+        $rpStmt->execute([$like, $like, $like, $like]);
+        foreach ($rpStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Funded R&D Project · ' . $r['funding_agency'], 'title' => $r['title'], 'url' => 'page.php?slug=research-development-cell'];
+        }
+
+        $riStmt = $pdo->prepare('SELECT item_type, title, inventors_or_lead FROM research_patents WHERE is_published = 1 AND (title LIKE ? OR item_type LIKE ? OR inventors_or_lead LIKE ? OR reference_number LIKE ?) LIMIT 5');
+        $riStmt->execute([$like, $like, $like, $like]);
+        foreach ($riStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Research · ' . $r['item_type'], 'title' => $r['title'], 'url' => 'page.php?slug=research-development-cell'];
+        }
     } catch (Throwable $ignoredSearch) {
     }
 }

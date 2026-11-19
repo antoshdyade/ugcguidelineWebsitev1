@@ -25,7 +25,8 @@ $resolvedSeo = resolvePhpRouteSeo(
     $seoSettings,
     $settings,
     (string)($pageTitle ?? $settings['institution_name']),
-    isset($pageDesc) ? (string)$pageDesc : null
+    isset($pageDesc) ? (string)$pageDesc : null,
+    isset($seoContext) && is_array($seoContext) ? $seoContext : []
 );
 ?>
 <!doctype html>
@@ -46,7 +47,7 @@ $resolvedSeo = resolvePhpRouteSeo(
   <?php if (!empty($resolvedSeo['bingVerify'])): ?>
   <meta name="msvalidate.01" content="<?= e($resolvedSeo['bingVerify']) ?>">
   <?php endif; ?>
-  <meta property="og:type" content="website">
+  <meta property="og:type" content="<?= e($resolvedSeo['ogType'] ?? 'website') ?>">
   <meta property="og:site_name" content="<?= e($settings['institution_name']) ?>">
   <meta property="og:title" content="<?= e($resolvedSeo['title']) ?>">
   <meta property="og:description" content="<?= e($resolvedSeo['description']) ?>">
@@ -156,6 +157,7 @@ $resolvedSeo = resolvePhpRouteSeo(
           <option value="ta">தமிழ்</option>
         </select>
 
+        <?= renderPhpSocialIcons($pdo, 'header') ?>
         <a href="<?= e(baseUrl('admin/login.php')) ?>" class="a11y-admin-pill">CMS Admin</a>
       </div>
     </div>

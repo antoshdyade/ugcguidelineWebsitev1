@@ -12,6 +12,7 @@ import { ConferencePortal } from './components/ConferencePortal';
 import { GrievancePortal, PlacementsPortal } from './components/EngineeringPortals';
 import { SportsPortal } from './components/SportsPortal';
 import { FacilitiesPortal } from './components/FacilitiesPortal';
+import { FeedbackPortal, type FeedbackSummaryStats } from './components/FeedbackPortal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { DEFAULT_SEO_SETTINGS, resolveRouteSeo } from './lib/securityAndSeoLogic';
 import type {
@@ -23,6 +24,7 @@ import type {
   Conference,
   Department,
   FacilitiesData,
+  FeedbackSectionConfig,
   GalleryAlbum,
   HeroSlide,
   HitCounterStats,
@@ -53,6 +55,8 @@ interface PublicBootstrapData {
   sports?: SportsData;
   facilities?: FacilitiesData;
   researchPortfolio?: ResearchPortfolioData;
+  feedbackSections?: FeedbackSectionConfig[];
+  feedbackSummary?: FeedbackSummaryStats;
   settings: SiteSettings;
   seo?: SeoSettings;
   hitCounter?: HitCounterStats;
@@ -250,13 +254,28 @@ export default function App() {
           events={data.events}
           conferences={data.conferences || []}
           researchSliderSlides={data.settings.researchSliderSlides || []}
+          researchPortfolio={data.researchPortfolio}
+          settings={data.settings}
           onNavigate={navigate}
         />
       );
     }
 
-    if (pathname.startsWith('/page/')) {
-      const slug = pathname.replace('/page/', '').split('/')[0];
+    if (pathname.startsWith('/page/') || pathname.startsWith('/research/')) {
+      const rawSlug = pathname.startsWith('/research/')
+        ? pathname.replace('/research/', '').split('/')[0]
+        : pathname.replace('/page/', '').split('/')[0];
+      const slugAliases: Record<string, string> = {
+        'incubation-center': 'incubation-cell',
+        'incubation-centre': 'incubation-cell',
+        'startups-iic-cell': 'incubation-cell',
+        'start-ups-and-iic-cell': 'incubation-cell',
+        'central-research-facilities': 'central-facilities',
+        'central-research-and-computing-facilities': 'central-facilities',
+        'research-facilities': 'central-facilities',
+      };
+      const normalized = rawSlug.toLowerCase().replace(/&/g, '-and-').replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+      const slug = slugAliases[normalized] || rawSlug;
       return (
         <PageViewer
           slug={slug}
@@ -321,6 +340,16 @@ export default function App() {
 
     if (pathname === '/grievance') {
       return <GrievancePortal settings={data.settings} />;
+    }
+
+    if (pathname === '/feedback') {
+      return (
+        <FeedbackPortal
+          sections={data.feedbackSections || []}
+          summary={data.feedbackSummary}
+          settings={data.settings}
+        />
+      );
     }
 
     if (pathname === '/sports') {

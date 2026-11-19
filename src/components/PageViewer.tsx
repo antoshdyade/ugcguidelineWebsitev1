@@ -49,6 +49,7 @@ export function PageViewer({
   const [projectAgencyFilter, setProjectAgencyFilter] = useState('All');
   const [projectSearch, setProjectSearch] = useState('');
   const [patentTypeFilter, setPatentTypeFilter] = useState('All');
+  const [patentYearFilter, setPatentYearFilter] = useState('All');
   const [patentSearch, setPatentSearch] = useState('');
 
   useEffect(() => {
@@ -75,13 +76,26 @@ export function PageViewer({
     () => ['All', ...Array.from(new Set(publishedPatents.map((p) => p.itemType).filter(Boolean)))],
     [publishedPatents],
   );
+  const patentYears = useMemo(
+    () => [
+      'All',
+      ...Array.from(
+        new Set(
+          publishedPatents
+            .map((p) => (p.filingOrGrantDate || '').slice(0, 4))
+            .filter((y) => /^\d{4}$/.test(y)),
+        ),
+      ).sort((a, b) => b.localeCompare(a)),
+    ],
+    [publishedPatents],
+  );
   const visibleProjects = useMemo(
     () => filterResearchProjects(publishedProjects, projectStatusFilter, projectAgencyFilter, projectSearch),
     [publishedProjects, projectStatusFilter, projectAgencyFilter, projectSearch],
   );
   const visiblePatents = useMemo(
-    () => filterResearchPatents(publishedPatents, patentTypeFilter, patentSearch),
-    [publishedPatents, patentTypeFilter, patentSearch],
+    () => filterResearchPatents(publishedPatents, patentTypeFilter, patentSearch, patentYearFilter),
+    [publishedPatents, patentTypeFilter, patentSearch, patentYearFilter],
   );
 
   const resolvedCategory = categorySlug ? categories.find((c) => c.slug === categorySlug) : undefined;
@@ -550,10 +564,10 @@ export function PageViewer({
                         <div>
                           <h3 className="font-display text-lg font-bold text-stone-900 dark:text-white flex items-center gap-2">
                             <Award className="w-5 h-5 text-amber-600" />
-                            Patents, IPR, Incubated Start-ups &amp; Consultancy ({visiblePatents.length})
+                            Publications, Patents, MoUs, Start-ups &amp; Consultancy ({visiblePatents.length})
                           </h3>
                           <p className="text-xs text-stone-500 dark:text-slate-400">
-                            Granted &amp; published patents, AICTE IDEA Lab / IIC incubated start-ups, and industry testing assignments.
+                            Journal &amp; conference papers, granted/published patents, industry MoUs, AICTE IDEA Lab start-ups, and consultancy records.
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -561,7 +575,7 @@ export function PageViewer({
                             type="text"
                             value={patentSearch}
                             onChange={(e) => setPatentSearch(e.target.value)}
-                            placeholder="Search patent, inventor, ID..."
+                            placeholder="Search title, author, ID..."
                             className="px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
                           />
                           <select
@@ -572,10 +586,24 @@ export function PageViewer({
                           >
                             {patentTypes.map((pt) => (
                               <option key={pt} value={pt}>
-                                {pt === 'All' ? 'All IPR & Start-ups' : pt}
+                                {pt === 'All' ? 'All Research Categories' : pt}
                               </option>
                             ))}
                           </select>
+                          {patentYears.length > 1 && (
+                            <select
+                              aria-label="Filter Research by year"
+                              value={patentYearFilter}
+                              onChange={(e) => setPatentYearFilter(e.target.value)}
+                              className="px-2.5 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                            >
+                              {patentYears.map((yr) => (
+                                <option key={yr} value={yr}>
+                                  {yr === 'All' ? 'All Years' : yr}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                       </div>
 
@@ -770,12 +798,14 @@ export function PageViewer({
             </div>
           )}
 
-          <SocialShareBar
-            title={page.title}
-            summary={page.subtitle}
-            settings={settings}
-            location={page.categorySlug === 'research' ? 'research' : 'page'}
-          />
+          {page.showShareBar !== false && (
+            <SocialShareBar
+              title={page.title}
+              summary={page.subtitle}
+              settings={settings}
+              location={page.categorySlug === 'research' ? 'research' : 'page'}
+            />
+          )}
         </article>
       </div>
     </div>

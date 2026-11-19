@@ -10,8 +10,14 @@ ensureCmsSchemaUpgraded($pdo);
 $msg = '';
 $err = '';
 $tab = (string)($_GET['tab'] ?? 'events');
-if (!in_array($tab, ['events', 'research_slider', 'submissions'], true)) {
+if (!in_array($tab, ['events', 'projects', 'patents', 'research_slider', 'submissions'], true)) {
     $tab = 'events';
+}
+if (!empty($_GET['edit_project'])) {
+    $tab = 'projects';
+}
+if (!empty($_GET['edit_patent'])) {
+    $tab = 'patents';
 }
 
 function saveResearchSliderSlides(PDO $pdo, array $slides): void
@@ -208,6 +214,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('UPDATE conference_registrations SET status = ? WHERE id = ?')
             ->execute([$st, (int)$_POST['reg_id']]);
         $msg = 'Delegate registration status updated.';
+    } elseif ($action === 'save_research_config') {
+        $tab = 'projects';
+        saveResearchPortfolioConfig($pdo, [
+            'heroBadge'            => trim((string)($_POST['heroBadge'] ?? '')),
+            'heroTitle'            => trim((string)($_POST['heroTitle'] ?? '')),
+            'heroSubtitle'         => trim((string)($_POST['heroSubtitle'] ?? '')),
+            'deanName'             => trim((string)($_POST['deanName'] ?? '')),
+            'deanTitle'            => trim((string)($_POST['deanTitle'] ?? '')),
+            'deanEmail'            => trim((string)($_POST['deanEmail'] ?? '')),
+            'deanPhone'            => trim((string)($_POST['deanPhone'] ?? '')),
+            'totalGrantsHighlight' => trim((string)($_POST['totalGrantsHighlight'] ?? '')),
+            'activeLabsHighlight'  => trim((string)($_POST['activeLabsHighlight'] ?? '')),
+            'consultancyPolicyUrl' => trim((string)($_POST['consultancyPolicyUrl'] ?? 'quick-links.php')),
+        ]);
+        logAudit($pdo, $user, 'UPDATE_RESEARCH_CONFIG', 'Research Portfolio', (string)($_POST['deanName'] ?? 'R&D Config'));
+        $msg = 'R&D Dean desk & Research Portfolio banner saved.';
+    } elseif ($action === 'save_research_project') {
+        $tab = 'projects';
+        $pid = (int)($_POST['project_id'] ?? 0);
+        $title = trim((string)($_POST['title'] ?? ''));
+        $agency = trim((string)($_POST['funding_agency'] ?? ''));
+        $pi = trim((string)($_POST['principal_investigator'] ?? ''));
+        $coPi = trim((string)($_POST['co_investigator'] ?? ''));
+        $dept = trim((string)($_POST['department_code'] ?? 'ALL')) ?: 'ALL';
+        $amount = trim((string)($_POST['grant_amount_lakhs'] ?? ''));
+        $year = trim((string)($_POST['sanction_year'] ?? '2025-26'));
+        $duration = trim((string)($_POST['duration'] ?? '24 Months'));
+        $status = in_array($_POST['status'] ?? 'Ongoing', ['Ongoing', 'Completed', 'Sanctioned', 'Submitted'], true) ? (string)$_POST['status'] : 'Ongoing';
+        $projCode = trim((string)($_POST['project_code'] ?? ''));
+        $summary = trim((string)($_POST['summary'] ?? ''));
+        $docUrl = trim((string)($_POST['document_url'] ?? ''));
+        if (!empty($_FILES['project_doc']['name'])) {
+            $up = handleCmsUpload($pdo, $_FILES['project_doc'], __DIR__ . '/../uploads', 'document');
+            if (!$up['ok']) $err = $up['error'];
+            else $docUrl = $up['file_url'];
+        }
+        $isPub = isset($_POST['is_published']) ? 1 : 0;
+        if ($err === '') {
+            if ($title === '' || $agency === '' || $pi === '') {
+                $err = 'Project Title, Funding Agency, and Principal Investigator are required.';
+            } elseif ($pid > 0) {
+                $pdo->prepare('UPDATE research_projects SET title=?, funding_agency=?, principal_investigator=?, co_investigator=?, department_code=?, grant_amount_lakhs=?, sanction_year=?, duration=?, status=?, project_code=?, summary=?, document_url=?, is_published=? WHERE id=?')
+                    ->execute([$title, $agency, $pi, $coPi, $dept, $amount, $year, $duration, $status, $projCode, $summary, $docUrl, $isPub, $pid]);
+                logAudit($pdo, $user, 'UPDATE_RESEARCH_PROJECT', 'Research Project', $title);
+                $msg = 'Funded research project updated.';
+            } else {
+                $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM research_projects')->fetchColumn()) + 1;
+                $pdo->prepare('INSERT INTO research_projects (title, funding_agency, principal_investigator, co_investigator, department_code, grant_amount_lakhs, sanction_year, duration, status, project_code, summary, document_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                    ->execute([$title, $agency, $pi, $coPi, $dept, $amount, $year, $duration, $status, $projCode, $summary, $docUrl, $isPub, $next]);
+                logAudit($pdo, $user, 'ADD_RESEARCH_PROJECT', 'Research Project', $title);
+                $msg = 'Funded research project added.';
+            }
+        }
+    } elseif ($action === 'move_research_project' && !empty($_POST['id'])) {
+        $tab = 'projects';
+        swapSortOrder($pdo, 'research_projects', (int)$_POST['id'], ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up', null, null, 'id ASC');
+        $msg = 'Research project order updated.';
+    } elseif ($action === 'toggle_research_project' && !empty($_POST['id'])) {
+        $tab = 'projects';
+        $pdo->prepare('UPDATE research_projects SET is_published = 1 - is_published WHERE id = ?')->execute([(int)$_POST['id']]);
+        $msg = 'Research project visibility toggled.';
+    } elseif ($action === 'delete_research_project' && !empty($_POST['id'])) {
+        $tab = 'projects';
+        $pdo->prepare('DELETE FROM research_projects WHERE id = ?')->execute([(int)$_POST['id']]);
+        logAudit($pdo, $user, 'DELETE_RESEARCH_PROJECT', 'Research Project', 'ID #' . (int)$_POST['id']);
+        $msg = 'Research project deleted.';
+    } elseif ($action === 'save_research_patent') {
+        $tab = 'patents';
+        $ipid = (int)($_POST['patent_id'] ?? 0);
+        $iType = trim((string)($_POST['item_type'] ?? 'Patent Granted')) ?: 'Patent Granted';
+        $title = trim((string)($_POST['title'] ?? ''));
+        $inv = trim((string)($_POST['inventors_or_lead'] ?? ''));
+        $dept = trim((string)($_POST['department_code'] ?? 'ALL')) ?: 'ALL';
+        $refNo = trim((string)($_POST['reference_number'] ?? ''));
+        $dt = trim((string)($_POST['filing_or_grant_date'] ?? ''));
+        $status = trim((string)($_POST['status'] ?? ''));
+        $partner = trim((string)($_POST['partner_or_agency'] ?? ''));
+        $summary = trim((string)($_POST['summary'] ?? ''));
+        $extUrl = trim((string)($_POST['external_url'] ?? ''));
+        $isPub = isset($_POST['is_published']) ? 1 : 0;
+
+        if ($title === '' || $inv === '') {
+            $err = 'Title and Inventors / Authors / Lead are required.';
+        } elseif ($ipid > 0) {
+            $pdo->prepare('UPDATE research_patents SET item_type=?, title=?, inventors_or_lead=?, department_code=?, reference_number=?, filing_or_grant_date=?, status=?, partner_or_agency=?, summary=?, external_url=?, is_published=? WHERE id=?')
+                ->execute([$iType, $title, $inv, $dept, $refNo, $dt, $status, $partner, $summary, $extUrl, $isPub, $ipid]);
+            logAudit($pdo, $user, 'UPDATE_RESEARCH_PATENT', 'Research IPR', $title);
+            $msg = 'Research publication / patent / IPR record updated.';
+        } else {
+            $next = ((int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM research_patents')->fetchColumn()) + 1;
+            $pdo->prepare('INSERT INTO research_patents (item_type, title, inventors_or_lead, department_code, reference_number, filing_or_grant_date, status, partner_or_agency, summary, external_url, is_published, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$iType, $title, $inv, $dept, $refNo, $dt, $status, $partner, $summary, $extUrl, $isPub, $next]);
+            logAudit($pdo, $user, 'ADD_RESEARCH_PATENT', 'Research IPR', $title);
+            $msg = 'Research publication / patent / IPR record added.';
+        }
+    } elseif ($action === 'move_research_patent' && !empty($_POST['id'])) {
+        $tab = 'patents';
+        swapSortOrder($pdo, 'research_patents', (int)$_POST['id'], ($_POST['dir'] ?? 'up') === 'down' ? 'down' : 'up', null, null, 'id ASC');
+        $msg = 'IPR / Publication display order updated.';
+    } elseif ($action === 'toggle_research_patent' && !empty($_POST['id'])) {
+        $tab = 'patents';
+        $pdo->prepare('UPDATE research_patents SET is_published = 1 - is_published WHERE id = ?')->execute([(int)$_POST['id']]);
+        $msg = 'IPR / Publication visibility toggled.';
+    } elseif ($action === 'delete_research_patent' && !empty($_POST['id'])) {
+        $tab = 'patents';
+        $pdo->prepare('DELETE FROM research_patents WHERE id = ?')->execute([(int)$_POST['id']]);
+        logAudit($pdo, $user, 'DELETE_RESEARCH_PATENT', 'Research IPR', 'ID #' . (int)$_POST['id']);
+        $msg = 'IPR / Publication record deleted.';
     }
 }
 
@@ -220,6 +334,28 @@ if (!empty($_GET['edit_id'])) {
 
 $conferences = $pdo->query('SELECT * FROM conferences ORDER BY sort_order ASC, id ASC')->fetchAll();
 $researchSlides = getResearchSliderSlides($pdo);
+$researchPortfolio = getResearchPortfolioData($pdo, false);
+$rCfg = $researchPortfolio['config'];
+$rProjects = $researchPortfolio['projects'];
+$rPatents = $researchPortfolio['patents'];
+$editingProject = null;
+if (!empty($_GET['edit_project'])) {
+    foreach ($rProjects as $pr) {
+        if ((int)$pr['id'] === (int)$_GET['edit_project']) {
+            $editingProject = $pr;
+            break;
+        }
+    }
+}
+$editingPatent = null;
+if (!empty($_GET['edit_patent'])) {
+    foreach ($rPatents as $pt) {
+        if ((int)$pt['id'] === (int)$_GET['edit_patent']) {
+            $editingPatent = $pt;
+            break;
+        }
+    }
+}
 
 $submissions = $pdo->query('SELECT cs.*, c.short_name AS conf_short FROM conference_submissions cs LEFT JOIN conferences c ON c.id = cs.conference_id ORDER BY cs.id DESC')->fetchAll();
 $registrations = $pdo->query('SELECT cr.*, c.short_name AS conf_short FROM conference_registrations cr LEFT JOIN conferences c ON c.id = cr.conference_id ORDER BY cr.id DESC')->fetchAll();
@@ -259,10 +395,12 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
 
 <div class="admin-subtabs">
-  <a href="?tab=events" class="admin-subtab <?= $tab === 'events' ? 'is-active' : '' ?>">Conferences, Workshops &amp; Events (<?= count($conferences) ?>)</a>
-  <a href="?tab=research_slider" class="admin-subtab <?= $tab === 'research_slider' ? 'is-active' : '' ?>">Research Landing Page Slider (<?= count($researchSlides) ?>)</a>
+  <a href="?tab=events" class="admin-subtab <?= $tab === 'events' ? 'is-active' : '' ?>">Conferences &amp; Events (<?= count($conferences) ?>)</a>
+  <a href="?tab=projects" class="admin-subtab <?= $tab === 'projects' ? 'is-active' : '' ?>">Funded Projects &amp; R&amp;D Desk (<?= count($rProjects) ?>)</a>
+  <a href="?tab=patents" class="admin-subtab <?= $tab === 'patents' ? 'is-active' : '' ?>">Patents, Publications, MoUs &amp; Start-ups (<?= count($rPatents) ?>)</a>
+  <a href="?tab=research_slider" class="admin-subtab <?= $tab === 'research_slider' ? 'is-active' : '' ?>">Research Slider (<?= count($researchSlides) ?>)</a>
   <a href="?tab=submissions" class="admin-subtab <?= $tab === 'submissions' ? 'is-active' : '' ?>">Papers (<?= count($submissions) ?>) &amp; Registrations (<?= count($registrations) ?>)</a>
-  <a href="<?= e(baseUrl('conferences.php')) ?>" target="_blank" class="btn-outline btn-sm" style="margin-left:auto;">Open Public Conferences Portal &rarr;</a>
+  <a href="<?= e(baseUrl('conferences.php')) ?>" target="_blank" class="btn-outline btn-sm" style="margin-left:auto;">Open Research Portal &rarr;</a>
 </div>
 
 <?php if ($tab === 'events'): ?>
@@ -719,6 +857,212 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             <input type="hidden" name="slide_idx" value="<?= $idx ?>">
             <button type="submit" class="btn-danger btn-sm">Delete</button>
           </form>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+
+<?php elseif ($tab === 'projects'): ?>
+  <!-- R&D Governance Banner & Dean R&D Profile -->
+  <form method="post" class="card" style="margin-bottom:1.25rem;">
+    <h2 style="margin-top:0;">R&amp;D Governance Banner, Dean R&amp;D Profile &amp; Grants Highlights</h2>
+    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+    <input type="hidden" name="action" value="save_research_config">
+    <div class="grid-3" style="margin-bottom:0.55rem;">
+      <label style="font-size:0.8rem;font-weight:600;">Portal Badge
+        <input type="text" name="heroBadge" value="<?= e((string)$rCfg['heroBadge']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Research Portfolio Heading
+        <input type="text" name="heroTitle" value="<?= e((string)$rCfg['heroTitle']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Consultancy / R&amp;D Policy Link
+        <input type="text" name="consultancyPolicyUrl" value="<?= e((string)$rCfg['consultancyPolicyUrl']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+    </div>
+    <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.55rem;">Portfolio Subtitle
+      <input type="text" name="heroSubtitle" value="<?= e((string)$rCfg['heroSubtitle']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+    </label>
+    <div class="grid-3" style="margin-bottom:0.55rem;">
+      <label style="font-size:0.8rem;font-weight:600;">Dean R&amp;D Name
+        <input type="text" name="deanName" value="<?= e((string)$rCfg['deanName']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Dean Title
+        <input type="text" name="deanTitle" value="<?= e((string)$rCfg['deanTitle']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Dean Email
+        <input type="email" name="deanEmail" value="<?= e((string)$rCfg['deanEmail']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Dean Phone
+        <input type="text" name="deanPhone" value="<?= e((string)$rCfg['deanPhone']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Total Grants Highlight
+        <input type="text" name="totalGrantsHighlight" value="<?= e((string)$rCfg['totalGrantsHighlight']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Ph.D. Centres &amp; Active Labs Highlight
+        <input type="text" name="activeLabsHighlight" value="<?= e((string)$rCfg['activeLabsHighlight']) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+    </div>
+    <button type="submit" class="btn-primary btn-sm">Save R&amp;D Portfolio Config</button>
+  </form>
+
+  <!-- Add / Edit Funded Research Project -->
+  <form method="post" enctype="multipart/form-data" class="card" style="margin-bottom:1.25rem;">
+    <h2 style="margin-top:0;"><?= $editingProject ? 'Edit Funded Project: ' . e((string)$editingProject['title']) : 'Add Sponsored / Funded Research Project' ?></h2>
+    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+    <input type="hidden" name="action" value="save_research_project">
+    <input type="hidden" name="project_id" value="<?= (int)($editingProject['id'] ?? 0) ?>">
+
+    <div class="grid-3" style="margin-bottom:0.55rem;">
+      <label style="font-size:0.8rem;font-weight:600;grid-column:span 2;">Project Title *
+        <input type="text" name="title" required value="<?= e((string)($editingProject['title'] ?? '')) ?>" placeholder="DST-SERB / AICTE-MODROBS / RGSTC Project Title" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Funding Agency *
+        <input type="text" name="funding_agency" required value="<?= e((string)($editingProject['funding_agency'] ?? '')) ?>" placeholder="DST-SERB / AICTE / DRDO / MSME" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+    </div>
+    <div class="grid-4" style="margin-bottom:0.55rem;">
+      <label style="font-size:0.8rem;font-weight:600;">Principal Investigator (PI) *
+        <input type="text" name="principal_investigator" required value="<?= e((string)($editingProject['principal_investigator'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Co-Investigator(s)
+        <input type="text" name="co_investigator" value="<?= e((string)($editingProject['co_investigator'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Department Code
+        <input type="text" name="department_code" value="<?= e((string)($editingProject['department_code'] ?? 'CSE')) ?>" placeholder="CSE / MECH / ENTC / CIVIL / ELEC" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Sanctioned Grant Amount
+        <input type="text" name="grant_amount_lakhs" value="<?= e((string)($editingProject['grant_amount_lakhs'] ?? '')) ?>" placeholder="Rs. 24.50 Lakhs" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Sanction Year
+        <input type="text" name="sanction_year" value="<?= e((string)($editingProject['sanction_year'] ?? '2025-26')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Duration
+        <input type="text" name="duration" value="<?= e((string)($editingProject['duration'] ?? '24 Months')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Status
+        <select name="status" style="width:100%;padding:0.45rem;margin-top:3px;">
+          <?php foreach (['Ongoing', 'Completed', 'Sanctioned', 'Submitted'] as $ps): ?>
+            <option value="<?= e($ps) ?>" <?= ($editingProject['status'] ?? 'Ongoing') === $ps ? 'selected' : '' ?>><?= e($ps) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Sanction Order / File No.
+        <input type="text" name="project_code" value="<?= e((string)($editingProject['project_code'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+    </div>
+    <div class="grid-2" style="margin-bottom:0.55rem;">
+      <label style="font-size:0.8rem;font-weight:600;">Sanction Order URL / Link
+        <input type="text" name="document_url" value="<?= e((string)($editingProject['document_url'] ?? '')) ?>" placeholder="uploads/... or https://..." style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Upload Sanction Letter PDF (Optional)
+        <input type="file" name="project_doc" accept=".pdf,.doc,.docx" style="width:100%;margin-top:6px;">
+      </label>
+    </div>
+    <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.55rem;">Project Scope &amp; Outcomes Summary
+      <textarea name="summary" rows="2" style="width:100%;padding:0.45rem;margin-top:3px;"><?= e((string)($editingProject['summary'] ?? '')) ?></textarea>
+    </label>
+    <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:600;margin-bottom:0.65rem;">
+      <input type="checkbox" name="is_published" value="1" <?= ($editingProject === null || !empty($editingProject['is_published'])) ? 'checked' : '' ?>> Visible on Research Portal
+    </label><br>
+    <button type="submit" class="btn-primary"><?= $editingProject ? 'Update Funded Project' : 'Add Funded Project' ?></button>
+    <?php if ($editingProject): ?><a href="?tab=projects" class="btn-outline" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
+  </form>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Funded Research Projects (<?= count($rProjects) ?>)</h2>
+    <?php foreach ($rProjects as $pr): ?>
+      <div class="admin-list-row">
+        <div>
+          <span style="font-size:0.72rem;font-weight:700;color:var(--secondary-color);text-transform:uppercase;"><?= e((string)$pr['funding_agency']) ?> · <?= e((string)$pr['status']) ?> · <?= e((string)$pr['department_code']) ?></span>
+          <span class="badge <?= !empty($pr['is_published']) ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:4px;"><?= !empty($pr['is_published']) ? 'Visible' : 'Hidden' ?></span><br>
+          <strong><?= e((string)$pr['title']) ?></strong>
+          <div style="font-size:0.78rem;color:#57534E;">PI: <?= e((string)$pr['principal_investigator']) ?> · Grant: <strong><?= e((string)$pr['grant_amount_lakhs']) ?></strong> (<?= e((string)$pr['sanction_year']) ?>)</div>
+        </div>
+        <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_research_project"><input type="hidden" name="id" value="<?= (int)$pr['id'] ?>"><button type="submit" name="dir" value="up" class="btn-outline btn-sm">&uarr;</button><button type="submit" name="dir" value="down" class="btn-outline btn-sm">&darr;</button></form>
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="toggle_research_project"><input type="hidden" name="id" value="<?= (int)$pr['id'] ?>"><button type="submit" class="btn-secondary btn-sm"><?= !empty($pr['is_published']) ? 'Hide' : 'Show' ?></button></form>
+          <a href="?tab=projects&edit_project=<?= (int)$pr['id'] ?>" class="btn-primary btn-sm">Edit</a>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete this research project?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_research_project"><input type="hidden" name="id" value="<?= (int)$pr['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+
+<?php elseif ($tab === 'patents'): ?>
+  <form method="post" class="card" style="margin-bottom:1.25rem;">
+    <h2 style="margin-top:0;"><?= $editingPatent ? 'Edit IPR / Publication Record' : 'Add Patent, Publication, Copyright, Start-up, Consultancy or MoU' ?></h2>
+    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+    <input type="hidden" name="action" value="save_research_patent">
+    <input type="hidden" name="patent_id" value="<?= (int)($editingPatent['id'] ?? 0) ?>">
+
+    <div class="grid-3" style="margin-bottom:0.55rem;">
+      <label style="font-size:0.8rem;font-weight:600;">Record Category *
+        <select name="item_type" data-custom-select="1" style="width:100%;padding:0.45rem;margin-top:3px;">
+          <?php
+            $patTypes = researchPatentTypePresets();
+            if ($editingPatent && !in_array($editingPatent['item_type'], $patTypes, true)) {
+                $patTypes[] = $editingPatent['item_type'];
+            }
+            foreach ($patTypes as $ptOpt):
+          ?>
+            <option value="<?= e($ptOpt) ?>" <?= ($editingPatent['item_type'] ?? 'Patent Granted') === $ptOpt ? 'selected' : '' ?>><?= e($ptOpt) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;grid-column:span 2;">Title *
+        <input type="text" name="title" required value="<?= e((string)($editingPatent['title'] ?? '')) ?>" placeholder="Patent / Journal Paper / Incubated Start-up / MoU Title" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:0.55rem;">
+      <label style="font-size:0.8rem;font-weight:600;">Inventors / Authors / Founders *
+        <input type="text" name="inventors_or_lead" required value="<?= e((string)($editingPatent['inventors_or_lead'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Department Code
+        <input type="text" name="department_code" value="<?= e((string)($editingPatent['department_code'] ?? 'CSE')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Patent / DOI / Ref No.
+        <input type="text" name="reference_number" value="<?= e((string)($editingPatent['reference_number'] ?? '')) ?>" placeholder="IN-PAT-... or DOI / CIN" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Date (YYYY-MM-DD)
+        <input type="text" name="filing_or_grant_date" value="<?= e((string)($editingPatent['filing_or_grant_date'] ?? date('Y-m-d'))) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Status / Indexing / Value
+        <input type="text" name="status" value="<?= e((string)($editingPatent['status'] ?? '')) ?>" placeholder="Granted / Scopus Q1 / MSME Seed" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;">Partner / Publisher / Agency
+        <input type="text" name="partner_or_agency" value="<?= e((string)($editingPatent['partner_or_agency'] ?? '')) ?>" placeholder="Indian Patent Office / IEEE / Industry" style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+      <label style="font-size:0.8rem;font-weight:600;grid-column:span 2;">External Link / DOI / Certificate URL
+        <input type="url" name="external_url" value="<?= e((string)($editingPatent['external_url'] ?? '')) ?>" placeholder="https://..." style="width:100%;padding:0.45rem;margin-top:3px;">
+      </label>
+    </div>
+
+    <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.55rem;">Brief Impact / Technical Summary
+      <textarea name="summary" rows="2" style="width:100%;padding:0.45rem;margin-top:3px;"><?= e((string)($editingPatent['summary'] ?? '')) ?></textarea>
+    </label>
+    <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.82rem;font-weight:600;margin-bottom:0.65rem;">
+      <input type="checkbox" name="is_published" value="1" <?= ($editingPatent === null || !empty($editingPatent['is_published'])) ? 'checked' : '' ?>> Visible on Research Portal
+    </label><br>
+    <button type="submit" class="btn-primary"><?= $editingPatent ? 'Update IPR / Publication' : 'Save IPR / Publication Record' ?></button>
+    <?php if ($editingPatent): ?><a href="?tab=patents" class="btn-outline" style="margin-left:0.4rem;">Cancel</a><?php endif; ?>
+  </form>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Patents, Publications, MoUs, Consultancy &amp; Start-ups (<?= count($rPatents) ?>)</h2>
+    <?php foreach ($rPatents as $pt): ?>
+      <div class="admin-list-row">
+        <div>
+          <span style="font-size:0.72rem;font-weight:700;color:var(--secondary-color);text-transform:uppercase;"><?= e((string)$pt['item_type']) ?> · <?= e((string)$pt['department_code']) ?> · <?= e((string)$pt['filing_or_grant_date']) ?></span>
+          <span class="badge <?= !empty($pt['is_published']) ? 'badge-ok' : 'badge-warn' ?>" style="margin-left:4px;"><?= !empty($pt['is_published']) ? 'Visible' : 'Hidden' ?></span><br>
+          <strong><?= e((string)$pt['title']) ?></strong>
+          <div style="font-size:0.78rem;color:#57534E;"><?= e((string)$pt['inventors_or_lead']) ?> · Ref: <code><?= e((string)$pt['reference_number']) ?></code> · <?= e((string)$pt['status']) ?></div>
+        </div>
+        <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="move_research_patent"><input type="hidden" name="id" value="<?= (int)$pt['id'] ?>"><button type="submit" name="dir" value="up" class="btn-outline btn-sm">&uarr;</button><button type="submit" name="dir" value="down" class="btn-outline btn-sm">&darr;</button></form>
+          <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="toggle_research_patent"><input type="hidden" name="id" value="<?= (int)$pt['id'] ?>"><button type="submit" class="btn-secondary btn-sm"><?= !empty($pt['is_published']) ? 'Hide' : 'Show' ?></button></form>
+          <a href="?tab=patents&edit_patent=<?= (int)$pt['id'] ?>" class="btn-primary btn-sm">Edit</a>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete this record?');"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="delete_research_patent"><input type="hidden" name="id" value="<?= (int)$pt['id'] ?>"><button type="submit" class="btn-danger btn-sm">Delete</button></form>
         </div>
       </div>
     <?php endforeach; ?>

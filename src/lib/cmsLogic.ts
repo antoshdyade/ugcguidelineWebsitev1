@@ -407,7 +407,10 @@ export function filterDocuments(
 
 export function searchCmsContent(
   query: string,
-  db: Pick<CmsDatabase, 'pages' | 'departments' | 'documents' | 'events' | 'conferences' | 'sports' | 'facilities'>,
+  db: Pick<
+    CmsDatabase,
+    'pages' | 'departments' | 'documents' | 'events' | 'conferences' | 'sports' | 'facilities' | 'researchPortfolio'
+  >,
 ): SearchResultItem[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];

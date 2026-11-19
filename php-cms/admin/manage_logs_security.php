@@ -76,14 +76,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             logAudit($pdo, $user, 'PRUNE_LOGS', 'Analytics', 'Pruned > ' . $cfg['logRetentionDays'] . ' days');
             $msg = 'Pruned logs older than ' . (int)$cfg['logRetentionDays'] . ' days.';
         }
+    } elseif ($action === 'save_email_push_config') {
+        $nextEp = [
+            'enabled'                      => isset($_POST['ep_enabled']),
+            'transportMode'                => trim((string)($_POST['ep_transport_mode'] ?? 'php_mail')),
+            'fromName'                     => trim((string)($_POST['ep_from_name'] ?? 'SVCOER Portal')),
+            'fromEmail'                    => trim((string)($_POST['ep_from_email'] ?? 'noreply@coe.sveri.ac.in')),
+            'replyToEmail'                 => trim((string)($_POST['ep_reply_to'] ?? 'principal@coe.sveri.ac.in')),
+            'smtpHost'                     => trim((string)($_POST['ep_smtp_host'] ?? '')),
+            'smtpPort'                     => (int)($_POST['ep_smtp_port'] ?? 587),
+            'smtpEncryption'               => trim((string)($_POST['ep_smtp_encryption'] ?? 'tls')),
+            'smtpUsername'                 => trim((string)($_POST['ep_smtp_username'] ?? '')),
+            'smtpPassword'                 => (string)($_POST['ep_smtp_password'] ?? ''),
+            'clearSmtpPassword'            => isset($_POST['ep_clear_smtp_password']),
+            'webhookRelayUrl'              => trim((string)($_POST['ep_webhook_url'] ?? '')),
+            'alertRecipientEmails'         => trim((string)($_POST['ep_alert_recipients'] ?? '')),
+            'reportRecipientEmails'        => trim((string)($_POST['ep_report_recipients'] ?? '')),
+            'pushOnNewFeedback'            => isset($_POST['ep_push_feedback']),
+            'pushOnNewGrievance'           => isset($_POST['ep_push_grievance']),
+            'pushOnSecurityAlert'          => isset($_POST['ep_push_security']),
+            'enableScheduledVisitorDigest' => isset($_POST['ep_scheduled_digest']),
+            'digestFrequency'              => trim((string)($_POST['ep_digest_freq'] ?? 'daily')),
+        ];
+        saveEmailPushConfig($pdo, $nextEp, true);
+        logAudit($pdo, $user, 'UPDATE_EMAIL_PUSH_CONFIG', 'Email Push Center', $nextEp['transportMode']);
+        $msg = 'Email Push & Automated Reporting settings saved (SMTP password preserved unless replaced/cleared).';
+    } elseif ($action === 'send_test_email') {
+        $epCfg = getEmailPushConfig($pdo);
+        $testTo = trim((string)($_POST['test_recipient'] ?? ''));
+        if ($testTo === '') $testTo = (string)($epCfg['alertRecipientEmails'] ?? '');
+        $res = cms_dispatch_and_log_email(
+            $pdo,
+            'test_email',
+            $testTo,
+            '[SVCOER Test Alert] Email Push Verification (' . gmdate('Y-m-d H:i') . ' UTC)',
+            "Hello,\n\nThis is a live verification email dispatched from your SVCOER Admin Email Push Center using transport mode: " . strtoupper((string)$epCfg['transportMode']) . ".\n\nServer Host: " . ($_SERVER['HTTP_HOST'] ?? 'localhost') . "\nTriggered By: " . ($user['email'] ?? 'admin'),
+            'Manual Test',
+            '',
+            $epCfg
+        );
+        if ($res['ok']) $msg = 'Test email dispatched successfully: ' . $res['detail'];
+        else $err = 'Test email notice: ' . ($res['detail'] ?? 'Check SMTP/Postfix settings.');
+    } elseif ($action === 'push_visitor_logs_report') {
+        $res = cms_send_visitor_logs_report($pdo, 'manual');
+        logAudit($pdo, $user, 'PUSH_VISITOR_REPORT', 'Email Push Center', (string)$res['status']);
+        if ($res['ok']) $msg = 'Visitor & GeoIP Log Report pushed: ' . $res['detail'];
+        else $err = 'Visitor Report logged: ' . ($res['detail'] ?? '');
+    } elseif ($action === 'push_security_alert_report') {
+        $res = cms_send_security_alert_report($pdo, 'manual');
+        logAudit($pdo, $user, 'PUSH_SECURITY_DIGEST', 'Email Push Center', (string)$res['status']);
+        if ($res['ok']) $msg = 'WAF & Security Audit Digest pushed: ' . $res['detail'];
+        else $err = 'Security Digest logged: ' . ($res['detail'] ?? '');
+    } elseif ($action === 'push_feedback_digest_report') {
+        $res = cms_send_feedback_digest_report($pdo);
+        logAudit($pdo, $user, 'PUSH_FEEDBACK_DIGEST', 'Email Push Center', (string)$res['status']);
+        if ($res['ok']) $msg = 'Feedback Summary Digest pushed: ' . $res['detail'];
+        else $err = 'Feedback Digest logged: ' . ($res['detail'] ?? '');
     }
 }
 
 $secCfg = getSecurityConfig($pdo);
+$epCfg = getEmailPushConfig($pdo);
 $hitStats = getHitCounterStats($pdo);
 $logs = queryFilteredVisitorLogs($pdo, $filters, 300);
 $summary = aggregatePhpVisitorLogs($logs);
 $blockedIps = $pdo->query('SELECT * FROM security_blocked_ips ORDER BY id DESC')->fetchAll();
+$emailDispatchLogs = $pdo->query('SELECT * FROM email_dispatch_logs ORDER BY id DESC LIMIT 30')->fetchAll() ?: [];
 
 // Build distinct dropdown lists from all logs cleanly
 $allGeoRows = $pdo->query('SELECT DISTINCT country, state, area FROM visitor_logs')->fetchAll();
@@ -510,6 +568,158 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
         <?php endforeach; ?>
       </tbody>
     </table>
+  </div>
+</div>
+
+<!-- Email Push Alerts, Scheduled Visitor Digests & Dispatch Audit Logs -->
+<div id="email-push" class="card" style="margin-top:1.25rem;">
+  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.75rem;margin-bottom:0.85rem;">
+    <div>
+      <h2 style="margin:0;">Email Push Center, Automated Log Reports &amp; Delivery Audit</h2>
+      <div style="font-size:0.8rem;color:#57534E;">Configure Ubuntu Postfix/Sendmail (<code>php_mail</code>), authenticated SMTP (TLS/SSL), or Webhook Relay to push Feedback alerts, Grievance notifications, WAF Security digests &amp; Visitor Log reports.</div>
+    </div>
+    <span class="badge <?= !empty($epCfg['enabled']) ? 'badge-ok' : 'badge-warn' ?>">
+      Email Push: <?= !empty($epCfg['enabled']) ? 'ENABLED (' . strtoupper((string)$epCfg['transportMode']) . ')' : 'PAUSED' ?>
+    </span>
+  </div>
+
+  <!-- 1-Click Report Dispatch Bar -->
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;padding:0.75rem;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;margin-bottom:1rem;">
+    <form method="post" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="send_test_email">
+      <input type="email" name="test_recipient" value="<?= e(explode(',', (string)$epCfg['alertRecipientEmails'])[0] ?? '') ?>" placeholder="Test recipient email" style="padding:0.4rem 0.6rem;border:1px solid #93C5FD;border-radius:6px;background:#fff;">
+      <button type="submit" class="btn-primary btn-sm">Send Test Email</button>
+    </form>
+    <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="push_visitor_logs_report"><button type="submit" class="btn-secondary btn-sm">Push Visitor Logs Report Now</button></form>
+    <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="push_security_alert_report"><button type="submit" class="btn-secondary btn-sm">Push Security / WAF Digest Now</button></form>
+    <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>"><input type="hidden" name="action" value="push_feedback_digest_report"><button type="submit" class="btn-secondary btn-sm">Push Feedback Summary Now</button></form>
+  </div>
+
+  <div class="grid-2" style="gap:1.25rem;align-items:start;">
+    <form method="post" style="display:grid;gap:0.65rem;">
+      <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+      <input type="hidden" name="action" value="save_email_push_config">
+
+      <label style="display:inline-flex;align-items:center;gap:0.45rem;font-weight:700;font-size:0.86rem;color:var(--primary-color);">
+        <input type="checkbox" name="ep_enabled" value="1" <?= !empty($epCfg['enabled']) ? 'checked' : '' ?>>
+        Enable Outbound Email Push &amp; Alerts
+      </label>
+
+      <div class="grid-2" style="gap:0.55rem;">
+        <label style="font-size:0.78rem;font-weight:600;">Transport Mode
+          <select name="ep_transport_mode" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+            <option value="php_mail" <?= ($epCfg['transportMode'] ?? '') === 'php_mail' ? 'selected' : '' ?>>Ubuntu Server PHP mail() / Postfix</option>
+            <option value="smtp" <?= ($epCfg['transportMode'] ?? '') === 'smtp' ? 'selected' : '' ?>>Authenticated SMTP (STARTTLS / SSL)</option>
+            <option value="webhook" <?= ($epCfg['transportMode'] ?? '') === 'webhook' ? 'selected' : '' ?>>HTTPS Webhook Relay</option>
+          </select>
+        </label>
+        <label style="font-size:0.78rem;font-weight:600;">Sender Display Name
+          <input type="text" name="ep_from_name" value="<?= e((string)$epCfg['fromName']) ?>" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+        <label style="font-size:0.78rem;font-weight:600;">From Email
+          <input type="email" name="ep_from_email" value="<?= e((string)$epCfg['fromEmail']) ?>" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+        <label style="font-size:0.78rem;font-weight:600;">Reply-To Email
+          <input type="email" name="ep_reply_to" value="<?= e((string)$epCfg['replyToEmail']) ?>" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+      </div>
+
+      <div class="grid-3" style="gap:0.55rem;">
+        <label style="font-size:0.78rem;font-weight:600;">SMTP Host
+          <input type="text" name="ep_smtp_host" value="<?= e((string)$epCfg['smtpHost']) ?>" placeholder="smtp.gmail.com" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+        <label style="font-size:0.78rem;font-weight:600;">SMTP Port
+          <input type="number" name="ep_smtp_port" value="<?= (int)$epCfg['smtpPort'] ?>" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+        <label style="font-size:0.78rem;font-weight:600;">Encryption
+          <select name="ep_smtp_encryption" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+            <option value="tls" <?= ($epCfg['smtpEncryption'] ?? '') === 'tls' ? 'selected' : '' ?>>STARTTLS (587)</option>
+            <option value="ssl" <?= ($epCfg['smtpEncryption'] ?? '') === 'ssl' ? 'selected' : '' ?>>SSL / SMTPS (465)</option>
+            <option value="none" <?= ($epCfg['smtpEncryption'] ?? '') === 'none' ? 'selected' : '' ?>>Plain / Local Relay (25)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="grid-2" style="gap:0.55rem;">
+        <label style="font-size:0.78rem;font-weight:600;">SMTP Username
+          <input type="text" name="ep_smtp_username" value="<?= e((string)$epCfg['smtpUsername']) ?>" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+        <label style="font-size:0.78rem;font-weight:600;">SMTP Password / App Token (<?= !empty($epCfg['smtpPassword']) ? 'Stored — leave blank to keep' : 'Not set' ?>)
+          <input type="password" name="ep_smtp_password" value="" autocomplete="new-password" placeholder="Leave blank to preserve saved password" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+      </div>
+      <?php if (!empty($epCfg['smtpPassword'])): ?>
+        <label style="font-size:0.76rem;color:#B91C1C;"><input type="checkbox" name="ep_clear_smtp_password" value="1"> Clear saved SMTP password</label>
+      <?php endif; ?>
+
+      <label style="font-size:0.78rem;font-weight:600;">Webhook Relay URL (Used when mode = Webhook Relay)
+        <input type="url" name="ep_webhook_url" value="<?= e((string)$epCfg['webhookRelayUrl']) ?>" placeholder="https://hooks.example.com/mail" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+      </label>
+
+      <div class="grid-2" style="gap:0.55rem;">
+        <label style="font-size:0.78rem;font-weight:600;">Security &amp; Grievance Alert Recipients (CSV)
+          <input type="text" name="ep_alert_recipients" value="<?= e((string)$epCfg['alertRecipientEmails']) ?>" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+        <label style="font-size:0.78rem;font-weight:600;">Analytics &amp; Feedback Digest Recipients (CSV)
+          <input type="text" name="ep_report_recipients" value="<?= e((string)$epCfg['reportRecipientEmails']) ?>" style="width:100%;padding:0.45rem;border:1px solid #D6D3D1;border-radius:6px;margin-top:3px;">
+        </label>
+      </div>
+
+      <div class="grid-2" style="gap:0.4rem;font-size:0.81rem;">
+        <label><input type="checkbox" name="ep_push_feedback" value="1" <?= !empty($epCfg['pushOnNewFeedback']) ? 'checked' : '' ?>> Push Email on New Feedback Submission</label>
+        <label><input type="checkbox" name="ep_push_grievance" value="1" <?= !empty($epCfg['pushOnNewGrievance']) ? 'checked' : '' ?>> Push Alert on New Grievance / Anti-Ragging Ticket</label>
+        <label><input type="checkbox" name="ep_push_security" value="1" <?= !empty($epCfg['pushOnSecurityAlert']) ? 'checked' : '' ?>> Push Alert on WAF Critical Security Event</label>
+        <label><input type="checkbox" name="ep_scheduled_digest" value="1" <?= !empty($epCfg['enableScheduledVisitorDigest']) ? 'checked' : '' ?>> Enable Scheduled Visitor Digest</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <label style="font-size:0.78rem;font-weight:600;">Digest Cadence
+          <select name="ep_digest_freq" style="padding:0.35rem 0.55rem;border:1px solid #D6D3D1;border-radius:6px;margin-left:4px;">
+            <option value="daily" <?= ($epCfg['digestFrequency'] ?? 'daily') === 'daily' ? 'selected' : '' ?>>Daily (24h)</option>
+            <option value="weekly" <?= ($epCfg['digestFrequency'] ?? '') === 'weekly' ? 'selected' : '' ?>>Weekly (7d)</option>
+          </select>
+        </label>
+        <?php if (!empty($epCfg['lastDigestSentAt'])): ?>
+          <small style="color:#78716C;">Last Scheduled Digest: <?= e((string)$epCfg['lastDigestSentAt']) ?></small>
+        <?php endif; ?>
+      </div>
+
+      <div>
+        <button type="submit" class="btn-primary">Save Email Push Settings</button>
+      </div>
+    </form>
+
+    <div>
+      <h3 style="margin-top:0;">Outbound Email Dispatch Audit Log (Latest 30)</h3>
+      <div style="max-height:520px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;">
+        <table class="data-table">
+          <thead><tr><th>Time (UTC)</th><th>Category &amp; Recipients</th><th>Subject &amp; Detail</th><th>Status</th></tr></thead>
+          <tbody>
+            <?php if (empty($emailDispatchLogs)): ?>
+              <tr><td colspan="4" style="text-align:center;color:#78716C;padding:1rem;">No outbound email push events recorded yet.</td></tr>
+            <?php endif; ?>
+            <?php foreach ($emailDispatchLogs as $dl): ?>
+              <tr>
+                <td style="font-size:0.74rem;white-space:nowrap;font-variant-numeric:tabular-nums;"><?= e((string)$dl['sent_at']) ?></td>
+                <td style="font-size:0.76rem;">
+                  <strong style="text-transform:uppercase;"><?= e((string)$dl['category']) ?></strong><br>
+                  <code style="word-break:break-all;"><?= e((string)$dl['recipients']) ?></code>
+                </td>
+                <td style="font-size:0.76rem;">
+                  <strong><?= e((string)$dl['subject']) ?></strong>
+                  <?php if (!empty($dl['detail'])): ?><div style="color:#57534E;"><?= e((string)$dl['detail']) ?></div><?php endif; ?>
+                </td>
+                <td>
+                  <span class="badge <?= ($dl['status'] ?? '') === 'sent' ? 'badge-ok' : 'badge-warn' ?>">
+                    <?= e(strtoupper((string)$dl['status'])) ?>
+                  </span>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 

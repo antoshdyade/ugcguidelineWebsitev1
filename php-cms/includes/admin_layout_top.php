@@ -134,7 +134,7 @@ $uploadPolicy = isset($pdo)
           <a href="<?= e(baseUrl('admin/manage_alumni.php')) ?>" class="<?= $activePage === 'manage_alumni.php' ? 'active' : '' ?>"><?= $icons['graduation'] ?><span>Alumni Network &amp; Jobs</span></a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'placements') || canAccessResource($user, 'grievances')): ?>
-          <a href="<?= e(baseUrl('admin/manage_portals.php')) ?>" class="<?= $activePage === 'manage_portals.php' ? 'active' : '' ?>"><?= $icons['shield'] ?><span>Placements &amp; Grievance Desk</span></a>
+          <a href="<?= e(baseUrl('admin/manage_portals.php')) ?>" class="<?= $activePage === 'manage_portals.php' ? 'active' : '' ?>"><?= $icons['shield'] ?><span>Placements, Grievances &amp; Feedback</span></a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'sports')): ?>
           <a href="<?= e(baseUrl('admin/manage_sports.php')) ?>" class="<?= $activePage === 'manage_sports.php' ? 'active' : '' ?>"><?= $icons['trophy'] ?><span>Sports &amp; Gymkhana</span></a>
@@ -155,10 +155,10 @@ $uploadPolicy = isset($pdo)
           <a href="<?= e(baseUrl('admin/manage_seo.php')) ?>" class="<?= $activePage === 'manage_seo.php' ? 'active' : '' ?>"><?= $icons['search'] ?><span>SEO Studio &amp; Hit Counter</span></a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'analytics')): ?>
-          <a href="<?= e(baseUrl('admin/manage_logs_security.php')) ?>" class="<?= $activePage === 'manage_logs_security.php' ? 'active' : '' ?>"><?= $icons['activity'] ?><span>Log Analyzer &amp; Security</span></a>
+          <a href="<?= e(baseUrl('admin/manage_logs_security.php')) ?>" class="<?= $activePage === 'manage_logs_security.php' ? 'active' : '' ?>"><?= $icons['activity'] ?><span>Log Analyzer, Security &amp; Email Push</span></a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'settings')): ?>
-          <a href="<?= e(baseUrl('admin/site_settings.php')) ?>" class="<?= $activePage === 'site_settings.php' ? 'active' : '' ?>"><?= $icons['settings'] ?><span>Site Settings, Vision &amp; Theme</span></a>
+          <a href="<?= e(baseUrl('admin/site_settings.php')) ?>" class="<?= $activePage === 'site_settings.php' ? 'active' : '' ?>"><?= $icons['settings'] ?><span>Settings, Social Media &amp; Theme</span></a>
         <?php endif; ?>
         <?php if (canAccessResource($user, 'users')): ?>
           <a href="<?= e(baseUrl('admin/manage_users.php')) ?>" class="<?= $activePage === 'manage_users.php' ? 'active' : '' ?>"><?= $icons['users'] ?><span>Users, Per-Page RBAC &amp; Audit</span></a>

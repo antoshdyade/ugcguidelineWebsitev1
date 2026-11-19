@@ -44,7 +44,10 @@ import {
   verifyCaptchaChallenge,
 } from './src/lib/captchaLogic';
 import {
+  DEFAULT_EMAIL_PUSH_CONFIG,
+  DEFAULT_FEEDBACK_SECTIONS,
   DEFAULT_GRIEVANCE_PORTAL_CONFIG,
+  computeFeedbackMetrics,
   generateReferenceCode,
   isExternalPaperSubmissionActive,
   migrateDatabaseInPlace,
@@ -53,6 +56,7 @@ import {
   validateAlumniPledgeInput,
   validateConferenceRegistrationInput,
   validateConferenceSubmissionInput,
+  validateFeedbackInput,
   validateGrievanceInput,
 } from './src/lib/collegeFeaturesLogic';
 import {
@@ -100,8 +104,12 @@ import type {
   ConferenceRegistration,
   ConferenceSubmission,
   CustomHomeComponent,
+  EmailDispatchLogEntry,
+  EmailPushConfig,
   FacilitiesData,
   FacilityItem,
+  FeedbackEntry,
+  FeedbackSectionConfig,
   GrievanceStatus,
   GrievanceTicket,
   HomeComponentPlacement,
@@ -820,6 +828,8 @@ async function startServer() {
         projects: sortByOrder((researchRaw.projects ?? []).filter((p) => p.isPublished)),
         patents: sortByOrder((researchRaw.patents ?? []).filter((p) => p.isPublished)),
       },
+      feedbackSections: sortByOrder((db.feedbackSections ?? DEFAULT_FEEDBACK_SECTIONS).filter((s) => s.isActive)),
+      feedbackSummary: computeFeedbackMetrics(db.feedbackEntries ?? []),
       settings: db.settings,
       seo,
       hitCounter: {
@@ -1748,6 +1758,10 @@ async function startServer() {
       facilities: ensureFacilitiesState(),
       researchPortfolio: ensureResearchPortfolioState(),
       grievances: db.grievances ?? [],
+      feedbackSections: sortByOrder(db.feedbackSections ?? DEFAULT_FEEDBACK_SECTIONS),
+      feedbackEntries: db.feedbackEntries ?? [],
+      emailPushConfig: { ...DEFAULT_EMAIL_PUSH_CONFIG, ...(db.emailPushConfig || {}) },
+      emailDispatchLogs: db.emailDispatchLogs ?? [],
       settings: db.settings,
       seo: canUserAccessResource(currentUser, 'seo') || canUserAccessResource(currentUser, 'settings') ? seo : undefined,
       hitCounter: {
@@ -1961,8 +1975,18 @@ async function startServer() {
   // Pages CRUD (enforces granular per-category & per-page RBAC)
   app.post('/api/admin/pages', requireAdmin('pages'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
-    const { categorySlug, slug, title, subtitle, contentHtml, attachedPdfUrl, attachedPdfLabel, isPublished } =
-      req.body;
+    const {
+      categorySlug,
+      slug,
+      title,
+      subtitle,
+      contentHtml,
+      attachedPdfUrl,
+      attachedPdfLabel,
+      showShareBar,
+      metaDescription,
+      isPublished,
+    } = req.body;
     if (!title || !slug || !categorySlug) {
       res.status(400).json({ error: 'Category, slug, and title are required.' });
       return;
@@ -1980,7 +2004,12 @@ async function startServer() {
         return;
       }
     }
-    const cleanSlug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const cleanSlug = String(slug)
+      .toLowerCase()
+      .replace(/&/g, '-and-')
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
     if (db.pages.some((p) => p.slug === cleanSlug)) {
       res.status(409).json({ error: 'A page with this slug already exists.' });
       return;
@@ -1995,6 +2024,8 @@ async function startServer() {
       contentHtml: String(contentHtml || '<p></p>'),
       attachedPdfUrl: attachedPdfUrl ? String(attachedPdfUrl).trim() : undefined,
       attachedPdfLabel: attachedPdfLabel ? String(attachedPdfLabel).trim() : undefined,
+      showShareBar: showShareBar !== undefined ? Boolean(showShareBar) : true,
+      metaDescription: metaDescription ? String(metaDescription).trim() : undefined,
       isPublished: Boolean(isPublished ?? true),
       sortOrder: db.pages.filter((p) => p.categorySlug === categorySlug).length + 1,
       updatedAt: new Date().toISOString().slice(0, 10),
@@ -2037,7 +2068,18 @@ async function startServer() {
       res.status(403).json({ error: 'RBAC Restriction: You are not authorized to edit this page.' });
       return;
     }
-    const { title, subtitle, contentHtml, categorySlug, isPublished, attachedPdfUrl, attachedPdfLabel, sortOrder } = req.body;
+    const {
+      title,
+      subtitle,
+      contentHtml,
+      categorySlug,
+      isPublished,
+      attachedPdfUrl,
+      attachedPdfLabel,
+      showShareBar,
+      metaDescription,
+      sortOrder,
+    } = req.body;
     if (categorySlug !== undefined && categorySlug !== page.categorySlug && !canUserAccessCategory(actor, String(categorySlug))) {
       res.status(403).json({
         error: `RBAC Restriction: Your account cannot move pages into "${categorySlug}".`,
@@ -2056,6 +2098,8 @@ async function startServer() {
     if (contentHtml !== undefined) page.contentHtml = String(contentHtml);
     if (categorySlug !== undefined) page.categorySlug = categorySlug;
     if (isPublished !== undefined) page.isPublished = Boolean(isPublished);
+    if (showShareBar !== undefined) page.showShareBar = Boolean(showShareBar);
+    if (metaDescription !== undefined) page.metaDescription = String(metaDescription).trim() || undefined;
     if (sortOrder !== undefined) page.sortOrder = Number(sortOrder);
     if (attachedPdfUrl !== undefined) page.attachedPdfUrl = String(attachedPdfUrl).trim() || undefined;
     if (attachedPdfLabel !== undefined) page.attachedPdfLabel = String(attachedPdfLabel).trim() || undefined;
@@ -5080,6 +5124,413 @@ async function startServer() {
     addAudit(actor, 'UPDATE_GRIEVANCE_CONFIG', 'Grievance', 'Updated SGRC & Anti-Ragging Portal Config');
     saveDatabase();
     res.json(db.settings.grievancePortal);
+  });
+
+  // ============================================================================
+  // COMPLAINT & FEEDBACK PORTAL + AUTOMATED SECTION EMAIL PUSH & REPORTS CENTER
+  // ============================================================================
+  function ensureFeedbackAndEmailState() {
+    if (!Array.isArray(db.feedbackSections)) {
+      db.feedbackSections = structuredClone(DEFAULT_FEEDBACK_SECTIONS);
+    }
+    if (!Array.isArray(db.feedbackEntries)) {
+      db.feedbackEntries = [];
+    }
+    if (!db.emailPushConfig) {
+      db.emailPushConfig = structuredClone(DEFAULT_EMAIL_PUSH_CONFIG);
+    }
+    if (!Array.isArray(db.emailDispatchLogs)) {
+      db.emailDispatchLogs = [];
+    }
+    return {
+      feedbackSections: db.feedbackSections,
+      feedbackEntries: db.feedbackEntries,
+      emailPushConfig: db.emailPushConfig,
+      emailDispatchLogs: db.emailDispatchLogs,
+    };
+  }
+
+  async function dispatchPortalEmail(params: {
+    category: EmailDispatchLogEntry['category'];
+    recipientEmails: string;
+    subject: string;
+    bodyText: string;
+    detailPrefix?: string;
+  }): Promise<EmailDispatchLogEntry> {
+    const { emailPushConfig, emailDispatchLogs } = ensureFeedbackAndEmailState();
+    const toList = String(params.recipientEmails || '').trim();
+    let status: EmailDispatchLogEntry['status'] = emailPushConfig.enabled ? 'sent' : 'queued';
+    let detail = params.detailPrefix || `Routed via ${emailPushConfig.transportMode}`;
+
+    if (emailPushConfig.enabled && emailPushConfig.transportMode === 'webhook' && emailPushConfig.webhookRelayUrl) {
+      try {
+        const resp = await fetch(emailPushConfig.webhookRelayUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fromName: emailPushConfig.fromName,
+            fromEmail: emailPushConfig.fromEmail,
+            replyTo: emailPushConfig.replyToEmail,
+            to: toList,
+            subject: params.subject,
+            text: params.bodyText,
+            category: params.category,
+          }),
+        });
+        status = resp.ok ? 'sent' : 'failed';
+        detail = `Webhook HTTP ${resp.status}`;
+      } catch (err) {
+        status = 'failed';
+        detail = `Webhook error: ${(err as Error).message}`;
+      }
+    } else if (!toList) {
+      status = 'failed';
+      detail = 'No recipient email addresses configured.';
+    }
+
+    const nextId = Math.max(0, ...emailDispatchLogs.map((l) => l.id)) + 1;
+    const entry: EmailDispatchLogEntry = {
+      id: nextId,
+      sentAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      category: params.category,
+      recipientEmails: toList,
+      subject: params.subject,
+      transport: emailPushConfig.transportMode,
+      status,
+      detail,
+    };
+    db.emailDispatchLogs = [entry, ...emailDispatchLogs].slice(0, 200);
+    saveDatabase();
+    return entry;
+  }
+
+  app.get('/api/public/feedback/summary', (_req, res) => {
+    const { feedbackEntries } = ensureFeedbackAndEmailState();
+    res.json(computeFeedbackMetrics(feedbackEntries));
+  });
+
+  app.get('/api/public/feedback/status', (req, res) => {
+    const { feedbackEntries } = ensureFeedbackAndEmailState();
+    const code = String(req.query.code || '').trim().toUpperCase();
+    if (!code) {
+      res.status(400).json({ error: 'Please enter a Feedback / Complaint Ticket Code (e.g. CFB-2026-0001).' });
+      return;
+    }
+    const found = feedbackEntries.find((e) => e.ticketCode.toUpperCase() === code);
+    if (!found) {
+      res.status(404).json({ error: `No submission found matching "${code}".` });
+      return;
+    }
+    res.json({
+      ticketCode: found.ticketCode,
+      submissionType: found.submissionType,
+      sectionName: found.sectionName,
+      subsection: found.subsection,
+      rating: found.rating,
+      subject: found.subject,
+      routedToEmails: found.routedToEmails,
+      status: found.status,
+      actionTakenNote: found.actionTakenNote || 'Forwarded to section in-charge for review.',
+      submittedAt: found.submittedAt,
+      updatedAt: found.updatedAt,
+    });
+  });
+
+  app.post('/api/public/feedback/upload-attachment', (req, res) => {
+    const { filename, mimeType, base64Data } = req.body as {
+      filename?: string;
+      mimeType?: string;
+      base64Data?: string;
+    };
+    if (!filename || !mimeType || !base64Data) {
+      res.status(400).json({ error: 'Missing attachment filename, MIME type, or file data.' });
+      return;
+    }
+    const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    const maxBytes = getUploadSizeLimitBytes(db.settings, 'document');
+    const check = validateUploadMeta(filename, mimeType, buffer.length, maxBytes);
+    if (!check.valid || !check.safeFilename) {
+      res.status(400).json({ error: check.reason || 'Attachment rejected.' });
+      return;
+    }
+    const safeName = `feedback-${check.safeFilename}`;
+    fs.writeFileSync(path.join(UPLOAD_DIR, safeName), buffer);
+    res.json({ url: `/uploads/${safeName}`, filename: safeName, sizeBytes: buffer.length });
+  });
+
+  app.post('/api/public/feedback', async (req, res) => {
+    const { feedbackSections, feedbackEntries, emailPushConfig } = ensureFeedbackAndEmailState();
+    const body = req.body as Partial<FeedbackEntry> & { captchaId?: string; captchaAnswer?: string };
+    const captchaCheck = verifyCaptchaChallenge(body.captchaId, body.captchaAnswer);
+    if (!captchaCheck.valid) {
+      res.status(400).json({ error: captchaCheck.reason || 'Invalid CAPTCHA verification.' });
+      return;
+    }
+    const isConf = Boolean(body.isConfidential);
+    const effectiveName = isConf && !(body.senderName || '').trim()
+      ? 'Confidential Stakeholder'
+      : String(body.senderName || '').trim();
+    const validation = validateFeedbackInput({ ...body, senderName: effectiveName });
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.reason });
+      return;
+    }
+    if (body.attachmentUrl && String(body.attachmentUrl).trim()) {
+      const uCheck = validateExternalDocumentUrl(String(body.attachmentUrl));
+      if (!uCheck.valid) {
+        res.status(400).json({ error: uCheck.reason || 'Invalid attachment URL.' });
+        return;
+      }
+    }
+    const sec = feedbackSections.find((s) => s.slug === String(body.sectionSlug).trim() && s.isActive);
+    const sectionName = sec?.sectionName || String(body.sectionName || body.sectionSlug).trim();
+    const routedRecipients = [sec?.recipientEmails, sec?.ccEmails].filter(Boolean).join(', ') || db.settings.email;
+    const nextId = Math.max(0, ...feedbackEntries.map((f) => f.id)) + 1;
+    const ticketCode = generateReferenceCode('CFB', nextId);
+    const today = new Date().toISOString().slice(0, 10);
+
+    let pushStatus = 'Logged (Auto-email disabled)';
+    if (emailPushConfig.enabled && emailPushConfig.pushOnNewFeedback && (!sec || sec.autoEmailEnabled)) {
+      const dispatch = await dispatchPortalEmail({
+        category: 'feedback',
+        recipientEmails: routedRecipients,
+        subject: `[${ticketCode}] ${String(body.submissionType || 'Feedback')} · ${sectionName}: ${String(body.subject).trim()}`,
+        bodyText: `Ticket: ${ticketCode}\nType: ${body.submissionType || 'Feedback'}\nSection: ${sectionName} / ${body.subsection}\nRating: ${body.rating || 5}/5\nFrom: ${isConf ? 'Confidential' : effectiveName} (${body.senderEmail})\n\n${String(body.message).trim()}`,
+        detailPrefix: `Auto-routed to ${sectionName} head`,
+      });
+      pushStatus = dispatch.status === 'sent' ? `Dispatched to ${routedRecipients}` : `Status: ${dispatch.detail}`;
+    }
+
+    const created: FeedbackEntry = {
+      id: nextId,
+      ticketCode,
+      submissionType: String(body.submissionType || 'Feedback').trim(),
+      sectionSlug: sec?.slug || String(body.sectionSlug).trim(),
+      sectionName,
+      subsection: String(body.subsection).trim(),
+      senderName: isConf ? 'Confidential Stakeholder' : effectiveName,
+      senderRole: String(body.senderRole || 'Student').trim(),
+      senderEmail: String(body.senderEmail).trim().toLowerCase(),
+      senderPhone: String(body.senderPhone || '').trim(),
+      departmentOrRollNo: String(body.departmentOrRollNo || '').trim(),
+      rating: Math.max(1, Math.min(5, Number(body.rating || 5))),
+      isConfidential: isConf,
+      subject: String(body.subject).trim(),
+      message: String(body.message).trim(),
+      attachmentUrl: body.attachmentUrl ? String(body.attachmentUrl).trim() : undefined,
+      routedToEmails: routedRecipients,
+      emailPushStatus: pushStatus,
+      status: 'forwarded',
+      submittedAt: today,
+      updatedAt: today,
+    };
+    db.feedbackEntries = [created, ...feedbackEntries];
+    saveDatabase();
+    res.status(201).json({
+      ok: true,
+      ticketCode,
+      routedToEmails: routedRecipients,
+      emailPushStatus: pushStatus,
+      message: `Submission recorded (${ticketCode}) and pushed to ${routedRecipients}.`,
+    });
+  });
+
+  app.post('/api/admin/feedback/sections', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { feedbackSections } = ensureFeedbackAndEmailState();
+    const b = req.body || {};
+    if (!String(b.sectionName || '').trim() || !String(b.recipientEmails || '').trim()) {
+      res.status(400).json({ error: 'Section name and recipient email(s) are required.' });
+      return;
+    }
+    const slug = String(b.slug || b.sectionName)
+      .toLowerCase()
+      .replace(/&/g, '-and-')
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    const nextId = Math.max(0, ...feedbackSections.map((s) => s.id)) + 1;
+    const subs = Array.isArray(b.subsections)
+      ? b.subsections.map((x: string) => String(x).trim()).filter(Boolean)
+      : String(b.subsections || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const created: FeedbackSectionConfig = {
+      id: nextId,
+      slug,
+      sectionName: String(b.sectionName).trim(),
+      subsections: subs.length > 0 ? subs : ['General Feedback & Query'],
+      recipientEmails: String(b.recipientEmails).trim(),
+      ccEmails: String(b.ccEmails || '').trim(),
+      inchargeName: String(b.inchargeName || 'Section Coordinator').trim(),
+      inchargeDesignation: String(b.inchargeDesignation || '').trim(),
+      slaDays: Math.max(1, Number(b.slaDays || 5)),
+      autoEmailEnabled: b.autoEmailEnabled !== false,
+      isActive: b.isActive !== false,
+      sortOrder: feedbackSections.length + 1,
+    };
+    feedbackSections.push(created);
+    addAudit(actor, 'CREATE_FEEDBACK_SECTION', 'FeedbackSection', created.sectionName);
+    saveDatabase();
+    res.status(201).json(created);
+  });
+
+  app.put('/api/admin/feedback/sections/reorder', requireAdmin('grievances'), (req, res) => {
+    const { feedbackSections } = ensureFeedbackAndEmailState();
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (Array.isArray(orderedIds)) {
+      db.feedbackSections = applyReorderIds(feedbackSections, orderedIds);
+      saveDatabase();
+    }
+    res.json({ ok: true, sections: db.feedbackSections });
+  });
+
+  app.put('/api/admin/feedback/sections/:id', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { feedbackSections } = ensureFeedbackAndEmailState();
+    const sec = feedbackSections.find((s) => s.id === Number(req.params.id));
+    if (!sec) {
+      res.status(404).json({ error: 'Feedback section not found.' });
+      return;
+    }
+    const b = req.body || {};
+    if (b.sectionName !== undefined) sec.sectionName = String(b.sectionName).trim();
+    if (b.subsections !== undefined) {
+      sec.subsections = Array.isArray(b.subsections)
+        ? b.subsections.map((x: string) => String(x).trim()).filter(Boolean)
+        : String(b.subsections).split(',').map((x) => x.trim()).filter(Boolean);
+    }
+    if (b.recipientEmails !== undefined) sec.recipientEmails = String(b.recipientEmails).trim();
+    if (b.ccEmails !== undefined) sec.ccEmails = String(b.ccEmails).trim();
+    if (b.inchargeName !== undefined) sec.inchargeName = String(b.inchargeName).trim();
+    if (b.inchargeDesignation !== undefined) sec.inchargeDesignation = String(b.inchargeDesignation).trim();
+    if (b.slaDays !== undefined) sec.slaDays = Math.max(1, Number(b.slaDays));
+    if (b.autoEmailEnabled !== undefined) sec.autoEmailEnabled = Boolean(b.autoEmailEnabled);
+    if (b.isActive !== undefined) sec.isActive = Boolean(b.isActive);
+    addAudit(actor, 'UPDATE_FEEDBACK_SECTION', 'FeedbackSection', sec.sectionName);
+    saveDatabase();
+    res.json(sec);
+  });
+
+  app.delete('/api/admin/feedback/sections/:id', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { feedbackSections } = ensureFeedbackAndEmailState();
+    const idx = feedbackSections.findIndex((s) => s.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Feedback section not found.' });
+      return;
+    }
+    const [removed] = feedbackSections.splice(idx, 1);
+    addAudit(actor, 'DELETE_FEEDBACK_SECTION', 'FeedbackSection', removed.sectionName);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/feedback/entries/:id', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { feedbackEntries } = ensureFeedbackAndEmailState();
+    const entry = feedbackEntries.find((e) => e.id === Number(req.params.id));
+    if (!entry) {
+      res.status(404).json({ error: 'Feedback entry not found.' });
+      return;
+    }
+    const b = req.body || {};
+    if (b.status !== undefined) entry.status = b.status;
+    if (b.actionTakenNote !== undefined) entry.actionTakenNote = String(b.actionTakenNote).trim();
+    entry.updatedAt = new Date().toISOString().slice(0, 10);
+    addAudit(actor, 'UPDATE_FEEDBACK_ENTRY', 'Feedback', entry.ticketCode);
+    saveDatabase();
+    res.json(entry);
+  });
+
+  app.post('/api/admin/feedback/entries/:id/resend', requireAdmin('grievances'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { feedbackEntries } = ensureFeedbackAndEmailState();
+    const entry = feedbackEntries.find((e) => e.id === Number(req.params.id));
+    if (!entry) {
+      res.status(404).json({ error: 'Feedback entry not found.' });
+      return;
+    }
+    const dispatch = await dispatchPortalEmail({
+      category: 'feedback',
+      recipientEmails: entry.routedToEmails,
+      subject: `[REMINDER · ${entry.ticketCode}] ${entry.submissionType} · ${entry.sectionName}: ${entry.subject}`,
+      bodyText: `Escalated by ${actor.fullName}\nFrom: ${entry.senderName} (${entry.senderEmail})\nMessage:\n${entry.message}`,
+      detailPrefix: `Manual escalation push by ${actor.email}`,
+    });
+    entry.emailPushStatus = `Escalated on ${dispatch.sentAt}`;
+    addAudit(actor, 'RESEND_FEEDBACK_EMAIL', 'Feedback', entry.ticketCode);
+    saveDatabase();
+    res.json({ ok: true, entry, dispatch });
+  });
+
+  app.delete('/api/admin/feedback/entries/:id', requireAdmin('grievances'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { feedbackEntries } = ensureFeedbackAndEmailState();
+    const idx = feedbackEntries.findIndex((e) => e.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Feedback entry not found.' });
+      return;
+    }
+    const [removed] = feedbackEntries.splice(idx, 1);
+    addAudit(actor, 'DELETE_FEEDBACK_ENTRY', 'Feedback', removed.ticketCode);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  app.put('/api/admin/email-push/config', requireAdmin('analytics'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { emailPushConfig } = ensureFeedbackAndEmailState();
+    const b = req.body || {};
+    const nextConfig: EmailPushConfig = {
+      ...emailPushConfig,
+      ...b,
+      smtpPort: Math.max(1, Number(b.smtpPort ?? emailPushConfig.smtpPort ?? 587)),
+    };
+    db.emailPushConfig = nextConfig;
+    addAudit(actor, 'UPDATE_EMAIL_PUSH_CONFIG', 'EmailPush', `${nextConfig.transportMode} (${nextConfig.fromEmail})`);
+    saveDatabase();
+    res.json(nextConfig);
+  });
+
+  app.post('/api/admin/email-push/send', requireAdmin('analytics'), async (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const { emailPushConfig, feedbackEntries } = ensureFeedbackAndEmailState();
+    const reportType = String(req.body?.reportType || 'test') as EmailDispatchLogEntry['category'];
+    const customRecipients = String(req.body?.recipients || '').trim();
+    const recipientEmails =
+      customRecipients ||
+      (reportType === 'security_alert' ? emailPushConfig.alertRecipientEmails : emailPushConfig.reportRecipientEmails) ||
+      db.settings.email;
+
+    let subject = 'SVCOER Portal SMTP / Email Push Test Confirmation';
+    let bodyText = `Email notification pipeline test triggered by ${actor.fullName} (${actor.email}).`;
+
+    if (reportType === 'visitor_report') {
+      const logs = db.visitorLogs ?? [];
+      const summary = aggregateVisitorLogs(logs);
+      subject = `SVCOER Visitor & Geo Analytics Report (${summary.totalHits} Logged Events)`;
+      bodyText = `Total Hits: ${db.hitCounter?.totalHits || summary.totalHits}\nUnique IPs: ${summary.uniqueIps}\nTop Countries: ${summary.byCountry.slice(0, 5).map((c) => `${c.name} (${c.hits})`).join(', ')}`;
+      emailPushConfig.lastDigestSentAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    } else if (reportType === 'security_alert') {
+      const alerts = (db.visitorLogs ?? []).filter((l) => l.severity === 'critical' || l.eventType === 'security_block');
+      subject = `SVCOER Security & WAF Alert Digest (${alerts.length} Critical Blocks)`;
+      bodyText = `Blocked IPs: ${(db.blockedIps ?? []).length}\nRecent Threats:\n${alerts.slice(0, 8).map((a) => `${a.timestamp} ${a.ipAddress} [${a.country}] ${a.threatCategory || a.path}`).join('\n')}`;
+    } else if (reportType === 'feedback') {
+      const m = computeFeedbackMetrics(feedbackEntries);
+      subject = `SVCOER Complaint & Feedback Digest (${m.open} Open / ${m.total} Total)`;
+      bodyText = `Total Submissions: ${m.total}\nOpen / Under Review: ${m.open}\nAvg Rating: ${m.avgRating}/5`;
+    }
+
+    const logEntry = await dispatchPortalEmail({
+      category: reportType,
+      recipientEmails,
+      subject,
+      bodyText,
+      detailPrefix: `Manual push by ${actor.email}`,
+    });
+    addAudit(actor, 'PUSH_EMAIL_REPORT', 'EmailPush', `${reportType} -> ${recipientEmails}`);
+    saveDatabase();
+    res.json({ ok: logEntry.status !== 'failed', logEntry, logs: db.emailDispatchLogs });
   });
 
   app.put('/api/admin/placements/stats/reorder', requireAdmin('placements'), (req, res) => {

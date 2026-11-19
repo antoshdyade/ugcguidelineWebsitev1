@@ -54,4 +54,5 @@ require_once __DIR__ . '/includes/header.php';
     </tbody>
   </table>
 </div>
+<?= renderPhpSocialIcons($pdo, 'contact') ?>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

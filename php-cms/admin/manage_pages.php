@@ -61,20 +61,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($err === '') {
-            $slug = trim(preg_replace('/[^a-z0-9-]+/', '-', strtolower(trim($_POST['slug']))), '-');
+            $rawSlug = trim((string)($_POST['slug'] ?? ''));
+            if ($rawSlug === '') {
+                $rawSlug = trim((string)($_POST['title'] ?? ''));
+            }
+            $slug = normalizePhpSlug($rawSlug);
+            if ($slug === '') {
+                $slug = 'page-' . random_int(100, 999);
+            }
             $sortOrder = max(1, (int)($_POST['sort_order'] ?? 1));
+            $metaDesc = trim((string)($_POST['meta_description'] ?? ''));
+            $showShareBar = isset($_POST['show_share_bar']) ? 1 : 0;
+
             if ($action === 'update' && !empty($_POST['page_id'])) {
                 $stmt = $pdo->prepare(
-                    'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, is_published = ?, sort_order = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?'
+                    'UPDATE pages SET category_id = ?, slug = ?, title = ?, subtitle = ?, meta_description = ?, content_html = ?, attached_pdf_url = ?, attached_pdf_label = ?, show_share_bar = ?, is_published = ?, sort_order = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?'
                 );
                 $stmt->execute([
                     $targetCatId,
                     $slug,
                     trim($_POST['title']),
                     trim($_POST['subtitle'] ?? ''),
+                    $metaDesc,
                     $_POST['content_html'] ?? '<p></p>',
                     $pdfUrl !== '' ? $pdfUrl : null,
                     $pdfLabel !== '' ? $pdfLabel : null,
+                    $showShareBar,
                     isset($_POST['is_published']) ? 1 : 0,
                     $sortOrder,
                     $user['full_name'],
@@ -84,16 +96,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'Disclosure page updated successfully.';
             } else {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO pages (category_id, slug, title, subtitle, content_html, attached_pdf_url, attached_pdf_label, is_published, sort_order, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())'
+                    'INSERT INTO pages (category_id, slug, title, subtitle, meta_description, content_html, attached_pdf_url, attached_pdf_label, show_share_bar, is_published, sort_order, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())'
                 );
                 $stmt->execute([
                     $targetCatId,
                     $slug,
                     trim($_POST['title']),
                     trim($_POST['subtitle'] ?? ''),
+                    $metaDesc,
                     $_POST['content_html'] ?? '<p></p>',
                     $pdfUrl !== '' ? $pdfUrl : null,
                     $pdfLabel !== '' ? $pdfLabel : null,
+                    $showShareBar,
                     isset($_POST['is_published']) ? 1 : 0,
                     $sortOrder,
                     $user['full_name'],
@@ -101,6 +115,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 logAudit($pdo, $user, 'CREATE_PAGE', 'Page', $_POST['title']);
                 $msg = 'Disclosure page created successfully.';
             }
+        }
+    } elseif ($action === 'toggle_publish' && !empty($_POST['page_id'])) {
+        $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
+        $chk->execute([(int)$_POST['page_id']]);
+        $existing = $chk->fetch();
+        if (!$existing || !canAccessPage($user, $existing, $existing['cat_slug'])) {
+            $err = 'Access Denied: Cannot change visibility of a page outside your RBAC scope.';
+        } else {
+            $nextState = !empty($existing['is_published']) ? 0 : 1;
+            $pdo->prepare('UPDATE pages SET is_published = ?, updated_by = ?, updated_at = CURDATE() WHERE id = ?')
+                ->execute([$nextState, $user['full_name'], (int)$existing['id']]);
+            logAudit($pdo, $user, $nextState ? 'SHOW_PAGE' : 'HIDE_PAGE', 'Page', $existing['title']);
+            $msg = 'Micro-page "' . $existing['title'] . '" is now ' . ($nextState ? 'Visible (Published).' : 'Hidden (Draft).');
         }
     } elseif ($action === 'delete') {
         $chk = $pdo->prepare('SELECT p.*, c.slug AS cat_slug FROM pages p JOIN categories c ON p.category_id = c.id WHERE p.id = ? LIMIT 1');
@@ -208,6 +235,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
     </div>
     <input type="text" name="title" required value="<?= e($editingPage['title'] ?? '') ?>" placeholder="Page Title" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
     <input type="text" name="subtitle" value="<?= e($editingPage['subtitle'] ?? '') ?>" placeholder="Subtitle / UGC Reference" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
+    <input type="text" name="meta_description" value="<?= e((string)($editingPage['meta_description'] ?? '')) ?>" placeholder="OpenGraph & SEO Meta Description (used when sharing on WhatsApp / LinkedIn / Google)" style="width:100%;padding:0.5rem;margin-bottom:0.75rem;">
 
     <label style="display:block;font-weight:600;margin-bottom:0.35rem;">Page Content (Visual Word-Style Editor &amp; Optional HTML Source Toggle):</label>
     <textarea class="rich-editor" data-csrf="<?= e(csrfToken()) ?>" data-upload-url="<?= e(baseUrl('admin/upload_handler.php')) ?>" name="content_html" rows="10"><?= htmlspecialchars($editingPage['content_html'] ?? '<h2>Disclosure Overview</h2><p>Enter institutional disclosure details...</p>', ENT_QUOTES, 'UTF-8') ?></textarea>
@@ -222,9 +250,10 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       </label>
     </div>
 
-    <label style="display:block;margin:0.75rem 0;">
-      <input type="checkbox" name="is_published" <?= (!$editingPage || !empty($editingPage['is_published'])) ? 'checked' : '' ?>> Publish Immediately
-    </label>
+    <div style="display:flex;flex-wrap:wrap;gap:1.25rem;margin:0.75rem 0;font-size:0.88rem;font-weight:600;">
+      <label><input type="checkbox" name="is_published" <?= (!$editingPage || !empty($editingPage['is_published'])) ? 'checked' : '' ?>> Visible / Published on Website</label>
+      <label><input type="checkbox" name="show_share_bar" <?= (!$editingPage || !isset($editingPage['show_share_bar']) || !empty($editingPage['show_share_bar'])) ? 'checked' : '' ?>> Enable Social Sharing Bar on this Micro-Page</label>
+    </div>
     <button type="submit" class="btn-primary"><?= $editingPage ? 'Update Disclosure Page' : 'Save &amp; Publish Page' ?></button>
     <?php if ($editingPage): ?>
       <a href="manage_pages.php" class="btn-secondary" style="margin-left:0.5rem;">Cancel Edit</a>
@@ -238,7 +267,7 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
 
   <div class="card">
     <table class="data-table">
-      <thead><tr><th>Order</th><th>Title</th><th>Category</th><th>Slug</th><th>Updated</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Order</th><th>Title</th><th>Category</th><th>Slug</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
         <?php foreach ($pages as $pg): ?>
           <tr>
@@ -254,10 +283,22 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
             </td>
             <td><?= e($pg['title']) ?></td>
             <td><?= e($pg['cat_name']) ?></td>
-            <td><?= e($pg['slug']) ?></td>
+            <td><code><?= e($pg['slug']) ?></code></td>
+            <td>
+              <span class="badge <?= !empty($pg['is_published']) ? 'badge-ok' : 'badge-warn' ?>">
+                <?= !empty($pg['is_published']) ? 'Visible' : 'Hidden' ?>
+              </span>
+            </td>
             <td><?= e($pg['updated_at']) ?></td>
             <td style="white-space:nowrap;">
+              <a href="<?= e(baseUrl('page.php?slug=' . urlencode($pg['slug']))) ?>" target="_blank" class="btn-outline btn-sm" style="padding:0.35rem 0.55rem;font-size:0.78rem;">View</a>
               <a href="?edit=<?= (int)$pg['id'] ?>" class="btn-primary" style="padding:0.35rem 0.65rem;font-size:0.8rem;">Edit</a>
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                <input type="hidden" name="action" value="toggle_publish">
+                <input type="hidden" name="page_id" value="<?= (int)$pg['id'] ?>">
+                <button type="submit" class="btn-secondary" style="padding:0.35rem 0.65rem;font-size:0.8rem;"><?= !empty($pg['is_published']) ? 'Hide' : 'Show' ?></button>
+              </form>
               <form method="post" style="display:inline;" onsubmit="return confirm('Delete this page?');">
                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                 <input type="hidden" name="action" value="delete">

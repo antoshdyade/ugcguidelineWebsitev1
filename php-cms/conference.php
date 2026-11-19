@@ -136,6 +136,13 @@ $posterItems = json_decode((string)($conf['poster_items_json'] ?? '[]'), true) ?
 $hasPosterTrack = !isset($conf['enable_poster_presentation']) || !empty($conf['enable_poster_presentation']) || !empty($posterItems);
 
 $pageTitle = $conf['short_name'] . ' — ' . $conf['title'];
+$pageDesc  = trim((string)($conf['theme'] ?: extractPlainTextExcerpt((string)($conf['overview_html'] ?? ''), 160)));
+$seoContext = [
+    'description'   => $pageDesc,
+    'ogImage'       => (string)($conf['banner_url'] ?: 'assets/images/hero_campus.jpg'),
+    'ogType'        => 'article',
+    'canonicalPath' => 'conference.php?slug=' . rawurlencode((string)$conf['slug']),
+];
 require_once __DIR__ . '/includes/header.php';
 ?>
 
@@ -490,5 +497,7 @@ require_once __DIR__ . '/includes/header.php';
     <button type="submit" class="btn-secondary" style="width:100%;">Complete Delegate Registration</button>
   </form>
 </section>
+
+<?= renderPhpSocialShareBar($pdo, $conf['short_name'] . ' — ' . $conf['title'], (string)$pageDesc, baseUrl('conference.php?slug=' . urlencode((string)$conf['slug'])), 'conference', true) ?>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -694,7 +694,7 @@ export function PlacementsPortal({ placements, settings }: PlacementsPortalProps
       </section>
 
       <SocialShareBar
-        title={`${settings.shortCode} Training & Placement Portal — ${metrics.placementRate}% Track`}
+        title={`${settings.shortCode} Training & Placement Portal — ${metrics.overallRate}% Track`}
         summary={placements.summaryNote}
         settings={settings}
         location="portal"

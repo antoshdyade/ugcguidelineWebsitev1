@@ -72,7 +72,7 @@ export function SocialPlatformSvg({ platform, className = 'w-4 h-4' }: { platfor
 
 interface SocialIconLinksProps {
   settings: SiteSettings;
-  variant: 'header' | 'footer';
+  variant: 'header' | 'footer' | 'contact';
 }
 
 export function SocialIconLinks({ settings, variant }: SocialIconLinksProps) {
@@ -98,6 +98,33 @@ export function SocialIconLinks({ settings, variant }: SocialIconLinksProps) {
             <SocialPlatformSvg platform={item.platform} className="w-3.5 h-3.5" />
           </a>
         ))}
+      </div>
+    );
+  }
+
+  if (variant === 'contact') {
+    return (
+      <div className="pt-4 mt-4 border-t border-stone-200 dark:border-slate-800">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-slate-400 mb-2.5">
+          Official Social Media Channels
+        </p>
+        <div className="flex flex-wrap items-center gap-2" aria-label="Official institutional social media profiles">
+          {links.map((item) => (
+            <a
+              key={item.id}
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={item.handle ? `${item.label} (${item.handle})` : item.label}
+              aria-label={item.label}
+              className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 text-stone-800 dark:text-slate-100 hover:border-amber-500 text-xs font-semibold transition-colors"
+            >
+              <SocialPlatformSvg platform={item.platform} className="w-4 h-4 shrink-0 text-amber-700 dark:text-amber-400" />
+              <span>{item.label}</span>
+              {item.handle && <span className="text-[11px] font-normal text-stone-500 dark:text-slate-400">{item.handle}</span>}
+            </a>
+          ))}
+        </div>
       </div>
     );
   }

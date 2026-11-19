@@ -92,6 +92,15 @@ function defaultSeoSettings(): array
                 'ogImageUrl'  => 'assets/images/campus_facilities.jpg',
                 'noIndex'     => false,
             ],
+            [
+                'id'          => 6,
+                'path'        => 'feedback.php',
+                'title'       => 'Stakeholder Complaint & Feedback Cell | SVCOER Pandharpur',
+                'description' => 'Submit official complaints, service requests, suggestions, or appreciations routed directly to respective Deans, CoE, Hostel, and Administrative sections.',
+                'keywords'    => 'SVCOER Feedback Portal, Student Complaint Tracking, Academic Feedback Pandharpur',
+                'ogImageUrl'  => 'assets/images/hero_campus.jpg',
+                'noIndex'     => false,
+            ],
         ],
     ];
 }
@@ -897,11 +906,13 @@ function resolvePhpCanonicalBase(array $seo): string
     return rtrim($scheme . '://' . $host . $base, '/');
 }
 
-function resolvePhpRouteSeo(array $seo, array $siteSettings, string $pageTitle, ?string $pageDesc = null): array
+function resolvePhpRouteSeo(array $seo, array $siteSettings, string $pageTitle, ?string $pageDesc = null, array $extraSeo = []): array
 {
     $script = basename((string)($_SERVER['PHP_SELF'] ?? 'index.php'));
     $query = (string)($_SERVER['QUERY_STRING'] ?? '');
-    $relPath = $script . ($query !== '' ? '?' . $query : '');
+    $relPath = !empty($extraSeo['canonicalPath'])
+        ? ltrim((string)$extraSeo['canonicalPath'], '/')
+        : ($script . ($query !== '' ? '?' . $query : ''));
 
     $matched = null;
     foreach (($seo['routeOverrides'] ?? []) as $ov) {
@@ -924,19 +935,27 @@ function resolvePhpRouteSeo(array $seo, array $siteSettings, string $pageTitle, 
 
     $desc = ($matched && !empty($matched['description']))
         ? (string)$matched['description']
-        : (trim((string)$pageDesc) !== '' ? trim((string)$pageDesc) : (string)($seo['defaultDescription'] ?? ''));
+        : (trim((string)($extraSeo['description'] ?? $pageDesc ?? '')) !== ''
+            ? trim((string)($extraSeo['description'] ?? $pageDesc))
+            : (string)($seo['defaultDescription'] ?? ''));
 
     $keywords = ($matched && !empty($matched['keywords']))
         ? (string)$matched['keywords']
-        : (string)($seo['defaultKeywords'] ?? '');
+        : (!empty($extraSeo['keywords']) ? (string)$extraSeo['keywords'] : (string)($seo['defaultKeywords'] ?? ''));
 
-    $ogImage = ($matched && !empty($matched['ogImageUrl']))
-        ? (string)$matched['ogImageUrl']
-        : (string)($seo['ogImageUrl'] ?? 'assets/images/hero_campus.jpg');
+    $ogImage = !empty($extraSeo['ogImage'])
+        ? (string)$extraSeo['ogImage']
+        : (($matched && !empty($matched['ogImageUrl']))
+            ? (string)$matched['ogImageUrl']
+            : (string)($seo['ogImageUrl'] ?? 'assets/images/hero_campus.jpg'));
 
-    $robots = ($matched && !empty($matched['noIndex']))
-        ? 'noindex, nofollow'
-        : ((string)($seo['robotsPolicy'] ?? 'index, follow'));
+    $ogType = !empty($extraSeo['ogType']) ? (string)$extraSeo['ogType'] : 'website';
+
+    $robots = !empty($extraSeo['robots'])
+        ? (string)$extraSeo['robots']
+        : (($matched && !empty($matched['noIndex']))
+            ? 'noindex, nofollow'
+            : ((string)($seo['robotsPolicy'] ?? 'index, follow')));
 
     $canonicalBase = resolvePhpCanonicalBase($seo);
     $canonicalUrl = $canonicalBase . '/' . ltrim($relPath, '/');
@@ -974,6 +993,7 @@ function resolvePhpRouteSeo(array $seo, array $siteSettings, string $pageTitle, 
         'robots'       => $robots,
         'canonicalUrl' => $canonicalUrl,
         'ogImageUrl'   => $ogImageAbs,
+        'ogType'       => $ogType,
         'twitterHandle'=> (string)($seo['twitterHandle'] ?? ''),
         'googleVerify' => (string)($seo['googleSiteVerification'] ?? ''),
         'bingVerify'   => (string)($seo['bingSiteVerification'] ?? ''),
@@ -1009,6 +1029,7 @@ function buildPhpSitemapXml(PDO $pdo, string $baseUrl): string
         ['loc' => $base . '/quick-links.php', 'priority' => '0.8', 'changefreq' => 'weekly'],
         ['loc' => $base . '/gallery.php', 'priority' => '0.7', 'changefreq' => 'monthly'],
         ['loc' => $base . '/grievance.php', 'priority' => '0.7', 'changefreq' => 'monthly'],
+        ['loc' => $base . '/feedback.php', 'priority' => '0.8', 'changefreq' => 'weekly'],
         ['loc' => $base . '/contact.php', 'priority' => '0.7', 'changefreq' => 'monthly'],
     ];
 
