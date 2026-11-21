@@ -590,7 +590,7 @@ export function FeedbackPortal({ sections, summary, settings }: FeedbackPortalPr
       </div>
 
       <SocialShareBar
-        title="SVCOER Complaint & Feedback Portal"
+        title={`${settings.shortCode || settings.institutionName || 'Institutional'} Complaint & Feedback Portal`}
         summary="Submit campus complaints, suggestions, or service feedback directly to section heads."
         settings={settings}
         location="portal"

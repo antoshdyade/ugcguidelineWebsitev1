@@ -142,13 +142,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        $prevShort = trim((string)($s['short_code'] ?? 'SVCOER'));
+        $prevName  = trim((string)($s['institution_name'] ?? ''));
+        $newShort  = trim((string)($_POST['short_code'] ?? ''));
+        $newName   = trim((string)($_POST['institution_name'] ?? ''));
+
         $stmt = $pdo->prepare(
             'UPDATE site_settings SET trust_name = ?, institution_name = ?, short_code = ?, logo_url = ?, affiliation = ?, aicte_code = ?, dte_code = ?, address = ?, phone = ?, email = ?, emergency_helpline = ?, anti_ragging_helpline = ?, primary_color = ?, secondary_color = ?, about_summary = ?, about_image_url = ?, vision_text = ?, mission_text = ?, recruiters = ?, home_sections_json = ?, highlights_json = ?, approved_bodies_json = ? WHERE id = 1'
         );
         $stmt->execute([
             trim($_POST['trust_name']),
-            trim($_POST['institution_name']),
-            trim($_POST['short_code']),
+            $newName,
+            $newShort,
             $logoUrl,
             trim($_POST['affiliation']),
             trim($_POST['aicte_code']),
@@ -186,10 +191,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([json_encode(['max_photo_mb' => $maxPhotoMb, 'max_doc_mb' => $maxDocMb, 'auto_crop_enabled' => $autoCrop])]);
             $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('design_settings', ?)")
                 ->execute([json_encode($designPayload, JSON_UNESCAPED_UNICODE)]);
+
+            if (($newShort !== '' && $newShort !== $prevShort) || ($newName !== '' && $newName !== $prevName)) {
+                $targetShort = $newShort !== '' ? $newShort : $prevShort;
+                $targetName  = $newName !== '' ? $newName : $prevName;
+                if (function_exists('getEmailPushConfig') && function_exists('saveEmailPushConfig')) {
+                    $epCurr = getEmailPushConfig($pdo);
+                    $fn = trim((string)($epCurr['fromName'] ?? ''));
+                    if ($fn === '' || $fn === ($prevShort . ' Portal') || str_contains($fn, 'SVCOER') || ($prevShort !== '' && str_starts_with($fn, $prevShort))) {
+                        saveEmailPushConfig($pdo, ['fromName' => $targetShort . ' Portal'], true);
+                    }
+                }
+                if (function_exists('getSeoSettings') && function_exists('saveSeoSettings')) {
+                    $seoCurr = getSeoSettings($pdo);
+                    $replaceBrandStr = static function (string $val) use ($prevShort, $targetShort, $prevName, $targetName): string {
+                        $out = $val;
+                        if ($prevName !== '' && $targetName !== '') {
+                            $out = str_replace($prevName, $targetName, $out);
+                        }
+                        if ($prevShort !== '' && $targetShort !== '') {
+                            $out = (string)preg_replace('/\b' . preg_quote($prevShort, '/') . '\b/', $targetShort, $out);
+                        }
+                        return $out;
+                    };
+                    if (!empty($seoCurr['siteTitleSuffix'])) {
+                        $seoCurr['siteTitleSuffix'] = $replaceBrandStr((string)$seoCurr['siteTitleSuffix']);
+                    }
+                    if (!empty($seoCurr['defaultDescription'])) {
+                        $seoCurr['defaultDescription'] = $replaceBrandStr((string)$seoCurr['defaultDescription']);
+                    }
+                    if (!empty($seoCurr['routeOverrides']) && is_array($seoCurr['routeOverrides'])) {
+                        foreach ($seoCurr['routeOverrides'] as &$ov) {
+                            if (!empty($ov['title'])) $ov['title'] = $replaceBrandStr((string)$ov['title']);
+                            if (!empty($ov['description'])) $ov['description'] = $replaceBrandStr((string)$ov['description']);
+                        }
+                        unset($ov);
+                    }
+                    saveSeoSettings($pdo, $seoCurr);
+                }
+            }
         } catch (Throwable $ignoredKv) {}
 
-        logAudit($pdo, $user, 'UPDATE_SETTINGS', 'Settings', $_POST['institution_name']);
-        $msg = 'Site settings, design presets, upload limits & homepage layout saved.';
+        logAudit($pdo, $user, 'UPDATE_SETTINGS', 'Settings', $newName);
+        $msg = 'Site settings, design presets, SEO/email branding, upload limits & homepage layout saved.';
         $s = getSiteSettings($pdo);
     }
     }
@@ -538,11 +582,11 @@ function addApprovedBodyRow() {
             <input type="text" name="share_heading" value="<?= e((string)($socialShareCfg['shareHeading'] ?? 'Share this update')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
           </label>
           <label style="font-size:0.8rem;font-weight:600;">X / Twitter @Handle
-            <input type="text" name="twitter_handle" value="<?= e((string)($socialShareCfg['twitterHandle'] ?? 'svcoer_edu')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+            <input type="text" name="twitter_handle" value="<?= e((string)($socialShareCfg['twitterHandle'] ?? 'campus_official')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
           </label>
         </div>
         <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.75rem;">Default Hashtags (comma-separated)
-          <input type="text" name="default_hashtags" value="<?= e((string)($socialShareCfg['defaultHashtags'] ?? 'SVCOER,SVERI,Engineering')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          <input type="text" name="default_hashtags" value="<?= e((string)($socialShareCfg['defaultHashtags'] ?? (trim((string)($s['short_code'] ?? 'Campus')) . ',Engineering,NEP2020'))) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
         </label>
 
         <button type="submit" class="btn-primary">Save Social Sharing Settings</button>
@@ -570,13 +614,13 @@ function addApprovedBodyRow() {
             <input type="url" id="sc-url" value="<?= e($canonBase . '/index.php') ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
           </label>
           <label style="font-size:0.8rem;font-weight:600;">Announcement Headline
-            <input type="text" id="sc-headline" value="<?= e((string)($s['institution_name'] ?? 'SVCOER Pandharpur')) ?> — Institutional Update" style="width:100%;padding:0.45rem;margin-top:3px;">
+            <input type="text" id="sc-headline" value="<?= e((string)($s['institution_name'] ?? $s['short_code'] ?? 'Institution')) ?> — Institutional Update" style="width:100%;padding:0.45rem;margin-top:3px;">
           </label>
           <label style="font-size:0.8rem;font-weight:600;">Summary / Caption
             <textarea id="sc-summary" rows="3" style="width:100%;padding:0.45rem;margin-top:3px;" placeholder="Key highlights, dates, or accreditation achievement..."></textarea>
           </label>
           <label style="font-size:0.8rem;font-weight:600;">Hashtags
-            <input type="text" id="sc-tags" value="<?= e((string)($socialShareCfg['defaultHashtags'] ?? 'SVCOER,SVERI')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+            <input type="text" id="sc-tags" value="<?= e((string)($socialShareCfg['defaultHashtags'] ?? (trim((string)($s['short_code'] ?? 'Campus')) . ',Engineering'))) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
           </label>
           <div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-top:0.25rem;" id="sc-actions">
             <a id="sc-btn-wa" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-sm">Post to WhatsApp</a>

@@ -33,10 +33,41 @@ if (!function_exists('defaultEmailPushConfig')) {
     }
 }
 
+if (!function_exists('cms_resolve_brand_tokens')) {
+    function cms_resolve_brand_tokens(?PDO $pdo = null): array
+    {
+        $short = 'SVCOER';
+        $name  = "SVERI's College of Engineering, Pandharpur (Autonomous)";
+        if ($pdo instanceof PDO && function_exists('getSiteSettings')) {
+            try {
+                $ss = getSiteSettings($pdo);
+                $sc = trim((string)($ss['short_code'] ?? ''));
+                $in = trim((string)($ss['institution_name'] ?? ''));
+                if ($sc !== '') {
+                    $short = $sc;
+                } elseif ($in !== '') {
+                    $short = $in;
+                }
+                if ($in !== '') {
+                    $name = $in;
+                }
+            } catch (Throwable $ignored) {
+            }
+        }
+        return [
+            'short' => $short,
+            'name'  => $name,
+            'upper' => strtoupper($short),
+        ];
+    }
+}
+
 if (!function_exists('getEmailPushConfig')) {
     function getEmailPushConfig(PDO $pdo): array
     {
         $def = defaultEmailPushConfig();
+        $brand = cms_resolve_brand_tokens($pdo);
+        $def['fromName'] = $brand['short'] . ' Portal';
         try {
             $stmt = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'email_push_config' LIMIT 1");
             $stmt->execute();
@@ -45,6 +76,9 @@ if (!function_exists('getEmailPushConfig')) {
                 $decoded = json_decode($raw, true);
                 if (is_array($decoded)) {
                     $merged = array_merge($def, $decoded);
+                    if (trim((string)($merged['fromName'] ?? '')) === '' || ($brand['short'] !== 'SVCOER' && in_array(trim((string)$merged['fromName']), ['SVCOER Portal', 'SVCOER Pandharpur (Autonomous) Portal'], true))) {
+                        $merged['fromName'] = $brand['short'] . ' Portal';
+                    }
                     $merged['enabled'] = !empty($merged['enabled']);
                     $merged['smtpPort'] = max(1, min(65535, (int)($merged['smtpPort'] ?? 587)));
                     if (!in_array($merged['transportMode'] ?? '', ['php_mail', 'smtp', 'webhook'], true)) {
@@ -229,7 +263,7 @@ if (!function_exists('cms_smtp_send')) {
         if (filter_var($fromEmail, FILTER_VALIDATE_EMAIL) === false) {
             $fromEmail = 'noreply@coe.sveri.ac.in';
         }
-        $fromName = cms_sanitize_header_value((string)($config['fromName'] ?? 'SVCOER Portal'));
+        $fromName = cms_sanitize_header_value((string)($config['fromName'] ?? 'Institutional Portal')) ?: 'Institutional Portal';
         $replyTo  = cms_sanitize_header_value((string)($config['replyToEmail'] ?? $fromEmail));
         if (filter_var($replyTo, FILTER_VALIDATE_EMAIL) === false) {
             $replyTo = $fromEmail;
@@ -313,7 +347,7 @@ if (!function_exists('cms_send_raw_email')) {
         if (filter_var($fromEmail, FILTER_VALIDATE_EMAIL) === false) {
             $fromEmail = 'noreply@coe.sveri.ac.in';
         }
-        $fromName = cms_sanitize_header_value((string)($config['fromName'] ?? 'SVCOER Portal'));
+        $fromName = cms_sanitize_header_value((string)($config['fromName'] ?? 'Institutional Portal')) ?: 'Institutional Portal';
         $replyTo  = cms_sanitize_header_value((string)($config['replyToEmail'] ?? $fromEmail));
         if (filter_var($replyTo, FILTER_VALIDATE_EMAIL) === false) {
             $replyTo = $fromEmail;
@@ -378,12 +412,13 @@ if (!function_exists('cms_send_raw_email')) {
         }
 
         // Default: php_mail() (Ubuntu Postfix / Sendmail via Webmin)
+        $mailerTag = trim((string)preg_replace('/[^A-Za-z0-9-]+/', '-', $fromName), '-') ?: 'CMS-Portal';
         $headers = [
             'From: "' . addslashes($fromName) . "\" <{$fromEmail}>",
             'Reply-To: ' . $replyTo,
             'MIME-Version: 1.0',
             'Content-Type: text/plain; charset=UTF-8',
-            'X-Mailer: SVCOER-CMS-PHP/' . PHP_VERSION,
+            'X-Mailer: ' . $mailerTag . '-PHP/' . PHP_VERSION,
         ];
         if (!empty($ccList)) {
             $headers[] = 'Cc: ' . implode(', ', $ccList);
@@ -430,6 +465,7 @@ if (!function_exists('cms_send_visitor_logs_report')) {
     function cms_send_visitor_logs_report(PDO $pdo, string $trigger = 'manual', ?array $overrideConfig = null): array
     {
         $config = $overrideConfig ?: getEmailPushConfig($pdo);
+        $brand  = cms_resolve_brand_tokens($pdo);
         $hits = function_exists('getHitCounterStats') ? getHitCounterStats($pdo) : ['totalHits' => 0, 'todayHits' => 0, 'uniqueVisitors' => 0];
         $logs = function_exists('queryFilteredVisitorLogs') ? queryFilteredVisitorLogs($pdo, ['dateRange' => 'all'], 350) : [];
         $agg  = function_exists('aggregatePhpVisitorLogs') ? aggregatePhpVisitorLogs($logs) : [
@@ -437,7 +473,8 @@ if (!function_exists('cms_send_visitor_logs_report')) {
         ];
 
         $lines = [
-            'SVCOER PANDHARPUR — VISITOR TRAFFIC & LOG ANALYZER REPORT',
+            $brand['upper'] . ' — VISITOR TRAFFIC & LOG ANALYZER REPORT',
+            'Institution: ' . $brand['name'],
             'Trigger: ' . strtoupper($trigger) . ' | Generated (UTC): ' . gmdate('Y-m-d H:i:s'),
             str_repeat('=', 66),
             sprintf('Cumulative Site Hits: %s | Today: %s | Unique Visitors: %s', number_format((int)$hits['totalHits']), number_format((int)$hits['todayHits']), number_format((int)$hits['uniqueVisitors'])),
@@ -459,9 +496,9 @@ if (!function_exists('cms_send_visitor_logs_report')) {
             $lines[] = sprintf('  - %s : %d visits', $p, $cnt);
         }
         $lines[] = '';
-        $lines[] = 'Managed via SVCOER Admin Console -> Log Analyzer & Email Push Center.';
+        $lines[] = 'Managed via ' . $brand['short'] . ' Admin Console -> Log Analyzer & Email Push Center.';
 
-        $subject = '[SVCOER Analytics] Website Traffic & GeoIP Log Report (' . gmdate('Y-m-d') . ')';
+        $subject = '[' . $brand['short'] . ' Analytics] Website Traffic & GeoIP Log Report (' . gmdate('Y-m-d') . ')';
         $to = trim((string)($config['reportRecipientEmails'] ?? ''));
         $res = cms_dispatch_and_log_email($pdo, 'visitor_logs_report', $to, $subject, implode("\n", $lines), 'Trigger: ' . $trigger, '', $config);
 
@@ -474,6 +511,7 @@ if (!function_exists('cms_send_security_alert_report')) {
     function cms_send_security_alert_report(PDO $pdo, string $trigger = 'manual', ?array $overrideConfig = null): array
     {
         $config = $overrideConfig ?: getEmailPushConfig($pdo);
+        $brand  = cms_resolve_brand_tokens($pdo);
         $logs = function_exists('queryFilteredVisitorLogs') ? queryFilteredVisitorLogs($pdo, ['dateRange' => 'all'], 350) : [];
         $threats = array_values(array_filter($logs, static function ($r): bool {
             return in_array((string)($r['event_type'] ?? ''), ['waf_block', 'rate_limit', 'failed_login'], true)
@@ -486,7 +524,8 @@ if (!function_exists('cms_send_security_alert_report')) {
         }
 
         $lines = [
-            'SVCOER PANDHARPUR — WAF & SECURITY AUDIT DIGEST',
+            $brand['upper'] . ' — WAF & SECURITY AUDIT DIGEST',
+            'Institution: ' . $brand['name'],
             'Trigger: ' . strtoupper($trigger) . ' | Generated (UTC): ' . gmdate('Y-m-d H:i:s'),
             str_repeat('=', 66),
             'Flagged Security Events (recent window): ' . count($threats),
@@ -516,7 +555,7 @@ if (!function_exists('cms_send_security_alert_report')) {
             $lines[] = sprintf('  - %s : %s (at %s)', $b['ip'], $b['reason'], $b['blocked_at']);
         }
 
-        $subject = '[SVCOER Security Shield] WAF & Intrusion Digest (' . count($threats) . ' events)';
+        $subject = '[' . $brand['short'] . ' Security Shield] WAF & Intrusion Digest (' . count($threats) . ' events)';
         $to = trim((string)($config['alertRecipientEmails'] ?? ''));
         return cms_dispatch_and_log_email($pdo, 'security_alert', $to, $subject, implode("\n", $lines), 'Trigger: ' . $trigger, '', $config);
     }
@@ -526,6 +565,7 @@ if (!function_exists('cms_send_feedback_digest_report')) {
     function cms_send_feedback_digest_report(PDO $pdo, ?array $overrideConfig = null): array
     {
         $config = $overrideConfig ?: getEmailPushConfig($pdo);
+        $brand  = cms_resolve_brand_tokens($pdo);
         $entries = [];
         try {
             $entries = $pdo->query('SELECT tracking_code, section_name, subsection, submission_type, rating, status, subject, submitted_at FROM feedback_entries ORDER BY id DESC LIMIT 40')->fetchAll() ?: [];
@@ -533,7 +573,8 @@ if (!function_exists('cms_send_feedback_digest_report')) {
         }
 
         $lines = [
-            'SVCOER PANDHARPUR — STAKEHOLDER COMPLAINT & FEEDBACK DIGEST',
+            $brand['upper'] . ' — STAKEHOLDER COMPLAINT & FEEDBACK DIGEST',
+            'Institution: ' . $brand['name'],
             'Generated (UTC): ' . gmdate('Y-m-d H:i:s'),
             str_repeat('=', 66),
             'Recent Submissions Count: ' . count($entries),
@@ -557,7 +598,7 @@ if (!function_exists('cms_send_feedback_digest_report')) {
             }
         }
 
-        $subject = '[SVCOER Feedback Cell] Stakeholder Feedback & Complaint Summary (' . gmdate('Y-m-d') . ')';
+        $subject = '[' . $brand['short'] . ' Feedback Cell] Stakeholder Feedback & Complaint Summary (' . gmdate('Y-m-d') . ')';
         $to = trim((string)($config['reportRecipientEmails'] ?? ''));
         return cms_dispatch_and_log_email($pdo, 'feedback_digest', $to, $subject, implode("\n", $lines), 'Feedback Digest', '', $config);
     }

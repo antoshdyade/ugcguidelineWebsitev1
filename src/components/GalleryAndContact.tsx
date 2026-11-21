@@ -210,7 +210,7 @@ export function ContactView({
 
         <div className="lg:col-span-7 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden min-h-[280px]">
           <iframe
-            title="SVCOER Campus Location Map"
+            title={`${settings.shortCode || settings.institutionName || 'Campus'} Location Map`}
             src={`https://maps.google.com/maps?q=${encodeURIComponent(settings.mapEmbedQuery)}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
             className="w-full h-full min-h-[280px] border-0"
             loading="lazy"

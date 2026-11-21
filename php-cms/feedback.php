@@ -76,7 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $dispatchStatus = 'queued';
                         $dispatchDetail = 'No section recipient emails configured; logged in Admin Inbox.';
                     } else {
-                        $mailBody = "SVCOER STAKEHOLDER COMPLAINT & FEEDBACK DESK\n"
+                        $fbBrand = strtoupper(trim((string)($settings['short_code'] ?? '')) ?: trim((string)($settings['institution_name'] ?? '')) ?: 'INSTITUTIONAL');
+                        $mailBody = "{$fbBrand} STAKEHOLDER COMPLAINT & FEEDBACK DESK\n"
                             . str_repeat('=', 60) . "\n"
                             . "Tracking Code : {$ticketCode}\n"
                             . "Section       : {$sectionName}\n"

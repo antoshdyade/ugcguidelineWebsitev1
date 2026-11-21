@@ -7,6 +7,7 @@ import {
   ArrowUp,
   Building2,
   Check,
+  CheckSquare,
   Edit3,
   FilePlus2,
   FileText,
@@ -45,6 +46,7 @@ import {
   validateUploadMeta,
 } from '../lib/cmsLogic';
 import {
+  buildRevisionDiffRows,
   buildSocialShareUrls,
   DEFAULT_PORTAL_MENU_ITEMS,
   DEFAULT_SOCIAL_MEDIA_LINKS,
@@ -112,6 +114,7 @@ import type {
   HomeComponentPlacement,
   LeadershipProfile,
   MenuPlacementLocation,
+  PendingContentRevision,
   PlacementsData,
   ResearchPortfolioData,
   SecurityConfig,
@@ -124,6 +127,12 @@ import type {
   UgcCategorySlug,
   UserRole,
 } from '../types/cms';
+
+type AdminMutateResult<T = Record<string, unknown>> = T & {
+  queuedForApproval?: boolean;
+  message?: string;
+  item?: T;
+};
 
 interface AdminStatePayload {
   categories: CmsCategory[];
@@ -154,12 +163,14 @@ interface AdminStatePayload {
   hitCounter?: HitCounterStats;
   securityConfig?: SecurityConfig;
   blockedIpCount?: number;
+  pendingContentRevisions?: PendingContentRevision[];
   users: CmsUser[];
   auditLogs: AuditLogEntry[];
 }
 
 type AdminTab =
   | 'overview'
+  | 'approvals'
   | 'categories'
   | 'pages'
   | 'departments'
@@ -374,9 +385,17 @@ export function AdminDashboard({
   const [broadcastSourceKey, setBroadcastSourceKey] = useState<string>('custom');
   const [broadcastTitle, setBroadcastTitle] = useState('');
   const [broadcastSummary, setBroadcastSummary] = useState('');
-  const [broadcastUrl, setBroadcastUrl] = useState('https://coe.sveri.ac.in/');
-  const [broadcastTags, setBroadcastTags] = useState('SVCOER,SVERI,Engineering,NEP2020');
+  const [broadcastUrl, setBroadcastUrl] = useState(() =>
+    typeof window !== 'undefined' ? `${window.location.origin}/` : '/',
+  );
+  const [broadcastTags, setBroadcastTags] = useState('Engineering,NEP2020');
+  const [broadcastTagsTouched, setBroadcastTagsTouched] = useState(false);
   const [broadcastCopied, setBroadcastCopied] = useState(false);
+
+  // Super Admin Content Approvals state
+  const [approvalFilter, setApprovalFilter] = useState<'pending_approval' | 'approved' | 'rejected' | 'all'>('pending_approval');
+  const [approvalNotes, setApprovalNotes] = useState<Record<number, string>>({});
+  const [expandedRevId, setExpandedRevId] = useState<number | null>(null);
 
   // Homepage Custom HTML Components state
   const [editingHomeCompId, setEditingHomeCompId] = useState<number | null>(null);
@@ -400,6 +419,7 @@ export function AdminDashboard({
   const [newDeptHod, setNewDeptHod] = useState('');
   const [newDeptOverview, setNewDeptOverview] = useState('');
   const [newDeptHero, setNewDeptHero] = useState('/src/assets/images/hero_robotics_lab_1794512596365.jpg');
+  const [newDeptShareable, setNewDeptShareable] = useState(true);
 
   const [deptDraft, setDeptDraft] = useState<Partial<Department>>({});
   const [deptPanelMode, setDeptPanelMode] = useState<'micropages' | 'faculty' | 'labs' | 'library_fields' | 'profile'>('micropages');
@@ -412,6 +432,7 @@ export function AdminDashboard({
   const [subPageType, setSubPageType] = useState<DepartmentSubPageType>('general');
   const [subHtml, setSubHtml] = useState('<h2>Department Update</h2><p>Enter department micro-page details here.</p>');
   const [subPublished, setSubPublished] = useState(true);
+  const [subShareable, setSubShareable] = useState(true);
   const [subPhotos, setSubPhotos] = useState<DepartmentSubPagePhoto[]>([]);
   const [newSubPhotoUrl, setNewSubPhotoUrl] = useState('');
   const [newSubPhotoCaption, setNewSubPhotoCaption] = useState('');
@@ -469,6 +490,7 @@ export function AdminDashboard({
   const [eventCat, setEventCat] = useState<string>('Notice');
   const [eventSummary, setEventSummary] = useState('');
   const [eventImage, setEventImage] = useState('');
+  const [eventShareable, setEventShareable] = useState(true);
 
   // Leadership state
   const [editingLeadId, setEditingLeadId] = useState<number | null>(null);
@@ -764,6 +786,34 @@ export function AdminDashboard({
   const maxDocumentMb = getUploadSizeLimitMb(activeSettings, 'document');
   const autoCropEnabled = activeSettings?.autoCropImages !== false;
 
+  useEffect(() => {
+    const brand = (activeSettings?.shortCode || activeSettings?.institutionName || '').trim();
+    if (brand) {
+      document.title = `${brand} — Staff & Admin Console`;
+      if (!broadcastTagsTouched) {
+        setBroadcastTags(`${brand.replace(/\s+/g, '')},Engineering,NEP2020`);
+      }
+    }
+  }, [activeSettings?.shortCode, activeSettings?.institutionName, broadcastTagsTouched]);
+
+  const renderModerationBadge = (status?: string) => {
+    if (status === 'pending_approval') {
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-bold uppercase tracking-wide">
+          Pending Super Admin Approval
+        </span>
+      );
+    }
+    if (status === 'rejected') {
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 text-[10px] font-bold uppercase tracking-wide">
+          Rejected
+        </span>
+      );
+    }
+    return null;
+  };
+
   const uploadBinaryFile = async (file: File): Promise<string> => {
     const isImg = isImageFileMeta(file.name, file.type);
     const maxBytes = getUploadSizeLimitBytes(activeSettings, isImg ? 'photo' : 'document');
@@ -938,8 +988,18 @@ export function AdminDashboard({
   const canUsers = canUserAccessResource(user, 'users');
   const canSettings = canUserAccessResource(user, 'settings');
 
+  const pendingApprovalCount = (state?.pendingContentRevisions || []).filter(
+    (r) => r.status === 'pending_approval',
+  ).length;
+
   const navItems: { id: AdminTab; label: string; icon: React.ReactNode; allowed: boolean }[] = [
     { id: 'overview', label: 'Overview & UGC Audit', icon: <Shield className="w-4 h-4" />, allowed: true },
+    {
+      id: 'approvals',
+      label: `Pending Approvals (${pendingApprovalCount})`,
+      icon: <CheckSquare className="w-4 h-4" />,
+      allowed: user.role === 'super_admin',
+    },
     { id: 'categories', label: 'Categories & Menus', icon: <LayoutGrid className="w-4 h-4" />, allowed: canCategories },
     { id: 'pages', label: 'Pages & Portal Content', icon: <Layers className="w-4 h-4" />, allowed: canPages },
     { id: 'departments', label: 'Departments & Micro-Pages', icon: <Building2 className="w-4 h-4" />, allowed: canDepts },
@@ -1072,6 +1132,12 @@ export function AdminDashboard({
           )}
         </div>
 
+        {user.role !== 'super_admin' && (
+          <div className="mb-5 px-4 py-2.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200">
+            <strong>Super Admin Approval Workflow Active:</strong> Any record you create, edit, or delete will be queued for Super Admin review before appearing or changing on the public website.
+          </div>
+        )}
+
         {/* Loading / Error Resilience */}
         {!state && (
           <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
@@ -1109,6 +1175,21 @@ export function AdminDashboard({
         {/* 1. OVERVIEW TAB */}
         {activeTab === 'overview' && state && (
           <div className="space-y-6">
+            {user.role === 'super_admin' && pendingApprovalCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200">
+                <span>
+                  <strong>{pendingApprovalCount}</strong> content submission{pendingApprovalCount === 1 ? '' : 's'} from department/editor accounts awaiting your review &amp; approval.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('approvals')}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white"
+                  style={{ backgroundColor: 'var(--primary-color)' }}
+                >
+                  Review Pending Approvals
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
               {[
                 { label: 'Published UGC Pages', val: state.pages.filter((p) => p.isPublished).length, tab: 'pages' as AdminTab },
@@ -1158,6 +1239,214 @@ export function AdminDashboard({
             </div>
           </div>
         )}
+
+        {/* 1A. SUPER ADMIN CONTENT APPROVAL QUEUE */}
+        {activeTab === 'approvals' && user.role === 'super_admin' && state && (() => {
+          const allRevs = state.pendingContentRevisions || [];
+          const counts = {
+            pending_approval: allRevs.filter((r) => r.status === 'pending_approval').length,
+            approved: allRevs.filter((r) => r.status === 'approved').length,
+            rejected: allRevs.filter((r) => r.status === 'rejected').length,
+            all: allRevs.length,
+          };
+          const filteredRevs = allRevs.filter((r) => (approvalFilter === 'all' ? true : r.status === approvalFilter));
+          return (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-stone-900 dark:text-white">
+                    Super Admin Content Moderation &amp; Approval Queue
+                  </h2>
+                  <p className="text-xs text-stone-500 dark:text-slate-400">
+                    Review new creations, live edits, and deletion requests queued by department admins and editors before publishing changes live.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ['pending_approval', `Pending (${counts.pending_approval})`],
+                      ['approved', `Approved (${counts.approved})`],
+                      ['rejected', `Rejected (${counts.rejected})`],
+                      ['all', `All (${counts.all})`],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setApprovalFilter(key)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                        approvalFilter === key
+                          ? 'text-white'
+                          : 'bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300'
+                      }`}
+                      style={approvalFilter === key ? { backgroundColor: 'var(--primary-color)' } : undefined}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {filteredRevs.length === 0 ? (
+                <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center text-sm text-stone-500">
+                  No submissions in &ldquo;{approvalFilter.replace('_', ' ')}&rdquo;.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredRevs.map((rev) => {
+                    const diffRows = buildRevisionDiffRows(rev);
+                    const changedRows = diffRows.filter((d) => d.changed);
+                    const isExpanded = expandedRevId === rev.id || rev.status === 'pending_approval';
+                    const actionBadgeClass =
+                      rev.actionType === 'create'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : rev.actionType === 'delete'
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+                    const statusBadgeClass =
+                      rev.status === 'approved'
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : rev.status === 'rejected'
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                          : 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300';
+
+                    return (
+                      <div
+                        key={rev.id}
+                        className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${actionBadgeClass}`}>
+                                {rev.actionType}
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-stone-100 dark:bg-slate-800 text-[11px] font-mono text-stone-700 dark:text-slate-300">
+                                {rev.entityTable}
+                                {rev.entityId ? ` #${rev.entityId}` : ''}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${statusBadgeClass}`}>
+                                {rev.status.replace('_', ' ')}
+                              </span>
+                            </div>
+                            <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                              {rev.entityTitle}
+                            </h3>
+                            <p className="text-xs text-stone-500 dark:text-slate-400">
+                              Submitted by <strong>{rev.submittedByName}</strong> ({rev.submittedByEmail} ·{' '}
+                              {rev.submittedByRole.replace(/_/g, ' ')}) on {new Date(rev.submittedAt).toLocaleString()}
+                            </p>
+                            {(rev.reviewedBy || rev.reviewerEmail) && (
+                              <p className="text-xs text-stone-500 dark:text-slate-400">
+                                Reviewed by {rev.reviewedBy || rev.reviewerEmail}
+                                {rev.reviewedAt ? ` on ${new Date(rev.reviewedAt).toLocaleString()}` : ''}
+                                {rev.reviewNote || rev.reviewerNote ? ` — "${rev.reviewNote || rev.reviewerNote}"` : ''}
+                              </p>
+                            )}
+                          </div>
+                          {rev.status !== 'pending_approval' && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedRevId(expandedRevId === rev.id ? null : rev.id)}
+                              className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs font-medium"
+                            >
+                              {isExpanded ? 'Hide Diff' : `Show Diff (${changedRows.length})`}
+                            </button>
+                          )}
+                        </div>
+
+                        {isExpanded && diffRows.length > 0 && (
+                          <div className="overflow-x-auto rounded-lg border border-stone-200 dark:border-slate-800">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-stone-50 dark:bg-slate-800/70 text-stone-600 dark:text-slate-300">
+                                <tr>
+                                  <th className="px-3 py-2 font-semibold">Field</th>
+                                  <th className="px-3 py-2 font-semibold">Current Live Value</th>
+                                  <th className="px-3 py-2 font-semibold">Proposed Change</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-stone-100 dark:divide-slate-800">
+                                {(changedRows.length > 0 ? changedRows : diffRows).map((row) => (
+                                  <tr key={row.field} className={row.changed ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}>
+                                    <td className="px-3 py-2 font-mono font-semibold text-stone-700 dark:text-slate-300 align-top whitespace-nowrap">
+                                      {row.field}
+                                    </td>
+                                    <td className="px-3 py-2 text-stone-600 dark:text-slate-400 align-top break-words max-w-xs">
+                                      {row.before}
+                                    </td>
+                                    <td className="px-3 py-2 text-stone-900 dark:text-slate-100 align-top break-words max-w-xs font-medium">
+                                      {row.after}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {rev.status === 'pending_approval' && (
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 pt-2 border-t border-stone-100 dark:border-slate-800">
+                            <input
+                              type="text"
+                              value={approvalNotes[rev.id] || ''}
+                              onChange={(e) => setApprovalNotes({ ...approvalNotes, [rev.id]: e.target.value })}
+                              placeholder="Optional reviewer note / reason..."
+                              className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                            />
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await adminFetch(`/api/admin/pending-approvals/${rev.id}/approve`, 'POST', {
+                                      reviewNote: approvalNotes[rev.id] || '',
+                                    });
+                                    setApprovalNotes((prev) => {
+                                      const next = { ...prev };
+                                      delete next[rev.id];
+                                      return next;
+                                    });
+                                    notify('ok', `Approved & published "${rev.entityTitle}".`);
+                                  } catch (err) {
+                                    notify('err', (err as Error).message);
+                                  }
+                                }}
+                                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800"
+                              >
+                                Approve &amp; Publish
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await adminFetch(`/api/admin/pending-approvals/${rev.id}/reject`, 'POST', {
+                                      reviewNote: approvalNotes[rev.id] || '',
+                                    });
+                                    setApprovalNotes((prev) => {
+                                      const next = { ...prev };
+                                      delete next[rev.id];
+                                      return next;
+                                    });
+                                    notify('ok', `Rejected "${rev.entityTitle}". Live site remains unchanged.`);
+                                  } catch (err) {
+                                    notify('err', (err as Error).message);
+                                  }
+                                }}
+                                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-700 hover:bg-rose-800"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* 1B. CATEGORIES, NAVIGATION MENUS & HEADER/FOOTER BUILDER */}
         {activeTab === 'categories' && canCategories && state && (
@@ -2084,26 +2373,36 @@ export function AdminDashboard({
                     }
                   }
                   if (editingPageId) {
-                    await adminFetch(`/api/admin/pages/${editingPageId}`, 'PUT', {
-                      categorySlug: pageCat,
-                      title: pageTitle,
-                      subtitle: pageSubtitle,
-                      metaDescription: pageMetaDescription || undefined,
-                      sortOrder: pageSortOrder,
-                      contentHtml: pageHtml,
-                      attachedPdfUrl: pagePdfUrl || undefined,
-                      attachedPdfLabel: pagePdfLabel || undefined,
-                      isPublished: pagePublished,
-                      showShareBar: pageShowShareBar,
-                    });
-                    notify('ok', `Updated page "${pageTitle}".`);
+                    const res = await adminFetch<AdminMutateResult<CmsPage>>(
+                      `/api/admin/pages/${editingPageId}`,
+                      'PUT',
+                      {
+                        categorySlug: pageCat,
+                        title: pageTitle,
+                        subtitle: pageSubtitle,
+                        metaDescription: pageMetaDescription || undefined,
+                        sortOrder: pageSortOrder,
+                        contentHtml: pageHtml,
+                        attachedPdfUrl: pagePdfUrl || undefined,
+                        attachedPdfLabel: pagePdfLabel || undefined,
+                        isPublished: pagePublished,
+                        showShareBar: pageShowShareBar,
+                        isShareable: pageShowShareBar,
+                      },
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res?.message
+                        ? res.message
+                        : `Updated page "${pageTitle}".`,
+                    );
                   } else {
                     const autoSlug = pageTitle
                       .toLowerCase()
                       .replace(/&/g, '-and-')
                       .replace(/[^a-z0-9]+/g, '-')
                       .replace(/^-|-$/g, '');
-                    await adminFetch('/api/admin/pages', 'POST', {
+                    const res = await adminFetch<AdminMutateResult<CmsPage>>('/api/admin/pages', 'POST', {
                       categorySlug: activeCreateCategory,
                       slug: pageSlug || autoSlug,
                       title: pageTitle,
@@ -2114,8 +2413,14 @@ export function AdminDashboard({
                       attachedPdfLabel: pagePdfLabel || undefined,
                       isPublished: pagePublished,
                       showShareBar: pageShowShareBar,
+                      isShareable: pageShowShareBar,
                     });
-                    notify('ok', `Published new page "${pageTitle}".`);
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res?.message
+                        ? res.message
+                        : `Published new page "${pageTitle}".`,
+                    );
                   }
                   setEditingPageId(null);
                   setPageTitle('');
@@ -2384,9 +2689,12 @@ export function AdminDashboard({
                   return visiblePages.map((pg, idx) => (
                     <div key={pg.id} className="p-3.5 flex items-center justify-between gap-3 text-sm">
                       <div className="min-w-0">
-                        <p className="font-semibold text-stone-900 dark:text-white truncate">{pg.title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="font-semibold text-stone-900 dark:text-white truncate">{pg.title}</p>
+                          {renderModerationBadge(pg.status)}
+                        </div>
                         <p className="text-xs text-stone-500 dark:text-slate-400">
-                          {pg.categorySlug} · #{pg.sortOrder} · /{pg.slug} · {pg.isPublished ? 'Published' : 'Draft'}
+                          {pg.categorySlug} · #{pg.sortOrder} · /{pg.slug} · {pg.isPublished ? 'Published' : 'Draft'} · {(pg.isShareable ?? pg.showShareBar) !== false ? 'Share On' : 'Share Off'}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -2414,8 +2722,17 @@ export function AdminDashboard({
                           type="button"
                           onClick={async () => {
                             try {
-                              await adminFetch(`/api/admin/pages/${pg.id}`, 'PUT', { isPublished: !pg.isPublished });
-                              notify('ok', pg.isPublished ? `Hidden micro-page "${pg.title}" from public menus.` : `Published micro-page "${pg.title}".`);
+                              const res = await adminFetch<AdminMutateResult>(`/api/admin/pages/${pg.id}`, 'PUT', {
+                                isPublished: !pg.isPublished,
+                              });
+                              notify(
+                                'ok',
+                                res?.queuedForApproval && res?.message
+                                  ? res.message
+                                  : pg.isPublished
+                                    ? `Hidden micro-page "${pg.title}" from public menus.`
+                                    : `Published micro-page "${pg.title}".`,
+                              );
                             } catch (err) {
                               notify('err', (err as Error).message);
                             }
@@ -2443,7 +2760,7 @@ export function AdminDashboard({
                             setPagePdfLabel(pg.attachedPdfLabel || '');
                             setPagePdfMode(pg.attachedPdfUrl && /^https?:\/\//i.test(pg.attachedPdfUrl) ? 'external' : 'upload');
                             setPagePublished(pg.isPublished !== false);
-                            setPageShowShareBar(pg.showShareBar !== false);
+                            setPageShowShareBar((pg.isShareable ?? pg.showShareBar) !== false);
                           }}
                           className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
                         >
@@ -2454,8 +2771,13 @@ export function AdminDashboard({
                           aria-label={`Delete ${pg.title}`}
                           onClick={async () => {
                             try {
-                              await adminFetch(`/api/admin/pages/${pg.id}`, 'DELETE');
-                              notify('ok', `Deleted page "${pg.title}".`);
+                              const res = await adminFetch<AdminMutateResult>(`/api/admin/pages/${pg.id}`, 'DELETE');
+                              notify(
+                                'ok',
+                                res?.queuedForApproval && res?.message
+                                  ? res.message
+                                  : `Deleted page "${pg.title}".`,
+                              );
                             } catch (err) {
                               notify('err', (err as Error).message);
                             }
@@ -2494,6 +2816,7 @@ export function AdminDashboard({
                     style={currentDept?.id === d.id ? { backgroundColor: 'var(--primary-color)' } : undefined}
                   >
                     {d.name} ({d.code})
+                    {d.status === 'pending_approval' ? ' · Pending' : d.status === 'rejected' ? ' · Rejected' : ''}
                   </button>
                 ))}
               </div>
@@ -2516,7 +2839,7 @@ export function AdminDashboard({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   try {
-                    const created = (await adminFetch('/api/admin/departments', 'POST', {
+                    const res = await adminFetch<AdminMutateResult<Department>>('/api/admin/departments', 'POST', {
                       name: newDeptName,
                       shortName: newDeptShort || newDeptCode,
                       code: newDeptCode,
@@ -2527,16 +2850,24 @@ export function AdminDashboard({
                       hodName: newDeptHod,
                       overview: newDeptOverview,
                       heroImageUrl: newDeptHero,
-                    })) as Department;
+                      isShareable: newDeptShareable,
+                    });
+                    const created = (res?.item ?? res) as Department;
                     setNewDeptName('');
                     setNewDeptShort('');
                     setNewDeptCode('');
                     setNewDeptSlug('');
                     setNewDeptHod('');
                     setNewDeptOverview('');
+                    setNewDeptShareable(true);
                     setShowAddDept(false);
-                    setSelectedDeptId(created.id);
-                    notify('ok', `Added new department microsite "${created.name}".`);
+                    if (created?.id) setSelectedDeptId(created.id);
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res?.message
+                        ? res.message
+                        : `Added new department microsite "${created?.name || newDeptName}".`,
+                    );
                   } catch (err) {
                     notify('err', (err as Error).message);
                   }
@@ -2628,13 +2959,23 @@ export function AdminDashboard({
                   maxPhotoMb={maxPhotoMb}
                   autoCropEnabled={autoCropEnabled}
                 />
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                  style={{ backgroundColor: 'var(--primary-color)' }}
-                >
-                  Create Department Microsite
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <label className="inline-flex items-center gap-2 text-xs font-medium">
+                    <input
+                      type="checkbox"
+                      checked={newDeptShareable}
+                      onChange={(e) => setNewDeptShareable(e.target.checked)}
+                    />
+                    <span>Allow Social Media Sharing on this Department Microsite</span>
+                  </label>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                    style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    Create Department Microsite
+                  </button>
+                </div>
               </form>
             )}
 
@@ -2675,8 +3016,13 @@ export function AdminDashboard({
                       type="button"
                       onClick={async () => {
                         try {
-                          await adminFetch(`/api/admin/departments/${currentDept.id}`, 'DELETE');
-                          notify('ok', `Deleted department "${currentDept.name}".`);
+                          const res = await adminFetch<AdminMutateResult>(`/api/admin/departments/${currentDept.id}`, 'DELETE');
+                          notify(
+                            'ok',
+                            res?.queuedForApproval && res?.message
+                              ? res.message
+                              : `Deleted department "${currentDept.name}".`,
+                          );
                         } catch (err) {
                           notify('err', (err as Error).message);
                         }
@@ -2696,7 +3042,7 @@ export function AdminDashboard({
                         e.preventDefault();
                         try {
                           if (editingSubId) {
-                            await adminFetch(
+                            const res = await adminFetch<AdminMutateResult>(
                               `/api/admin/departments/${currentDept.id}/subpages/${editingSubId}`,
                               'PUT',
                               {
@@ -2706,25 +3052,42 @@ export function AdminDashboard({
                                 photos: subPhotos,
                                 items: subItems,
                                 isPublished: subPublished,
+                                isShareable: subShareable,
                               },
                             );
-                            notify('ok', `Updated micro-page "${subTitle}".`);
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res?.message
+                                ? res.message
+                                : `Updated micro-page "${subTitle}".`,
+                            );
                           } else {
-                            await adminFetch(`/api/admin/departments/${currentDept.id}/subpages`, 'POST', {
-                              title: subTitle,
-                              slug: subSlug || subTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-                              pageType: subPageType,
-                              contentHtml: subHtml,
-                              photos: subPhotos,
-                              items: subItems,
-                              isPublished: subPublished,
-                            });
-                            notify('ok', `Added micro-page "${subTitle}".`);
+                            const res = await adminFetch<AdminMutateResult>(
+                              `/api/admin/departments/${currentDept.id}/subpages`,
+                              'POST',
+                              {
+                                title: subTitle,
+                                slug: subSlug || subTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                                pageType: subPageType,
+                                contentHtml: subHtml,
+                                photos: subPhotos,
+                                items: subItems,
+                                isPublished: subPublished,
+                                isShareable: subShareable,
+                              },
+                            );
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res?.message
+                                ? res.message
+                                : `Added micro-page "${subTitle}".`,
+                            );
                           }
                           setEditingSubId(null);
                           setSubTitle('');
                           setSubSlug('');
                           setSubPageType('general');
+                          setSubShareable(true);
                           setSubPhotos([]);
                           setSubItems([]);
                         } catch (err) {
@@ -2747,6 +3110,7 @@ export function AdminDashboard({
                               setSubTitle('');
                               setSubSlug('');
                               setSubPageType('general');
+                              setSubShareable(true);
                               setSubPhotos([]);
                               setSubItems([]);
                             }}
@@ -3042,15 +3406,25 @@ export function AdminDashboard({
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <label className="inline-flex items-center gap-2 text-xs font-medium">
-                          <input
-                            type="checkbox"
-                            checked={subPublished}
-                            onChange={(e) => setSubPublished(e.target.checked)}
-                          />
-                          <span>Published on Microsite Sidebar</span>
-                        </label>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="inline-flex items-center gap-2 text-xs font-medium">
+                            <input
+                              type="checkbox"
+                              checked={subPublished}
+                              onChange={(e) => setSubPublished(e.target.checked)}
+                            />
+                            <span>Published on Microsite Sidebar</span>
+                          </label>
+                          <label className="inline-flex items-center gap-2 text-xs font-medium">
+                            <input
+                              type="checkbox"
+                              checked={subShareable}
+                              onChange={(e) => setSubShareable(e.target.checked)}
+                            />
+                            <span>Allow Social Media Sharing</span>
+                          </label>
+                        </div>
                         <button
                           type="submit"
                           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white"
@@ -3068,9 +3442,12 @@ export function AdminDashboard({
                         {sortByOrder(currentDept.subPages).map((sp: DepartmentSubPage, idx: number, arr: DepartmentSubPage[]) => (
                           <li key={sp.id} className="py-3 flex items-center justify-between gap-2 text-sm">
                             <div className="min-w-0">
-                              <p className="font-semibold truncate">{sp.title}</p>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="font-semibold truncate">{sp.title}</p>
+                                {renderModerationBadge(sp.status)}
+                              </div>
                               <p className="text-xs text-stone-500">
-                                #{sp.sortOrder ?? idx + 1} · {sp.pageType || 'general'} · /{sp.slug} · {sp.photos?.length || 0} photos · {sp.items?.length || 0} items · {sp.isPublished ? 'Live' : 'Draft'}
+                                #{sp.sortOrder ?? idx + 1} · {sp.pageType || 'general'} · /{sp.slug} · {sp.photos?.length || 0} photos · {sp.items?.length || 0} items · {sp.isPublished ? 'Live' : 'Draft'} · {sp.isShareable !== false ? 'Share On' : 'Share Off'}
                               </p>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
@@ -3121,6 +3498,7 @@ export function AdminDashboard({
                                   setSubPhotos(sp.photos || []);
                                   setSubItems(sp.items || []);
                                   setSubPublished(sp.isPublished !== false);
+                                  setSubShareable(sp.isShareable !== false);
                                 }}
                                 className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 text-xs hover:bg-stone-100 dark:hover:bg-slate-800"
                               >
@@ -3131,8 +3509,16 @@ export function AdminDashboard({
                                 aria-label={`Delete sub-page ${sp.title}`}
                                 onClick={async () => {
                                   try {
-                                    await adminFetch(`/api/admin/departments/${currentDept.id}/subpages/${sp.id}`, 'DELETE');
-                                    notify('ok', `Removed micro-page "${sp.title}".`);
+                                    const res = await adminFetch<AdminMutateResult>(
+                                      `/api/admin/departments/${currentDept.id}/subpages/${sp.id}`,
+                                      'DELETE',
+                                    );
+                                    notify(
+                                      'ok',
+                                      res?.queuedForApproval && res?.message
+                                        ? res.message
+                                        : `Removed micro-page "${sp.title}".`,
+                                    );
                                   } catch (err) {
                                     notify('err', (err as Error).message);
                                   }
@@ -3890,7 +4276,7 @@ export function AdminDashboard({
                     onSubmit={async (e) => {
                       e.preventDefault();
                       try {
-                        await adminFetch(`/api/admin/departments/${currentDept.id}`, 'PUT', {
+                        const res = await adminFetch<AdminMutateResult>(`/api/admin/departments/${currentDept.id}`, 'PUT', {
                           name: deptDraft.name ?? currentDept.name,
                           shortName: deptDraft.shortName ?? currentDept.shortName,
                           code: deptDraft.code ?? currentDept.code,
@@ -3903,15 +4289,24 @@ export function AdminDashboard({
                           vision: deptDraft.vision ?? currentDept.vision,
                           mission: deptDraft.mission ?? currentDept.mission,
                           heroImageUrl: deptDraft.heroImageUrl ?? currentDept.heroImageUrl,
+                          isShareable: (deptDraft.isShareable ?? currentDept.isShareable) !== false,
                         });
-                        notify('ok', 'Updated department profile & banner image.');
+                        notify(
+                          'ok',
+                          res?.queuedForApproval && res?.message
+                            ? res.message
+                            : 'Updated department profile & banner image.',
+                        );
                       } catch (err) {
                         notify('err', (err as Error).message);
                       }
                     }}
                     className="rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4"
                   >
-                    <h2 className="text-base font-bold">Edit {currentDept.name} Microsite Profile</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-bold">Edit {currentDept.name} Microsite Profile</h2>
+                      {renderModerationBadge(currentDept.status)}
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <input
                         type="text"
@@ -3983,13 +4378,23 @@ export function AdminDashboard({
                       maxPhotoMb={maxPhotoMb}
                       autoCropEnabled={autoCropEnabled}
                     />
-                    <button
-                      type="submit"
-                      className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                      style={{ backgroundColor: 'var(--primary-color)' }}
-                    >
-                      Save Department Profile
-                    </button>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <label className="inline-flex items-center gap-2 text-xs font-medium">
+                        <input
+                          type="checkbox"
+                          checked={(deptDraft.isShareable ?? currentDept.isShareable) !== false}
+                          onChange={(e) => setDeptDraft({ ...deptDraft, isShareable: e.target.checked })}
+                        />
+                        <span>Allow Social Media Sharing on Department Microsite</span>
+                      </label>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                        style={{ backgroundColor: 'var(--primary-color)' }}
+                      >
+                        Save Department Profile
+                      </button>
+                    </div>
                   </form>
                 )}
               </div>
@@ -4042,21 +4447,31 @@ export function AdminDashboard({
                   e.preventDefault();
                   try {
                     if (editingHomeCompId) {
-                      await adminFetch(`/api/admin/home-components/${editingHomeCompId}`, 'PUT', {
+                      const res = await adminFetch<AdminMutateResult>(`/api/admin/home-components/${editingHomeCompId}`, 'PUT', {
                         title: homeCompTitle,
                         placement: homeCompPlacement,
                         contentHtml: homeCompHtml,
                         isActive: homeCompActive,
                       });
-                      notify('ok', `Updated Homepage HTML Component "${homeCompTitle}".`);
+                      notify(
+                        'ok',
+                        res?.queuedForApproval && res?.message
+                          ? res.message
+                          : `Updated Homepage HTML Component "${homeCompTitle}".`,
+                      );
                     } else {
-                      await adminFetch('/api/admin/home-components', 'POST', {
+                      const res = await adminFetch<AdminMutateResult>('/api/admin/home-components', 'POST', {
                         title: homeCompTitle,
                         placement: homeCompPlacement,
                         contentHtml: homeCompHtml,
                         isActive: homeCompActive,
                       });
-                      notify('ok', `Published Homepage HTML Component "${homeCompTitle}".`);
+                      notify(
+                        'ok',
+                        res?.queuedForApproval && res?.message
+                          ? res.message
+                          : `Published Homepage HTML Component "${homeCompTitle}".`,
+                      );
                     }
                     setEditingHomeCompId(null);
                     setHomeCompTitle('');
@@ -4166,7 +4581,10 @@ export function AdminDashboard({
                       return (
                         <li key={comp.id} className="py-3 flex items-center justify-between gap-2 text-xs">
                           <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">{comp.title}</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="font-semibold text-sm truncate">{comp.title}</p>
+                              {renderModerationBadge(comp.status)}
+                            </div>
                             <p className="text-stone-500">
                               Slot: {comp.placement} · Order #{comp.sortOrder} · {comp.isActive ? 'Active' : 'Hidden'}
                             </p>
@@ -4193,9 +4611,18 @@ export function AdminDashboard({
                             <button
                               type="button"
                               onClick={() =>
-                                adminFetch(`/api/admin/home-components/${comp.id}`, 'PUT', {
+                                adminFetch<AdminMutateResult>(`/api/admin/home-components/${comp.id}`, 'PUT', {
                                   isActive: !comp.isActive,
-                                }).then(() => notify('ok', comp.isActive ? 'Component hidden.' : 'Component enabled.'))
+                                }).then((res) =>
+                                  notify(
+                                    'ok',
+                                    res?.queuedForApproval && res?.message
+                                      ? res.message
+                                      : comp.isActive
+                                        ? 'Component hidden.'
+                                        : 'Component enabled.',
+                                  ),
+                                )
                               }
                               className="px-2 py-1 rounded border border-stone-300 dark:border-slate-700"
                             >
@@ -4218,8 +4645,13 @@ export function AdminDashboard({
                               type="button"
                               aria-label={`Delete ${comp.title}`}
                               onClick={() =>
-                                adminFetch(`/api/admin/home-components/${comp.id}`, 'DELETE').then(() =>
-                                  notify('ok', `Deleted component "${comp.title}".`),
+                                adminFetch<AdminMutateResult>(`/api/admin/home-components/${comp.id}`, 'DELETE').then((res) =>
+                                  notify(
+                                    'ok',
+                                    res?.queuedForApproval && res?.message
+                                      ? res.message
+                                      : `Deleted component "${comp.title}".`,
+                                  ),
                                 )
                               }
                               className="p-1 text-rose-600 hover:bg-rose-50 rounded"
@@ -4497,7 +4929,10 @@ export function AdminDashboard({
                     <div className="flex items-center gap-2 min-w-0">
                       <img src={s.imageUrl} alt={s.title} className="w-10 h-8 rounded object-cover shrink-0" />
                       <div className="min-w-0">
-                        <p className="font-semibold truncate">{s.title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="font-semibold truncate">{s.title}</p>
+                          {renderModerationBadge(s.status)}
+                        </div>
                         <p className="text-stone-500 truncate">#{s.sortOrder ?? idx + 1} · {s.ctaLink}</p>
                       </div>
                     </div>
@@ -4539,7 +4974,11 @@ export function AdminDashboard({
                       </button>
                       <button
                         type="button"
-                        onClick={() => adminFetch(`/api/admin/sliders/${s.id}`, 'DELETE').then(() => notify('ok', 'Slide deleted'))}
+                        onClick={() =>
+                          adminFetch<AdminMutateResult>(`/api/admin/sliders/${s.id}`, 'DELETE').then((res) =>
+                            notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Slide deleted'),
+                          )
+                        }
                         className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -4553,23 +4992,23 @@ export function AdminDashboard({
                   e.preventDefault();
                   try {
                     if (editingSlideId) {
-                      await adminFetch(`/api/admin/sliders/${editingSlideId}`, 'PUT', {
+                      const res = await adminFetch<AdminMutateResult>(`/api/admin/sliders/${editingSlideId}`, 'PUT', {
                         title: slideTitle,
                         caption: slideCaption,
                         imageUrl: slideImage,
                         ctaLabel: slideCta,
                         ctaLink: slideLink,
                       });
-                      notify('ok', 'Updated hero slide.');
+                      notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Updated hero slide.');
                     } else {
-                      await adminFetch('/api/admin/sliders', 'POST', {
+                      const res = await adminFetch<AdminMutateResult>('/api/admin/sliders', 'POST', {
                         title: slideTitle,
                         caption: slideCaption,
                         imageUrl: slideImage,
                         ctaLabel: slideCta,
                         ctaLink: slideLink,
                       });
-                      notify('ok', 'Added hero slide.');
+                      notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Added hero slide.');
                     }
                     setEditingSlideId(null);
                     setSlideTitle('');
@@ -4634,9 +5073,12 @@ export function AdminDashboard({
               <ul className="space-y-2 max-h-60 overflow-y-auto">
                 {sortByOrder(state.ticker).map((t, idx, arr) => (
                   <li key={t.id} className="p-2.5 rounded border border-stone-200 dark:border-slate-800 flex items-start justify-between gap-2 text-xs">
-                    <div>
-                      <span className="font-semibold text-amber-700 dark:text-amber-400">{t.badgeText}: </span>
-                      <span>{t.text}</span>
+                    <div className="space-y-0.5">
+                      <div>
+                        <span className="font-semibold text-amber-700 dark:text-amber-400">{t.badgeText}: </span>
+                        <span>{t.text}</span>
+                      </div>
+                      {renderModerationBadge(t.status)}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button
@@ -4661,7 +5103,11 @@ export function AdminDashboard({
                       </button>
                       <button
                         type="button"
-                        onClick={() => adminFetch(`/api/admin/ticker/${t.id}`, 'DELETE').then(() => notify('ok', 'Ticker item removed'))}
+                        onClick={() =>
+                          adminFetch<AdminMutateResult>(`/api/admin/ticker/${t.id}`, 'DELETE').then((res) =>
+                            notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Ticker item removed'),
+                          )
+                        }
                         className="text-rose-600 p-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -4673,13 +5119,13 @@ export function AdminDashboard({
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  await adminFetch('/api/admin/ticker', 'POST', {
+                  const res = await adminFetch<AdminMutateResult>('/api/admin/ticker', 'POST', {
                     text: tickerText,
                     badgeText: tickerBadge,
                     linkUrl: tickerLink,
                   });
                   setTickerText('');
-                  notify('ok', 'Ticker item added.');
+                  notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Ticker item added.');
                 }}
                 className="space-y-2.5 pt-3 border-t border-stone-200 dark:border-slate-800"
               >
@@ -4727,6 +5173,7 @@ export function AdminDashboard({
                       setEventTitle('');
                       setEventSummary('');
                       setEventImage('');
+                      setEventShareable(true);
                     }}
                     className="text-xs underline"
                   >
@@ -4738,9 +5185,12 @@ export function AdminDashboard({
                 {sortByOrder(state.events).map((ev, idx, arr) => (
                   <li key={ev.id} className="p-2.5 rounded border border-stone-200 dark:border-slate-800 flex items-start justify-between gap-2 text-xs">
                     <div className="min-w-0">
-                      <p className="font-semibold truncate">{ev.title}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="font-semibold truncate">{ev.title}</p>
+                        {renderModerationBadge(ev.status)}
+                      </div>
                       <p className="text-stone-500 tabular-nums">
-                        #{ev.sortOrder ?? idx + 1} · {ev.category} · {ev.eventDate}
+                        #{ev.sortOrder ?? idx + 1} · {ev.category} · {ev.eventDate} · {ev.isShareable !== false ? 'Share On' : 'Share Off'}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -4773,6 +5223,7 @@ export function AdminDashboard({
                           setEventCat(ev.category || 'Notice');
                           setEventSummary(ev.summary ?? '');
                           setEventImage(ev.imageUrl || '');
+                          setEventShareable(ev.isShareable !== false);
                         }}
                         className="p-1 text-stone-600 hover:bg-stone-100 rounded"
                       >
@@ -4780,7 +5231,11 @@ export function AdminDashboard({
                       </button>
                       <button
                         type="button"
-                        onClick={() => adminFetch(`/api/admin/events/${ev.id}`, 'DELETE').then(() => notify('ok', 'Event deleted'))}
+                        onClick={() =>
+                          adminFetch<AdminMutateResult>(`/api/admin/events/${ev.id}`, 'DELETE').then((res) =>
+                            notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Event deleted'),
+                          )
+                        }
                         className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -4793,28 +5248,31 @@ export function AdminDashboard({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   if (editingEventId) {
-                    await adminFetch(`/api/admin/events/${editingEventId}`, 'PUT', {
+                    const res = await adminFetch<AdminMutateResult>(`/api/admin/events/${editingEventId}`, 'PUT', {
                       title: eventTitle,
                       eventDate,
                       category: eventCat,
                       summary: eventSummary,
                       imageUrl: eventImage || undefined,
+                      isShareable: eventShareable,
                     });
-                    notify('ok', 'Updated event/notice.');
+                    notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Updated event/notice.');
                   } else {
-                    await adminFetch('/api/admin/events', 'POST', {
+                    const res = await adminFetch<AdminMutateResult>('/api/admin/events', 'POST', {
                       title: eventTitle,
                       eventDate,
                       category: eventCat,
                       summary: eventSummary,
                       imageUrl: eventImage || undefined,
+                      isShareable: eventShareable,
                     });
-                    notify('ok', 'Published event/notice.');
+                    notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Published event/notice.');
                   }
                   setEditingEventId(null);
                   setEventTitle('');
                   setEventSummary('');
                   setEventImage('');
+                  setEventShareable(true);
                 }}
                 className="space-y-2.5 pt-3 border-t border-stone-200 dark:border-slate-800"
               >
@@ -4864,9 +5322,17 @@ export function AdminDashboard({
                   maxPhotoMb={maxPhotoMb}
                   autoCropEnabled={autoCropEnabled}
                 />
+                <label className="inline-flex items-center gap-2 text-xs font-medium">
+                  <input
+                    type="checkbox"
+                    checked={eventShareable}
+                    onChange={(e) => setEventShareable(e.target.checked)}
+                  />
+                  <span>Allow Social Media Sharing on Event</span>
+                </label>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded text-xs font-semibold text-white"
+                  className="block px-3 py-1.5 rounded text-xs font-semibold text-white"
                   style={{ backgroundColor: 'var(--primary-color)' }}
                 >
                   {editingEventId ? 'Save Changes' : 'Publish Notice'}
@@ -4897,11 +5363,21 @@ export function AdminDashboard({
                     sortOrder: Math.max(1, Number(leadSortOrder) || 1),
                   };
                   if (editingLeadId) {
-                    await adminFetch(`/api/admin/leadership/${editingLeadId}`, 'PUT', payload);
-                    notify('ok', `Updated leadership profile "${leadName}".`);
+                    const res = await adminFetch<AdminMutateResult>(`/api/admin/leadership/${editingLeadId}`, 'PUT', payload);
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res?.message
+                        ? res.message
+                        : `Updated leadership profile "${leadName}".`,
+                    );
                   } else {
-                    await adminFetch('/api/admin/leadership', 'POST', payload);
-                    notify('ok', `Added leadership profile "${leadName}".`);
+                    const res = await adminFetch<AdminMutateResult>('/api/admin/leadership', 'POST', payload);
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res?.message
+                        ? res.message
+                        : `Added leadership profile "${leadName}".`,
+                    );
                   }
                   setEditingLeadId(null);
                   setLeadRole('');
@@ -5048,7 +5524,10 @@ export function AdminDashboard({
                         <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
                           {l.roleTitle} · <span className="text-stone-600 dark:text-slate-300">{formatCommitteeGroupLabel(l.committeeGroup)}</span>
                         </p>
-                        <p className="font-bold truncate">{l.name}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="font-bold truncate">{l.name}</p>
+                          {renderModerationBadge(l.status)}
+                        </div>
                         <p className="text-xs text-stone-500 truncate">{l.email} · {l.phone}</p>
                       </div>
                     </div>
@@ -5093,7 +5572,11 @@ export function AdminDashboard({
                       </button>
                       <button
                         type="button"
-                        onClick={() => adminFetch(`/api/admin/leadership/${l.id}`, 'DELETE').then(() => notify('ok', 'Officer removed'))}
+                        onClick={() =>
+                          adminFetch<AdminMutateResult>(`/api/admin/leadership/${l.id}`, 'DELETE').then((res) =>
+                            notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Officer removed'),
+                          )
+                        }
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -5114,15 +5597,21 @@ export function AdminDashboard({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   try {
-                    const created = (await adminFetch('/api/admin/gallery/albums', 'POST', {
+                    const res = await adminFetch<AdminMutateResult<GalleryAlbum>>('/api/admin/gallery/albums', 'POST', {
                       title: albumTitle,
                       category: albumCat,
                       eventDate: albumDate,
                       coverUrl: albumCover,
-                    })) as GalleryAlbum;
+                    });
+                    const created = (res?.item ?? res) as GalleryAlbum;
                     setAlbumTitle('');
-                    setSelectedAlbumId(created.id);
-                    notify('ok', `Created photo album "${created.title}".`);
+                    if (created?.id) setSelectedAlbumId(created.id);
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res?.message
+                        ? res.message
+                        : `Created photo album "${created?.title || albumTitle}".`,
+                    );
                   } catch (err) {
                     notify('err', (err as Error).message);
                   }
@@ -5228,7 +5717,10 @@ export function AdminDashboard({
                         onClick={() => setSelectedAlbumId(alb.id)}
                         className="text-left"
                       >
-                        <p className="font-bold text-sm">#{alb.sortOrder ?? idx + 1} · {alb.title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="font-bold text-sm">#{alb.sortOrder ?? idx + 1} · {alb.title}</p>
+                          {renderModerationBadge(alb.status)}
+                        </div>
                         <p className="text-xs text-stone-500">{alb.category} · {alb.eventDate} · {alb.photos.length} Photos</p>
                       </button>
                       <div className="flex items-center gap-1.5">
@@ -5261,7 +5753,11 @@ export function AdminDashboard({
                         </button>
                         <button
                           type="button"
-                          onClick={() => adminFetch(`/api/admin/gallery/albums/${alb.id}`, 'DELETE').then(() => notify('ok', 'Album deleted'))}
+                          onClick={() =>
+                            adminFetch<AdminMutateResult>(`/api/admin/gallery/albums/${alb.id}`, 'DELETE').then((res) =>
+                              notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Album deleted'),
+                            )
+                          }
                           className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -5303,7 +5799,7 @@ export function AdminDashboard({
                       notify('err', urlCheck.reason || 'Provide a valid Google Drive or https:// document URL.');
                       return;
                     }
-                    await adminFetch('/api/admin/documents', 'POST', {
+                    const res = await adminFetch<AdminMutateResult>('/api/admin/documents', 'POST', {
                       title: docTitle,
                       category: docCategory,
                       sourceType: 'external',
@@ -5312,7 +5808,12 @@ export function AdminDashboard({
                     });
                     setDocTitle('');
                     setDocExternalUrl('');
-                    notify('ok', 'External document link published to Repository.');
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res?.message
+                        ? res.message
+                        : 'External document link published to Repository.',
+                    );
                     return;
                   }
 
@@ -5339,7 +5840,7 @@ export function AdminDashboard({
                     });
                   }
 
-                  await adminFetch('/api/admin/documents', 'POST', {
+                  const res = await adminFetch<AdminMutateResult>('/api/admin/documents', 'POST', {
                     title: docTitle,
                     category: docCategory,
                     sourceType: 'upload',
@@ -5351,7 +5852,12 @@ export function AdminDashboard({
                   });
                   setDocTitle('');
                   setDocFile(null);
-                  notify('ok', 'Document uploaded and published to Repository.');
+                  notify(
+                    'ok',
+                    res?.queuedForApproval && res?.message
+                      ? res.message
+                      : 'Document uploaded and published to Repository.',
+                  );
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -5478,7 +5984,10 @@ export function AdminDashboard({
                     <div className="flex items-start gap-2.5 min-w-0">
                       <FileText className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                       <div className="min-w-0">
-                        <p className="font-semibold truncate">{doc.title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="font-semibold truncate">{doc.title}</p>
+                          {renderModerationBadge(doc.status)}
+                        </div>
                         <p className="text-xs text-stone-500 font-mono-tabular truncate">
                           #{doc.sortOrder ?? idx + 1} · {doc.category} ·{' '}
                           {doc.sourceType === 'external' ? 'External URL' : formatBytes(doc.fileSizeBytes)} · {doc.uploadedAt}
@@ -5508,7 +6017,11 @@ export function AdminDashboard({
                       </button>
                       <button
                         type="button"
-                        onClick={() => adminFetch(`/api/admin/documents/${doc.id}`, 'DELETE').then(() => notify('ok', 'Document deleted'))}
+                        onClick={() =>
+                          adminFetch<AdminMutateResult>(`/api/admin/documents/${doc.id}`, 'DELETE').then((res) =>
+                            notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Document deleted'),
+                          )
+                        }
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -5527,7 +6040,7 @@ export function AdminDashboard({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                await adminFetch('/api/admin/directory', 'POST', {
+                const res = await adminFetch<AdminMutateResult>('/api/admin/directory', 'POST', {
                   section: dirSection,
                   officerName: dirOfficer,
                   designation: dirDesig,
@@ -5541,7 +6054,12 @@ export function AdminDashboard({
                 setDirExt('');
                 setDirPhone('');
                 setDirEmail('');
-                notify('ok', 'Added entry to campus telephone directory.');
+                notify(
+                  'ok',
+                  res?.queuedForApproval && res?.message
+                    ? res.message
+                    : 'Added entry to campus telephone directory.',
+                );
               }}
               className="lg:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
             >
@@ -5608,10 +6126,13 @@ export function AdminDashboard({
                 {sortByOrder(state.telephoneDirectory).map((row: TelephoneEntry, idx: number, arr: TelephoneEntry[]) => (
                   <li key={row.id} className="py-3 flex items-center justify-between gap-3 text-sm">
                     <div>
-                      <p className="font-semibold">
-                        <span className="text-xs font-mono-tabular text-stone-500 mr-1.5">#{row.sortOrder ?? idx + 1}</span>
-                        {row.section} · {row.officerName}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="font-semibold">
+                          <span className="text-xs font-mono-tabular text-stone-500 mr-1.5">#{row.sortOrder ?? idx + 1}</span>
+                          {row.section} · {row.officerName}
+                        </p>
+                        {renderModerationBadge(row.status)}
+                      </div>
                       <p className="text-xs text-stone-500">
                         {row.designation} · Ext {row.extension} · {row.directPhone} · {row.email}
                       </p>
@@ -5643,7 +6164,11 @@ export function AdminDashboard({
                       </button>
                       <button
                         type="button"
-                        onClick={() => adminFetch(`/api/admin/directory/${row.id}`, 'DELETE').then(() => notify('ok', 'Contact removed'))}
+                        onClick={() =>
+                          adminFetch<AdminMutateResult>(`/api/admin/directory/${row.id}`, 'DELETE').then((res) =>
+                            notify('ok', res?.queuedForApproval && res?.message ? res.message : 'Contact removed'),
+                          )
+                        }
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -5700,7 +6225,7 @@ export function AdminDashboard({
 
               {settingsSection === 'identity' && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-semibold mb-1">Trust / Society Name</label>
                       <input
@@ -5718,6 +6243,22 @@ export function AdminDashboard({
                         onChange={(e) => setSettingsDraft({ ...settingsDraft, institutionName: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
                       />
+                    </div>
+                    <div>
+                      <label htmlFor="settings-short-code" className="block text-xs font-semibold mb-1">
+                        Short Code / Title Acronym
+                      </label>
+                      <input
+                        id="settings-short-code"
+                        type="text"
+                        value={settingsDraft.shortCode ?? ''}
+                        onChange={(e) => setSettingsDraft({ ...settingsDraft, shortCode: e.target.value })}
+                        placeholder="e.g. COEP / SVERI"
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                      <p className="text-[11px] text-stone-500 mt-1">
+                        Drives browser &amp; admin &lt;title&gt;, SEO suffix, security notices &amp; push email titles.
+                      </p>
                     </div>
                   </div>
 
@@ -6164,10 +6705,10 @@ export function AdminDashboard({
                     socialMediaLinks: next,
                   });
                 };
-                const origin = typeof window !== 'undefined' ? window.location.origin : 'https://coe.sveri.ac.in';
+                const origin = typeof window !== 'undefined' ? window.location.origin : 'https://example.edu.in';
                 const broadcastLinks = buildSocialShareUrls({
                   url: broadcastUrl || `${origin}/`,
-                  title: broadcastTitle || `${settingsDraft.shortCode} Institutional Announcement`,
+                  title: broadcastTitle || `${settingsDraft.shortCode || settingsDraft.institutionName || 'Campus'} Institutional Announcement`,
                   summary: broadcastSummary,
                   hashtags: broadcastTags,
                   via: shareCfg.twitterHandle,
@@ -6455,7 +6996,7 @@ export function AdminDashboard({
                                 socialSharing: { ...shareCfg, twitterHandle: e.target.value },
                               })
                             }
-                            placeholder="svcoer_edu"
+                            placeholder="campus_official"
                             className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                           />
                         </div>
@@ -6485,7 +7026,7 @@ export function AdminDashboard({
                                 const pg = state.pages.find((p) => p.slug === slug);
                                 if (pg) {
                                   setBroadcastTitle(pg.title);
-                                  setBroadcastSummary(pg.subtitle || `${settingsDraft.shortCode} Official Notice`);
+                                  setBroadcastSummary(pg.subtitle || `${settingsDraft.shortCode || settingsDraft.institutionName || 'Campus'} Official Notice`);
                                   setBroadcastUrl(`${origin}/page/${pg.slug}`);
                                 }
                               } else if (k.startsWith('conf:')) {
@@ -6533,7 +7074,10 @@ export function AdminDashboard({
                         <input
                           type="text"
                           value={broadcastTags}
-                          onChange={(e) => setBroadcastTags(e.target.value)}
+                          onChange={(e) => {
+                            setBroadcastTagsTouched(true);
+                            setBroadcastTags(e.target.value);
+                          }}
                           placeholder="Hashtags (comma-separated)"
                           className="px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         />
@@ -7165,6 +7709,7 @@ export function AdminDashboard({
             <FeedbackManagerPanel
               sections={state.feedbackSections || []}
               entries={state.feedbackEntries || []}
+              shortCode={state.settings?.shortCode}
               adminFetch={adminFetch}
               notify={notify}
             />
@@ -7197,6 +7742,7 @@ export function AdminDashboard({
         {activeTab === 'analytics' && canAnalytics && state && (
           <div className="space-y-8">
             <LogSecurityAdminPanel
+              shortCode={state.settings?.shortCode}
               adminFetch={adminFetch}
               sessionToken={sessionToken || getStoredToken()}
               notify={notify}
@@ -7215,6 +7761,7 @@ export function AdminDashboard({
         {/* 11. WEBSITE BACKUP, INCREMENTAL SNAPSHOTS, SCHEDULED EXPORT & DISASTER RECOVERY (SUPER ADMIN) */}
         {activeTab === 'backups' && canUsers && state && (
           <BackupRestorePanel
+            shortCode={state.settings?.shortCode}
             adminFetch={adminFetch}
             sessionToken={sessionToken || getStoredToken()}
             notify={notify}

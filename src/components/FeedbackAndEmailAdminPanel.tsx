@@ -23,7 +23,7 @@ import {
   filterFeedbackEntries,
 } from '../lib/collegeFeaturesLogic';
 
-function exportFeedbackCsv(entries: FeedbackEntry[]) {
+function exportFeedbackCsv(entries: FeedbackEntry[], shortCode?: string) {
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const headers = [
     'Ticket Code',
@@ -64,7 +64,8 @@ function exportFeedbackCsv(entries: FeedbackEntry[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `svcoer-feedback-entries-${new Date().toISOString().slice(0, 10)}.csv`;
+  const brandSlug = (shortCode || 'campus').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'campus';
+  a.download = `${brandSlug}-feedback-entries-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -74,6 +75,7 @@ function exportFeedbackCsv(entries: FeedbackEntry[]) {
 interface FeedbackManagerPanelProps {
   sections: FeedbackSectionConfig[];
   entries: FeedbackEntry[];
+  shortCode?: string;
   adminFetch: <T = unknown>(url: string, method?: string, body?: unknown) => Promise<T>;
   notify: (type: 'ok' | 'err', text: string) => void;
 }
@@ -81,6 +83,7 @@ interface FeedbackManagerPanelProps {
 export function FeedbackManagerPanel({
   sections,
   entries,
+  shortCode,
   adminFetch,
   notify,
 }: FeedbackManagerPanelProps) {
@@ -236,7 +239,7 @@ export function FeedbackManagerPanel({
             </div>
             <button
               type="button"
-              onClick={() => exportFeedbackCsv(filteredEntries)}
+              onClick={() => exportFeedbackCsv(filteredEntries, shortCode)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 dark:border-slate-700 text-xs font-semibold"
             >
               <Download className="w-3.5 h-3.5" />

@@ -22,7 +22,7 @@ if (!empty($_GET['export'])) {
     $maskIps = !empty($_GET['maskIps']);
     $expLogs = queryFilteredVisitorLogs($pdo, $filters, 2000);
     logAudit($pdo, $user, 'EXPORT_SECURITY_LOGS', 'Analytics', strtoupper($expFmt) . ($maskIps ? ' (Masked IPs)' : ''));
-    streamPhpLogsExport($expLogs, $expFmt, $maskIps);
+    streamPhpLogsExport($expLogs, $expFmt, $maskIps, $pdo);
 }
 
 $msg = '';
@@ -77,10 +77,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Pruned logs older than ' . (int)$cfg['logRetentionDays'] . ' days.';
         }
     } elseif ($action === 'save_email_push_config') {
+        $ssBrand = function_exists('getSiteSettings') ? getSiteSettings($pdo) : [];
+        $brandShort = trim((string)($ssBrand['short_code'] ?? '')) ?: trim((string)($ssBrand['institution_name'] ?? '')) ?: 'Institutional';
         $nextEp = [
             'enabled'                      => isset($_POST['ep_enabled']),
             'transportMode'                => trim((string)($_POST['ep_transport_mode'] ?? 'php_mail')),
-            'fromName'                     => trim((string)($_POST['ep_from_name'] ?? 'SVCOER Portal')),
+            'fromName'                     => trim((string)($_POST['ep_from_name'] ?? '')) ?: ($brandShort . ' Portal'),
             'fromEmail'                    => trim((string)($_POST['ep_from_email'] ?? 'noreply@coe.sveri.ac.in')),
             'replyToEmail'                 => trim((string)($_POST['ep_reply_to'] ?? 'principal@coe.sveri.ac.in')),
             'smtpHost'                     => trim((string)($_POST['ep_smtp_host'] ?? '')),
@@ -103,14 +105,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $msg = 'Email Push & Automated Reporting settings saved (SMTP password preserved unless replaced/cleared).';
     } elseif ($action === 'send_test_email') {
         $epCfg = getEmailPushConfig($pdo);
+        $ssBrand = function_exists('getSiteSettings') ? getSiteSettings($pdo) : [];
+        $brandShort = trim((string)($ssBrand['short_code'] ?? '')) ?: trim((string)($ssBrand['institution_name'] ?? '')) ?: 'Institutional';
         $testTo = trim((string)($_POST['test_recipient'] ?? ''));
         if ($testTo === '') $testTo = (string)($epCfg['alertRecipientEmails'] ?? '');
         $res = cms_dispatch_and_log_email(
             $pdo,
             'test_email',
             $testTo,
-            '[SVCOER Test Alert] Email Push Verification (' . gmdate('Y-m-d H:i') . ' UTC)',
-            "Hello,\n\nThis is a live verification email dispatched from your SVCOER Admin Email Push Center using transport mode: " . strtoupper((string)$epCfg['transportMode']) . ".\n\nServer Host: " . ($_SERVER['HTTP_HOST'] ?? 'localhost') . "\nTriggered By: " . ($user['email'] ?? 'admin'),
+            '[' . $brandShort . ' Test Alert] Email Push Verification (' . gmdate('Y-m-d H:i') . ' UTC)',
+            "Hello,\n\nThis is a live verification email dispatched from your {$brandShort} Admin Email Push Center using transport mode: " . strtoupper((string)$epCfg['transportMode']) . ".\n\nServer Host: " . ($_SERVER['HTTP_HOST'] ?? 'localhost') . "\nTriggered By: " . ($user['email'] ?? 'admin'),
             'Manual Test',
             '',
             $epCfg

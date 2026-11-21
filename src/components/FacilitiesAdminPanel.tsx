@@ -51,6 +51,7 @@ export function FacilitiesAdminPanel({
   const [cfValue, setCfValue] = useState('');
   const [isFeatured, setIsFeatured] = useState(true);
   const [isPublished, setIsPublished] = useState(true);
+  const [isShareable, setIsShareable] = useState(true);
 
   const resetForm = () => {
     setEditingId(null);
@@ -69,6 +70,7 @@ export function FacilitiesAdminPanel({
     setCustomFields([]);
     setIsFeatured(true);
     setIsPublished(true);
+    setIsShareable(true);
   };
 
   const reorderFacility = async (index: number, dir: -1 | 1) => {
@@ -203,14 +205,29 @@ export function FacilitiesAdminPanel({
                 customFields,
                 isFeatured,
                 isPublished,
+                isShareable,
               };
               try {
                 if (editingId) {
-                  await adminFetch(`/api/admin/facilities/items/${editingId}`, 'PUT', payload);
-                  notify('ok', `Updated facility "${title}".`);
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string; item?: FacilityItem }>(
+                    `/api/admin/facilities/items/${editingId}`,
+                    'PUT',
+                    payload,
+                  );
+                  notify(
+                    'ok',
+                    res?.queuedForApproval && res.message ? res.message : `Updated facility "${title}".`,
+                  );
                 } else {
-                  await adminFetch('/api/admin/facilities/items', 'POST', payload);
-                  notify('ok', `Added facility "${title}".`);
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string; item?: FacilityItem }>(
+                    '/api/admin/facilities/items',
+                    'POST',
+                    payload,
+                  );
+                  notify(
+                    'ok',
+                    res?.queuedForApproval && res.message ? res.message : `Added facility "${title}".`,
+                  );
                 }
                 resetForm();
               } catch (err) {
@@ -419,6 +436,10 @@ export function FacilitiesAdminPanel({
                 <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} />
                 <span>Highlight as Key Infrastructure</span>
               </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={isShareable} onChange={(e) => setIsShareable(e.target.checked)} />
+                <span>Allow Social Media Sharing on this Facility card</span>
+              </label>
             </div>
 
             <div className="flex gap-2">
@@ -449,9 +470,21 @@ export function FacilitiesAdminPanel({
                       className="w-16 h-12 rounded object-cover border shrink-0"
                     />
                     <div className="min-w-0">
-                      <p className="font-bold text-sm truncate">{item.title}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="font-bold text-sm truncate">{item.title}</p>
+                        {item.status === 'pending_approval' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Pending Super Admin Approval
+                          </span>
+                        )}
+                        {item.status === 'rejected' && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Rejected
+                          </span>
+                        )}
+                      </div>
                       <p className="text-stone-500 truncate">
-                        {item.category} · {(item.customFields || []).length} custom fields
+                        {item.category} · {(item.customFields || []).length} custom fields · {item.isShareable === false ? 'Share Hidden' : 'Shareable'}
                       </p>
                     </div>
                   </div>
@@ -491,6 +524,7 @@ export function FacilitiesAdminPanel({
                         setCustomFields(item.customFields || []);
                         setIsFeatured(item.isFeatured);
                         setIsPublished(item.isPublished);
+                        setIsShareable(item.isShareable !== false);
                       }}
                       className="px-2.5 py-1 rounded border font-semibold"
                     >
@@ -499,9 +533,19 @@ export function FacilitiesAdminPanel({
                     <button
                       type="button"
                       onClick={() =>
-                        adminFetch(`/api/admin/facilities/items/${item.id}`, 'DELETE').then(() =>
-                          notify('ok', `Deleted facility "${item.title}".`),
+                        adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                          `/api/admin/facilities/items/${item.id}`,
+                          'DELETE',
                         )
+                          .then((res) =>
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res.message
+                                ? res.message
+                                : `Deleted facility "${item.title}".`,
+                            ),
+                          )
+                          .catch((err) => notify('err', (err as Error).message))
                       }
                       className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
                     >

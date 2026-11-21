@@ -6,6 +6,7 @@ import type {
   SearchResultItem,
   UserRole,
 } from '../types/cms';
+import { isRecordPublished } from './collegeFeaturesLogic';
 
 export interface ThemePalette {
   id: string;
@@ -418,7 +419,7 @@ export function searchCmsContent(
   const results: SearchResultItem[] = [];
 
   for (const page of db.pages) {
-    if (!page.isPublished) continue;
+    if (!page.isPublished || !isRecordPublished(page)) continue;
     const plain = page.contentHtml.replace(/<[^>]+>/g, ' ').toLowerCase();
     if (
       page.title.toLowerCase().includes(q) ||
@@ -437,7 +438,7 @@ export function searchCmsContent(
   }
 
   for (const conf of db.conferences || []) {
-    if (!conf.isPublished) continue;
+    if (!conf.isPublished || !isRecordPublished(conf)) continue;
     if (
       conf.title.toLowerCase().includes(q) ||
       conf.shortName.toLowerCase().includes(q) ||
@@ -457,7 +458,7 @@ export function searchCmsContent(
   }
 
   for (const fac of db.facilities?.items || []) {
-    if (!fac.isPublished) continue;
+    if (fac.isPublished === false || !isRecordPublished(fac)) continue;
     const plain = fac.descriptionHtml.replace(/<[^>]+>/g, ' ').toLowerCase();
     const cfMatch = (fac.customFields || []).some(
       (f) => f.label.toLowerCase().includes(q) || f.value.toLowerCase().includes(q),
@@ -482,7 +483,7 @@ export function searchCmsContent(
   }
 
   for (const sf of db.sports?.facilities || []) {
-    if (!sf.isPublished) continue;
+    if (!isRecordPublished(sf, 'moderationStatus')) continue;
     if (
       sf.name.toLowerCase().includes(q) ||
       sf.facilityType.toLowerCase().includes(q) ||
@@ -500,7 +501,7 @@ export function searchCmsContent(
   }
 
   for (const se of db.sports?.events || []) {
-    if (!se.isPublished) continue;
+    if (!isRecordPublished(se, 'moderationStatus')) continue;
     if (
       se.title.toLowerCase().includes(q) ||
       se.discipline.toLowerCase().includes(q) ||
@@ -518,6 +519,7 @@ export function searchCmsContent(
   }
 
   for (const sa of db.sports?.achievements || []) {
+    if (!isRecordPublished(sa)) continue;
     if (
       sa.studentOrTeamName.toLowerCase().includes(q) ||
       sa.sportName.toLowerCase().includes(q) ||
@@ -536,6 +538,7 @@ export function searchCmsContent(
   }
 
   for (const dept of db.departments) {
+    if (!isRecordPublished(dept)) continue;
     if (
       dept.name.toLowerCase().includes(q) ||
       dept.code.toLowerCase().includes(q) ||
@@ -570,6 +573,7 @@ export function searchCmsContent(
   }
 
   for (const doc of db.documents) {
+    if (!isRecordPublished(doc)) continue;
     if (
       doc.title.toLowerCase().includes(q) ||
       doc.category.toLowerCase().includes(q) ||
@@ -590,6 +594,7 @@ export function searchCmsContent(
   }
 
   for (const ev of db.events) {
+    if (!isRecordPublished(ev)) continue;
     if (
       ev.title.toLowerCase().includes(q) ||
       ev.summary.toLowerCase().includes(q) ||
@@ -607,7 +612,7 @@ export function searchCmsContent(
   }
 
   for (const rp of db.researchPortfolio?.projects || []) {
-    if (!rp.isPublished) continue;
+    if (!isRecordPublished(rp, 'moderationStatus')) continue;
     if (
       rp.title.toLowerCase().includes(q) ||
       rp.fundingAgency.toLowerCase().includes(q) ||
@@ -626,7 +631,7 @@ export function searchCmsContent(
   }
 
   for (const pat of db.researchPortfolio?.patents || []) {
-    if (!pat.isPublished) continue;
+    if (!isRecordPublished(pat, 'moderationStatus')) continue;
     if (
       pat.title.toLowerCase().includes(q) ||
       pat.itemType.toLowerCase().includes(q) ||

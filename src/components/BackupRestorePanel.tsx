@@ -24,6 +24,7 @@ import type {
 } from '../types/cms';
 
 interface BackupRestorePanelProps {
+  shortCode?: string;
   adminFetch: <T = unknown>(url: string, method?: string, body?: unknown) => Promise<T>;
   sessionToken: string | null;
   notify: (type: 'ok' | 'err', text: string) => void;
@@ -31,6 +32,7 @@ interface BackupRestorePanelProps {
 }
 
 export function BackupRestorePanel({
+  shortCode,
   adminFetch,
   sessionToken,
   notify,
@@ -490,12 +492,13 @@ export function BackupRestorePanel({
             </button>
             <button
               type="button"
-              onClick={() =>
-                downloadAuthenticatedFile(
+              onClick={() => {
+                const brandSlug = (shortCode || 'cms').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'cms';
+                return downloadAuthenticatedFile(
                   '/api/admin/export',
-                  `svcoer-export-${new Date().toISOString().slice(0, 10)}.json`,
-                )
-              }
+                  `${brandSlug}-export-${new Date().toISOString().slice(0, 10)}.json`,
+                );
+              }}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border border-stone-300 dark:border-slate-700 hover:bg-stone-50 dark:hover:bg-slate-800"
             >
               <Download className="w-3.5 h-3.5" />
@@ -767,7 +770,7 @@ export function BackupRestorePanel({
                     scpConfig: { ...(schedule.scpConfig || { host: '', port: 22, username: '', remoteDir: '' }), remoteDir: e.target.value },
                   })
                 }
-                placeholder="Remote Path (/var/backups/svcoer)"
+                placeholder="Remote Path (/var/backups/cms)"
                 className="px-2.5 py-1.5 text-xs rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
               />
             </div>

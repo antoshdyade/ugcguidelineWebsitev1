@@ -79,12 +79,13 @@ export function SportsAdminPanel({
   const [eType, setEType] = useState<string>(SPORTS_EVENT_TYPE_PRESETS[0]);
   const [eDisc, setEDisc] = useState('');
   const [eDate, setEDate] = useState(new Date().toISOString().slice(0, 10));
-  const [eVenue, setEVenue] = useState('SVCOER Sports Complex, Pandharpur');
+  const [eVenue, setEVenue] = useState(`${settings.shortCode || 'Campus'} Sports Complex`);
   const [eOrg, setEOrg] = useState('Gymkhana Committee');
   const [eStatus, setEStatus] = useState<SportsEvent['status']>('Upcoming');
   const [eRegUrl, setERegUrl] = useState('');
   const [eDesc, setEDesc] = useState('');
   const [eImg, setEImg] = useState('/src/assets/images/sports_complex_1794991330591.jpg');
+  const [eIsShareable, setEIsShareable] = useState(true);
 
   // Achievement form
   const [editingAchId, setEditingAchId] = useState<number | null>(null);
@@ -320,11 +321,19 @@ export function SportsAdminPanel({
               };
               try {
                 if (editingFacId) {
-                  await adminFetch(`/api/admin/sports/facilities/${editingFacId}`, 'PUT', payload);
-                  notify('ok', `Updated sports facility "${fName}".`);
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    `/api/admin/sports/facilities/${editingFacId}`,
+                    'PUT',
+                    payload,
+                  );
+                  notify('ok', res?.queuedForApproval && res.message ? res.message : `Updated sports facility "${fName}".`);
                 } else {
-                  await adminFetch('/api/admin/sports/facilities', 'POST', payload);
-                  notify('ok', `Added sports facility "${fName}".`);
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    '/api/admin/sports/facilities',
+                    'POST',
+                    payload,
+                  );
+                  notify('ok', res?.queuedForApproval && res.message ? res.message : `Added sports facility "${fName}".`);
                 }
                 setEditingFacId(null);
                 setFName('');
@@ -468,7 +477,19 @@ export function SportsAdminPanel({
                   <div className="flex items-center gap-3 min-w-0">
                     <img src={fac.imageUrl} alt={fac.name} className="w-16 h-12 rounded object-cover border shrink-0" />
                     <div className="min-w-0">
-                      <p className="font-bold text-sm truncate">{fac.name}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="font-bold text-sm truncate">{fac.name}</p>
+                        {fac.moderationStatus === 'pending_approval' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Pending Super Admin Approval
+                          </span>
+                        )}
+                        {fac.moderationStatus === 'rejected' && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Rejected
+                          </span>
+                        )}
+                      </div>
                       <p className="text-stone-500 truncate">{fac.facilityType} · {fac.dimensionsOrCapacity}</p>
                     </div>
                   </div>
@@ -493,9 +514,17 @@ export function SportsAdminPanel({
                     <button
                       type="button"
                       onClick={() =>
-                        adminFetch(`/api/admin/sports/facilities/${fac.id}`, 'DELETE').then(() =>
-                          notify('ok', `Deleted ${fac.name}.`),
+                        adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                          `/api/admin/sports/facilities/${fac.id}`,
+                          'DELETE',
                         )
+                          .then((res) =>
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res.message ? res.message : `Deleted ${fac.name}.`,
+                            ),
+                          )
+                          .catch((err) => notify('err', (err as Error).message))
                       }
                       className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
                     >
@@ -527,19 +556,29 @@ export function SportsAdminPanel({
                 description: eDesc,
                 bannerUrl: eImg,
                 isPublished: true,
+                isShareable: eIsShareable,
               };
               try {
                 if (editingEvId) {
-                  await adminFetch(`/api/admin/sports/events/${editingEvId}`, 'PUT', payload);
-                  notify('ok', 'Updated sports event.');
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    `/api/admin/sports/events/${editingEvId}`,
+                    'PUT',
+                    payload,
+                  );
+                  notify('ok', res?.queuedForApproval && res.message ? res.message : 'Updated sports event.');
                 } else {
-                  await adminFetch('/api/admin/sports/events', 'POST', payload);
-                  notify('ok', 'Added sports event.');
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    '/api/admin/sports/events',
+                    'POST',
+                    payload,
+                  );
+                  notify('ok', res?.queuedForApproval && res.message ? res.message : 'Added sports event.');
                 }
                 setEditingEvId(null);
                 setETitle('');
                 setEDisc('');
                 setEDesc('');
+                setEIsShareable(true);
               } catch (err) {
                 notify('err', (err as Error).message);
               }
@@ -618,6 +657,14 @@ export function SportsAdminPanel({
               maxPhotoMb={maxPhotoMb}
               autoCropEnabled={autoCrop}
             />
+            <label className="inline-flex items-center gap-2 font-semibold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={eIsShareable}
+                onChange={(e) => setEIsShareable(e.target.checked)}
+              />
+              <span>Allow Social Media Sharing on this Event</span>
+            </label>
             <button
               type="submit"
               className="w-full py-2 rounded-lg text-white font-bold"
@@ -633,8 +680,22 @@ export function SportsAdminPanel({
               {sports.events.map((ev) => (
                 <div key={ev.id} className="py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-bold text-sm">{ev.title}</p>
-                    <p className="text-stone-500">{ev.eventType} · {ev.eventDate} · {ev.status}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-bold text-sm">{ev.title}</p>
+                      {ev.moderationStatus === 'pending_approval' && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          Pending Super Admin Approval
+                        </span>
+                      )}
+                      {ev.moderationStatus === 'rejected' && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                          Rejected
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-stone-500">
+                      {ev.eventType} · {ev.eventDate} · {ev.status} · {ev.isShareable === false ? 'Share Hidden' : 'Shareable'}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
@@ -651,6 +712,7 @@ export function SportsAdminPanel({
                         setERegUrl(ev.registrationUrl || '');
                         setEDesc(ev.description);
                         setEImg(ev.bannerUrl);
+                        setEIsShareable(ev.isShareable !== false);
                       }}
                       className="px-2.5 py-1 rounded border"
                     >
@@ -659,9 +721,17 @@ export function SportsAdminPanel({
                     <button
                       type="button"
                       onClick={() =>
-                        adminFetch(`/api/admin/sports/events/${ev.id}`, 'DELETE').then(() =>
-                          notify('ok', `Deleted ${ev.title}.`),
+                        adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                          `/api/admin/sports/events/${ev.id}`,
+                          'DELETE',
                         )
+                          .then((res) =>
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res.message ? res.message : `Deleted ${ev.title}.`,
+                            ),
+                          )
+                          .catch((err) => notify('err', (err as Error).message))
                       }
                       className="p-1.5 text-rose-600 rounded"
                     >
@@ -696,11 +766,19 @@ export function SportsAdminPanel({
               };
               try {
                 if (editingAchId) {
-                  await adminFetch(`/api/admin/sports/achievements/${editingAchId}`, 'PUT', payload);
-                  notify('ok', 'Updated sports achievement.');
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    `/api/admin/sports/achievements/${editingAchId}`,
+                    'PUT',
+                    payload,
+                  );
+                  notify('ok', res?.queuedForApproval && res.message ? res.message : 'Updated sports achievement.');
                 } else {
-                  await adminFetch('/api/admin/sports/achievements', 'POST', payload);
-                  notify('ok', 'Added student sports achievement.');
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    '/api/admin/sports/achievements',
+                    'POST',
+                    payload,
+                  );
+                  notify('ok', res?.queuedForApproval && res.message ? res.message : 'Added student sports achievement.');
                 }
                 setEditingAchId(null);
                 setAName('');
@@ -819,7 +897,19 @@ export function SportsAdminPanel({
                   <div className="flex items-center gap-3 min-w-0">
                     <img src={ach.photoUrl} alt={ach.studentOrTeamName} className="w-12 h-12 rounded object-cover border shrink-0" />
                     <div className="min-w-0">
-                      <p className="font-bold text-sm truncate">{ach.studentOrTeamName} — {ach.medalOrRank}</p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="font-bold text-sm truncate">{ach.studentOrTeamName} — {ach.medalOrRank}</p>
+                        {ach.status === 'pending_approval' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Pending Super Admin Approval
+                          </span>
+                        )}
+                        {ach.status === 'rejected' && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Rejected
+                          </span>
+                        )}
+                      </div>
                       <p className="text-stone-500 truncate">{ach.level} · {ach.sportName} · {ach.eventName}</p>
                     </div>
                   </div>
@@ -846,9 +936,17 @@ export function SportsAdminPanel({
                     <button
                       type="button"
                       onClick={() =>
-                        adminFetch(`/api/admin/sports/achievements/${ach.id}`, 'DELETE').then(() =>
-                          notify('ok', 'Deleted sports achievement.'),
+                        adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                          `/api/admin/sports/achievements/${ach.id}`,
+                          'DELETE',
                         )
+                          .then((res) =>
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res.message ? res.message : 'Deleted sports achievement.',
+                            ),
+                          )
+                          .catch((err) => notify('err', (err as Error).message))
                       }
                       className="p-1.5 text-rose-600 rounded"
                     >
@@ -869,19 +967,26 @@ export function SportsAdminPanel({
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await adminFetch('/api/admin/sports/gallery', 'POST', {
-                  title: gTitle,
-                  mediaType: gType,
-                  category: gCat,
-                  mediaUrl: gMediaUrl,
-                  thumbnailUrl: gThumbUrl,
-                  eventDate: gDate,
-                  caption: gCap,
-                  isPublished: true,
-                });
+                const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                  '/api/admin/sports/gallery',
+                  'POST',
+                  {
+                    title: gTitle,
+                    mediaType: gType,
+                    category: gCat,
+                    mediaUrl: gMediaUrl,
+                    thumbnailUrl: gThumbUrl,
+                    eventDate: gDate,
+                    caption: gCap,
+                    isPublished: true,
+                  },
+                );
                 setGTitle('');
                 setGCap('');
-                notify('ok', 'Added media item to Sports Gallery.');
+                notify(
+                  'ok',
+                  res?.queuedForApproval && res.message ? res.message : 'Added media item to Sports Gallery.',
+                );
               } catch (err) {
                 notify('err', (err as Error).message);
               }
@@ -973,15 +1078,35 @@ export function SportsAdminPanel({
               {sports.gallery.map((g: SportsGalleryItem) => (
                 <div key={g.id} className="py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-bold text-sm truncate">[{g.mediaType}] {g.title}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-bold text-sm truncate">[{g.mediaType}] {g.title}</p>
+                      {g.status === 'pending_approval' && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          Pending Super Admin Approval
+                        </span>
+                      )}
+                      {g.status === 'rejected' && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                          Rejected
+                        </span>
+                      )}
+                    </div>
                     <p className="text-stone-500 truncate">{g.category} · {g.eventDate}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() =>
-                      adminFetch(`/api/admin/sports/gallery/${g.id}`, 'DELETE').then(() =>
-                        notify('ok', `Deleted "${g.title}".`),
+                      adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                        `/api/admin/sports/gallery/${g.id}`,
+                        'DELETE',
                       )
+                        .then((res) =>
+                          notify(
+                            'ok',
+                            res?.queuedForApproval && res.message ? res.message : `Deleted "${g.title}".`,
+                          ),
+                        )
+                        .catch((err) => notify('err', (err as Error).message))
                     }
                     className="p-1.5 text-rose-600 rounded"
                   >
@@ -1001,21 +1126,25 @@ export function SportsAdminPanel({
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await adminFetch('/api/admin/sports/notices', 'POST', {
-                  title: nTitle,
-                  noticeDate: nDate,
-                  category: nCat,
-                  summary: nSummary,
-                  attachmentUrl: nAttachment,
-                  registrationLink: nRegLink,
-                  isPinned: nPinned,
-                  isPublished: true,
-                });
+                const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                  '/api/admin/sports/notices',
+                  'POST',
+                  {
+                    title: nTitle,
+                    noticeDate: nDate,
+                    category: nCat,
+                    summary: nSummary,
+                    attachmentUrl: nAttachment,
+                    registrationLink: nRegLink,
+                    isPinned: nPinned,
+                    isPublished: true,
+                  },
+                );
                 setNTitle('');
                 setNSummary('');
                 setNAttachment('');
                 setNRegLink('');
-                notify('ok', 'Published sports notice.');
+                notify('ok', res?.queuedForApproval && res.message ? res.message : 'Published sports notice.');
               } catch (err) {
                 notify('err', (err as Error).message);
               }
@@ -1111,17 +1240,37 @@ export function SportsAdminPanel({
               {sports.notices.map((n: SportsNotice) => (
                 <div key={n.id} className="py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-bold text-sm truncate">
-                      {n.isPinned ? '[Pinned] ' : ''}{n.title}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="font-bold text-sm truncate">
+                        {n.isPinned ? '[Pinned] ' : ''}{n.title}
+                      </p>
+                      {n.status === 'pending_approval' && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          Pending Super Admin Approval
+                        </span>
+                      )}
+                      {n.status === 'rejected' && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                          Rejected
+                        </span>
+                      )}
+                    </div>
                     <p className="text-stone-500">{n.category} · {n.noticeDate}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() =>
-                      adminFetch(`/api/admin/sports/notices/${n.id}`, 'DELETE').then(() =>
-                        notify('ok', `Deleted notice "${n.title}".`),
+                      adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                        `/api/admin/sports/notices/${n.id}`,
+                        'DELETE',
                       )
+                        .then((res) =>
+                          notify(
+                            'ok',
+                            res?.queuedForApproval && res.message ? res.message : `Deleted notice "${n.title}".`,
+                          ),
+                        )
+                        .catch((err) => notify('err', (err as Error).message))
                     }
                     className="p-1.5 text-rose-600 rounded"
                   >

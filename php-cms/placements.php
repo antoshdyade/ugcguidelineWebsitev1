@@ -650,6 +650,7 @@ require_once __DIR__ . '/includes/header.php';
   </section>
 <?php endif; ?>
 
-<?= renderPhpSocialShareBar($pdo, 'Training & Placements Cell (T&P) — SVCOER Pandharpur', (string)($summary['summaryNote'] ?? ''), baseUrl('placements.php'), 'portal', true) ?>
+<?php $tpBrand = trim((string)($settings['short_code'] ?? '')) ?: trim((string)($settings['institution_name'] ?? '')) ?: 'Campus'; ?>
+<?= renderPhpSocialShareBar($pdo, 'Training & Placements Cell (T&P) — ' . $tpBrand, (string)($summary['summaryNote'] ?? ''), baseUrl('placements.php'), 'portal', true) ?>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

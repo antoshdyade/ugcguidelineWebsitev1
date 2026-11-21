@@ -738,7 +738,15 @@ function runPhpSecurityFirewall(PDO $pdo): void
                 'note'            => $threat['summary'],
             ]);
             http_response_code(403);
-            exit('<!doctype html><title>403 Security Shield</title><body style="font-family:sans-serif;max-width:580px;margin:4rem auto;padding:2rem;border:1px solid #fecaca;border-radius:10px;background:#fef2f2;color:#7f1d1d;"><h1>403 · Blocked by SVCOER Security Shield</h1><p>This request was intercepted by the web application firewall.</p><p><strong>Rule:</strong> ' . htmlspecialchars((string)$threat['category'], ENT_QUOTES, 'UTF-8') . '</p></body>');
+            $shieldBrand = 'Institutional';
+            if (function_exists('getSiteSettings')) {
+                try {
+                    $ss = getSiteSettings($pdo);
+                    $shieldBrand = trim((string)($ss['short_code'] ?? '')) ?: trim((string)($ss['institution_name'] ?? '')) ?: 'Institutional';
+                } catch (Throwable $ignored) {
+                }
+            }
+            exit('<!doctype html><title>403 Security Shield</title><body style="font-family:sans-serif;max-width:580px;margin:4rem auto;padding:2rem;border:1px solid #fecaca;border-radius:10px;background:#fef2f2;color:#7f1d1d;"><h1>403 · Blocked by ' . htmlspecialchars($shieldBrand, ENT_QUOTES, 'UTF-8') . ' Security Shield</h1><p>This request was intercepted by the web application firewall.</p><p><strong>Rule:</strong> ' . htmlspecialchars((string)$threat['category'], ENT_QUOTES, 'UTF-8') . '</p></body>');
         }
     }
 }
@@ -929,19 +937,41 @@ function resolvePhpRouteSeo(array $seo, array $siteSettings, string $pageTitle, 
         }
     }
 
+    $customShort = trim((string)($siteSettings['short_code'] ?? ''));
+    $customName  = trim((string)($siteSettings['institution_name'] ?? ''));
+    $applyBrand  = static function (string $val) use ($customShort, $customName): string {
+        $out = $val;
+        if ($customName !== '' && !str_contains($customName, "SVERI's College of Engineering")) {
+            $out = str_replace(
+                ["SVERI's College of Engineering, Pandharpur (Autonomous)", "SVERI's College of Engineering (Autonomous), Pandharpur", "SVERI's College of Engineering, Pandharpur", 'SVCOER Pandharpur'],
+                $customName,
+                $out
+            );
+        }
+        if ($customShort !== '' && $customShort !== 'SVCOER') {
+            $out = (string)preg_replace('/\bSVCOER\b/', $customShort, $out);
+        }
+        return $out;
+    };
+
+    $rawSuffix = trim((string)($seo['siteTitleSuffix'] ?? ''));
+    $effectiveSuffix = ($customShort !== '' && $customShort !== 'SVCOER' && str_contains($rawSuffix, 'SVCOER'))
+        ? ($customShort . ' — ' . ($customName !== '' ? $customName : $customShort))
+        : $applyBrand($rawSuffix);
+
     $title = ($matched && !empty($matched['title']))
-        ? (string)$matched['title']
-        : $pageTitle . (!empty($seo['siteTitleSuffix']) && !str_contains($pageTitle, (string)$seo['siteTitleSuffix']) ? ' | ' . $seo['siteTitleSuffix'] : '');
+        ? $applyBrand((string)$matched['title'])
+        : $pageTitle . ($effectiveSuffix !== '' && !str_contains($pageTitle, $effectiveSuffix) ? ' | ' . $effectiveSuffix : '');
 
     $desc = ($matched && !empty($matched['description']))
-        ? (string)$matched['description']
+        ? $applyBrand((string)$matched['description'])
         : (trim((string)($extraSeo['description'] ?? $pageDesc ?? '')) !== ''
-            ? trim((string)($extraSeo['description'] ?? $pageDesc))
-            : (string)($seo['defaultDescription'] ?? ''));
+            ? $applyBrand(trim((string)($extraSeo['description'] ?? $pageDesc)))
+            : $applyBrand((string)($seo['defaultDescription'] ?? '')));
 
     $keywords = ($matched && !empty($matched['keywords']))
-        ? (string)$matched['keywords']
-        : (!empty($extraSeo['keywords']) ? (string)$extraSeo['keywords'] : (string)($seo['defaultKeywords'] ?? ''));
+        ? $applyBrand((string)$matched['keywords'])
+        : (!empty($extraSeo['keywords']) ? $applyBrand((string)$extraSeo['keywords']) : $applyBrand((string)($seo['defaultKeywords'] ?? '')));
 
     $ogImage = !empty($extraSeo['ogImage'])
         ? (string)$extraSeo['ogImage']
@@ -1240,12 +1270,21 @@ function maskPhpIpAddress(string $ip): string
     return $ip;
 }
 
-function streamPhpLogsExport(array $logs, string $format, bool $maskIps = false): void
+function streamPhpLogsExport(array $logs, string $format, bool $maskIps = false, ?PDO $pdo = null): void
 {
     $stamp = gmdate('Y-m-d');
+    $brandSlug = 'campus';
+    if ($pdo instanceof PDO && function_exists('getSiteSettings')) {
+        $stSet = getSiteSettings($pdo);
+        $rawBrand = (string)($stSet['short_code'] ?? $stSet['institution_name'] ?? 'campus');
+        $cleanBrand = trim((string)preg_replace('/[^a-z0-9]+/i', '-', strtolower($rawBrand)), '-');
+        if ($cleanBrand !== '') {
+            $brandSlug = $cleanBrand;
+        }
+    }
     if ($format === 'json') {
         header('Content-Type: application/json; charset=utf-8');
-        header('Content-Disposition: attachment; filename="svcoer-security-logs-' . $stamp . '.json"');
+        header('Content-Disposition: attachment; filename="' . $brandSlug . '-security-logs-' . $stamp . '.json"');
         $out = $maskIps
             ? array_map(static function ($r) {
                 $r['ip'] = maskPhpIpAddress((string)$r['ip']);
@@ -1258,7 +1297,7 @@ function streamPhpLogsExport(array $logs, string $format, bool $maskIps = false)
 
     if ($format === 'log') {
         header('Content-Type: text/plain; charset=utf-8');
-        header('Content-Disposition: attachment; filename="svcoer-access-waf-' . $stamp . '.log"');
+        header('Content-Disposition: attachment; filename="' . $brandSlug . '-access-waf-' . $stamp . '.log"');
         foreach ($logs as $r) {
             $ip = $maskIps ? maskPhpIpAddress((string)$r['ip']) : (string)$r['ip'];
             $path = (string)$r['path'] . (!empty($r['query_string']) ? '?' . $r['query_string'] : '');
@@ -1286,7 +1325,7 @@ function streamPhpLogsExport(array $logs, string $format, bool $maskIps = false)
 
     // Default: CSV
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="svcoer-visitor-logs-' . $stamp . '.csv"');
+    header('Content-Disposition: attachment; filename="' . $brandSlug . '-visitor-logs-' . $stamp . '.csv"');
     $fp = fopen('php://output', 'wb');
     fputcsv($fp, ['ID', 'Timestamp (UTC)', 'IP Address', 'Country', 'State', 'Area', 'Method', 'Path', 'Query', 'Status', 'Latency (ms)', 'Device', 'Browser', 'OS', 'Event Type', 'Severity', 'Threat Category', 'Actor Email', 'Note']);
     foreach ($logs as $r) {

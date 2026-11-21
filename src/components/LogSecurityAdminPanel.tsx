@@ -38,12 +38,14 @@ interface AnalyticsResponse {
 }
 
 interface LogSecurityAdminPanelProps {
+  shortCode?: string;
   adminFetch: <T = unknown>(url: string, method?: string, body?: unknown) => Promise<T>;
   sessionToken: string;
   notify: (kind: 'ok' | 'err', msg: string) => void;
 }
 
 export function LogSecurityAdminPanel({
+  shortCode,
   adminFetch,
   sessionToken,
   notify,
@@ -112,7 +114,8 @@ export function LogSecurityAdminPanel({
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objUrl;
-      a.download = `svcoer-logs-${new Date().toISOString().slice(0, 10)}.${format}`;
+      const brandSlug = (shortCode || 'campus').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'campus';
+      a.download = `${brandSlug}-logs-${new Date().toISOString().slice(0, 10)}.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();

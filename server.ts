@@ -47,11 +47,14 @@ import {
   DEFAULT_EMAIL_PUSH_CONFIG,
   DEFAULT_FEEDBACK_SECTIONS,
   DEFAULT_GRIEVANCE_PORTAL_CONFIG,
+  canPublishDirectly,
   computeFeedbackMetrics,
   generateReferenceCode,
   isExternalPaperSubmissionActive,
+  isRecordPublished,
   migrateDatabaseInPlace,
   normalizeSocialSharingConfig,
+  queuePendingRevision,
   syncLegacySocialLinks,
   validateAlumniPledgeInput,
   validateConferenceRegistrationInput,
@@ -103,6 +106,7 @@ import type {
   ConferencePaperStatus,
   ConferenceRegistration,
   ConferenceSubmission,
+  ContentModerationStatus,
   CustomHomeComponent,
   EmailDispatchLogEntry,
   EmailPushConfig,
@@ -113,6 +117,8 @@ import type {
   GrievanceStatus,
   GrievanceTicket,
   HomeComponentPlacement,
+  PendingContentRevision,
+  PlacementNotice,
   PlacementStory,
   PlacementYearStat,
   ResearchPatentItem,
@@ -562,8 +568,9 @@ async function startServer() {
         eventType: 'security_block',
         threatCategory: `IP Blocklist Enforced (${blocked.reason})`,
       });
+      const brand = (db.settings?.shortCode || db.settings?.institutionName || 'Institutional').trim() || 'Institutional';
       res.status(403).json({
-        error: 'Access denied by SVCOER Security Shield. Your IP is currently blocked.',
+        error: `Access denied by ${brand} Security Shield. Your IP is currently blocked.`,
       });
       return;
     }
@@ -779,29 +786,38 @@ async function startServer() {
     res.json(createCaptchaChallenge());
   });
 
-  // Public bootstrap endpoint (unrestricted access per UGC Rule 4; strips credentials & private member discussions)
+  // Public bootstrap endpoint (unrestricted access per UGC Rule 4; strips credentials & unpublished/pending items)
   app.get('/api/public/bootstrap', (_req, res) => {
     const alumniState = ensureAlumniState();
     const { seo, hitCounter } = ensureSecurityState();
     const sportsRaw = db.sports ?? createSeedSportsData();
     const facilitiesRaw = db.facilities ?? createSeedFacilitiesData();
     const researchRaw = db.researchPortfolio ?? createSeedResearchPortfolio();
+    const placementsRaw = db.placements ?? createSeedDatabase().placements!;
+    const publicSettings = {
+      ...db.settings,
+      customHomeComponents: (db.settings.customHomeComponents ?? []).filter(
+        (c) => c.isActive && isRecordPublished(c),
+      ),
+    };
     res.json({
       categories: sortByOrder(db.categories),
-      pages: sortByOrder(db.pages.filter((p) => p.isPublished)),
-      leadership: sortByOrder(db.leadership),
-      departments: db.departments.map((d) => ({
-        ...d,
-        subPages: sortByOrder(d.subPages.filter((sp) => sp.isPublished)),
-        faculty: sortByOrder(d.faculty),
-        labs: sortByOrder(d.labs),
-      })),
-      sliders: sortByOrder(db.sliders.filter((s) => s.isActive)),
-      ticker: sortByOrder(db.ticker.filter((t) => t.isActive)),
-      events: sortByOrder(db.events),
-      documents: sortByOrder(db.documents),
-      gallery: sortByOrder(db.gallery),
-      telephoneDirectory: sortByOrder(db.telephoneDirectory),
+      pages: sortByOrder(db.pages.filter((p) => p.isPublished && isRecordPublished(p))),
+      leadership: sortByOrder(db.leadership.filter((l) => isRecordPublished(l))),
+      departments: db.departments
+        .filter((d) => isRecordPublished(d))
+        .map((d) => ({
+          ...d,
+          subPages: sortByOrder(d.subPages.filter((sp) => sp.isPublished && isRecordPublished(sp))),
+          faculty: sortByOrder(d.faculty),
+          labs: sortByOrder(d.labs),
+        })),
+      sliders: sortByOrder(db.sliders.filter((s) => s.isActive && isRecordPublished(s))),
+      ticker: sortByOrder(db.ticker.filter((t) => t.isActive && isRecordPublished(t))),
+      events: sortByOrder(db.events.filter((ev) => isRecordPublished(ev))),
+      documents: sortByOrder(db.documents.filter((doc) => isRecordPublished(doc))),
+      gallery: sortByOrder(db.gallery.filter((alb) => isRecordPublished(alb))),
+      telephoneDirectory: sortByOrder(db.telephoneDirectory.filter((td) => isRecordPublished(td))),
       alumni: {
         settings: alumniState.settings,
         profiles: stripAlumniCredentials(sortByOrder(alumniState.profiles.filter((p) => p.status === 'approved'))),
@@ -809,28 +825,36 @@ async function startServer() {
         events: sortByOrder(alumniState.events.filter((e) => e.isActive)),
         achievers: sortByOrder(alumniState.achievers ?? []),
       },
-      conferences: sortByOrder((db.conferences ?? []).filter((c) => c.isPublished)),
-      placements: db.placements ?? createSeedDatabase().placements,
+      conferences: sortByOrder((db.conferences ?? []).filter((c) => c.isPublished && isRecordPublished(c))),
+      placements: {
+        ...placementsRaw,
+        stats: sortByOrder((placementsRaw.stats ?? []).filter((s) => isRecordPublished(s))),
+        stories: sortByOrder((placementsRaw.stories ?? []).filter((s) => isRecordPublished(s))),
+        notices: sortByOrder((placementsRaw.notices ?? []).filter((n) => isRecordPublished(n))),
+        customSections: sortByOrder(
+          (placementsRaw.customSections ?? []).filter((cs) => cs.isPublished !== false && isRecordPublished(cs)),
+        ),
+      },
       sports: {
         config: sportsRaw.config,
-        facilities: sortByOrder((sportsRaw.facilities ?? []).filter((f) => f.isPublished)),
-        events: sortByOrder((sportsRaw.events ?? []).filter((e) => e.isPublished)),
-        achievements: sortByOrder(sportsRaw.achievements ?? []),
-        gallery: sortByOrder((sportsRaw.gallery ?? []).filter((g) => g.isPublished)),
-        notices: sortByOrder((sportsRaw.notices ?? []).filter((n) => n.isPublished)),
+        facilities: sortByOrder((sportsRaw.facilities ?? []).filter((f) => f.isPublished && isRecordPublished(f, 'moderationStatus'))),
+        events: sortByOrder((sportsRaw.events ?? []).filter((e) => e.isPublished && isRecordPublished(e, 'moderationStatus'))),
+        achievements: sortByOrder((sportsRaw.achievements ?? []).filter((a) => isRecordPublished(a))),
+        gallery: sortByOrder((sportsRaw.gallery ?? []).filter((g) => g.isPublished && isRecordPublished(g))),
+        notices: sortByOrder((sportsRaw.notices ?? []).filter((n) => n.isPublished && isRecordPublished(n))),
       },
       facilities: {
         config: facilitiesRaw.config,
-        items: sortByOrder((facilitiesRaw.items ?? []).filter((item) => item.isPublished)),
+        items: sortByOrder((facilitiesRaw.items ?? []).filter((item) => item.isPublished && isRecordPublished(item))),
       },
       researchPortfolio: {
         config: researchRaw.config,
-        projects: sortByOrder((researchRaw.projects ?? []).filter((p) => p.isPublished)),
-        patents: sortByOrder((researchRaw.patents ?? []).filter((p) => p.isPublished)),
+        projects: sortByOrder((researchRaw.projects ?? []).filter((p) => p.isPublished && isRecordPublished(p, 'moderationStatus'))),
+        patents: sortByOrder((researchRaw.patents ?? []).filter((p) => p.isPublished && isRecordPublished(p, 'moderationStatus'))),
       },
       feedbackSections: sortByOrder((db.feedbackSections ?? DEFAULT_FEEDBACK_SECTIONS).filter((s) => s.isActive)),
       feedbackSummary: computeFeedbackMetrics(db.feedbackEntries ?? []),
-      settings: db.settings,
+      settings: publicSettings,
       seo,
       hitCounter: {
         totalHits: hitCounter.totalHits,
@@ -1719,7 +1743,40 @@ async function startServer() {
     };
   }
 
-  // Admin overview data (all pages including unpublished, users, audit logs)
+  function getBrandShortCode(): string {
+    return (db.settings?.shortCode || db.settings?.institutionName || 'Institutional').trim() || 'Institutional';
+  }
+
+  function ensurePendingRevisions(): PendingContentRevision[] {
+    if (!Array.isArray(db.pendingContentRevisions)) {
+      db.pendingContentRevisions = [];
+    }
+    return db.pendingContentRevisions;
+  }
+
+  function recordModerationQueue(
+    actor: CmsUser,
+    params: {
+      entityTable: string;
+      entityId?: number | null;
+      actionType: 'create' | 'update' | 'delete';
+      entityTitle: string;
+      currentSnapshot?: Record<string, unknown> | null;
+      proposedPayload?: Record<string, unknown> | null;
+    },
+  ): PendingContentRevision {
+    const res = queuePendingRevision(ensurePendingRevisions(), {
+      ...params,
+      submittedByUserId: actor.id,
+      submittedByName: actor.fullName,
+      submittedByEmail: actor.email,
+      submittedByRole: actor.role,
+    });
+    db.pendingContentRevisions = res.revisions;
+    return res.created;
+  }
+
+  // Admin overview data (all pages including unpublished/pending, users, audit logs)
   app.get('/api/admin/state', requireAdmin(), (req, res) => {
     const currentUser = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const alumniState = ensureAlumniState();
@@ -1762,6 +1819,7 @@ async function startServer() {
       feedbackEntries: db.feedbackEntries ?? [],
       emailPushConfig: { ...DEFAULT_EMAIL_PUSH_CONFIG, ...(db.emailPushConfig || {}) },
       emailDispatchLogs: db.emailDispatchLogs ?? [],
+      pendingContentRevisions: currentUser.role === 'super_admin' ? ensurePendingRevisions() : [],
       settings: db.settings,
       seo: canUserAccessResource(currentUser, 'seo') || canUserAccessResource(currentUser, 'settings') ? seo : undefined,
       hitCounter: {
@@ -1888,18 +1946,33 @@ async function startServer() {
       const pageSlug = `${cleanSlug}-overview`;
       if (!db.pages.some((p) => p.slug === pageSlug)) {
         const nextPageId = Math.max(100, ...db.pages.map((p) => p.id)) + 1;
-        db.pages.push({
+        const direct = canPublishDirectly(actor.role);
+        const starter = {
           id: nextPageId,
           categorySlug: cat.slug,
           slug: pageSlug,
           title: `${cat.name}: Overview`,
           subtitle: `${cat.ugcCode} · Official Information`,
           contentHtml: `<h2>${cat.name}</h2><p>${cat.description}</p><h3>Highlights &amp; Guidelines</h3><ul><li>Managed dynamically via Admin Dashboard &rarr; Pages &amp; UGC Content.</li><li>Add more micro-pages under the <strong>${cat.name}</strong> category to expand the left sidebar menu automatically.</li></ul>`,
-          isPublished: true,
+          showShareBar: true,
+          isShareable: true,
+          isPublished: direct,
+          status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
           sortOrder: 1,
           updatedAt: new Date().toISOString().slice(0, 10),
           updatedBy: actor.fullName,
-        });
+        };
+        db.pages.push(starter);
+        if (!direct) {
+          recordModerationQueue(actor, {
+            entityTable: 'pages',
+            entityId: starter.id,
+            actionType: 'create',
+            entityTitle: starter.title,
+            currentSnapshot: null,
+            proposedPayload: { ...starter, isPublished: true, status: 'published' },
+          });
+        }
       }
     }
 
@@ -1972,7 +2045,7 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  // Pages CRUD (enforces granular per-category & per-page RBAC)
+  // Pages CRUD (enforces granular per-category & per-page RBAC + Super Admin moderation)
   app.post('/api/admin/pages', requireAdmin('pages'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const {
@@ -1984,6 +2057,7 @@ async function startServer() {
       attachedPdfUrl,
       attachedPdfLabel,
       showShareBar,
+      isShareable,
       metaDescription,
       isPublished,
     } = req.body;
@@ -2015,6 +2089,14 @@ async function startServer() {
       return;
     }
     const nextId = Math.max(100, ...db.pages.map((p) => p.id)) + 1;
+    const shareFlag =
+      isShareable !== undefined
+        ? Boolean(isShareable)
+        : showShareBar !== undefined
+          ? Boolean(showShareBar)
+          : true;
+    const desiredPublished = Boolean(isPublished ?? true);
+    const direct = canPublishDirectly(actor.role);
     const created = {
       id: nextId,
       categorySlug,
@@ -2024,14 +2106,36 @@ async function startServer() {
       contentHtml: String(contentHtml || '<p></p>'),
       attachedPdfUrl: attachedPdfUrl ? String(attachedPdfUrl).trim() : undefined,
       attachedPdfLabel: attachedPdfLabel ? String(attachedPdfLabel).trim() : undefined,
-      showShareBar: showShareBar !== undefined ? Boolean(showShareBar) : true,
+      showShareBar: shareFlag,
+      isShareable: shareFlag,
       metaDescription: metaDescription ? String(metaDescription).trim() : undefined,
-      isPublished: Boolean(isPublished ?? true),
+      isPublished: direct ? desiredPublished : false,
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: db.pages.filter((p) => p.categorySlug === categorySlug).length + 1,
       updatedAt: new Date().toISOString().slice(0, 10),
       updatedBy: actor.fullName,
     };
     db.pages.push(created);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'pages',
+        entityId: created.id,
+        actionType: 'create',
+        entityTitle: created.title,
+        currentSnapshot: null,
+        proposedPayload: { ...created, isPublished: desiredPublished, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_PAGE', 'Page', created.title);
+      saveDatabase();
+      res.status(202).json({
+        ok: true,
+        queuedForApproval: true,
+        revision,
+        item: created,
+        message: `"${created.title}" submitted for Super Admin approval before going live.`,
+      });
+      return;
+    }
     addAudit(actor, 'CREATE_PAGE', 'Page', created.title);
     saveDatabase();
     res.status(201).json(created);
@@ -2077,6 +2181,7 @@ async function startServer() {
       attachedPdfUrl,
       attachedPdfLabel,
       showShareBar,
+      isShareable,
       metaDescription,
       sortOrder,
     } = req.body;
@@ -2093,18 +2198,51 @@ async function startServer() {
         return;
       }
     }
-    if (title !== undefined) page.title = String(title);
-    if (subtitle !== undefined) page.subtitle = String(subtitle);
-    if (contentHtml !== undefined) page.contentHtml = String(contentHtml);
-    if (categorySlug !== undefined) page.categorySlug = categorySlug;
-    if (isPublished !== undefined) page.isPublished = Boolean(isPublished);
-    if (showShareBar !== undefined) page.showShareBar = Boolean(showShareBar);
-    if (metaDescription !== undefined) page.metaDescription = String(metaDescription).trim() || undefined;
-    if (sortOrder !== undefined) page.sortOrder = Number(sortOrder);
-    if (attachedPdfUrl !== undefined) page.attachedPdfUrl = String(attachedPdfUrl).trim() || undefined;
-    if (attachedPdfLabel !== undefined) page.attachedPdfLabel = String(attachedPdfLabel).trim() || undefined;
-    page.updatedAt = new Date().toISOString().slice(0, 10);
-    page.updatedBy = actor.fullName;
+    const sharePatch =
+      isShareable !== undefined
+        ? Boolean(isShareable)
+        : showShareBar !== undefined
+          ? Boolean(showShareBar)
+          : undefined;
+    const patch: Record<string, unknown> = {
+      ...(title !== undefined ? { title: String(title) } : {}),
+      ...(subtitle !== undefined ? { subtitle: String(subtitle) } : {}),
+      ...(contentHtml !== undefined ? { contentHtml: String(contentHtml) } : {}),
+      ...(categorySlug !== undefined ? { categorySlug } : {}),
+      ...(isPublished !== undefined ? { isPublished: Boolean(isPublished) } : {}),
+      ...(sharePatch !== undefined ? { showShareBar: sharePatch, isShareable: sharePatch } : {}),
+      ...(metaDescription !== undefined ? { metaDescription: String(metaDescription).trim() || undefined } : {}),
+      ...(sortOrder !== undefined ? { sortOrder: Number(sortOrder) } : {}),
+      ...(attachedPdfUrl !== undefined ? { attachedPdfUrl: String(attachedPdfUrl).trim() || undefined } : {}),
+      ...(attachedPdfLabel !== undefined ? { attachedPdfLabel: String(attachedPdfLabel).trim() || undefined } : {}),
+      updatedAt: new Date().toISOString().slice(0, 10),
+      updatedBy: actor.fullName,
+    };
+
+    if (!canPublishDirectly(actor.role)) {
+      const currentSnapshot = structuredClone(page) as unknown as Record<string, unknown>;
+      const proposedPayload = { ...currentSnapshot, ...patch, status: 'published' };
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'pages',
+        entityId: page.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || page.title),
+        currentSnapshot,
+        proposedPayload,
+      });
+      addAudit(actor, 'QUEUE_UPDATE_PAGE', 'Page', page.title);
+      saveDatabase();
+      res.status(202).json({
+        ok: true,
+        queuedForApproval: true,
+        revision,
+        item: page,
+        message: `Changes to "${page.title}" queued for Super Admin approval. Live content remains unchanged.`,
+      });
+      return;
+    }
+
+    Object.assign(page, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_PAGE', 'Page', page.title);
     saveDatabase();
     res.json(page);
@@ -2118,8 +2256,28 @@ async function startServer() {
       res.status(404).json({ error: 'Page not found.' });
       return;
     }
-    if (!canUserAccessPage(actor, db.pages[idx])) {
+    const target = db.pages[idx];
+    if (!canUserAccessPage(actor, target)) {
       res.status(403).json({ error: 'RBAC Restriction: You are not authorized to delete this page.' });
+      return;
+    }
+    if (!canPublishDirectly(actor.role)) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'pages',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: structuredClone(target) as unknown as Record<string, unknown>,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_PAGE', 'Page', target.title);
+      saveDatabase();
+      res.status(202).json({
+        ok: true,
+        queuedForApproval: true,
+        revision,
+        message: `Deletion of "${target.title}" queued for Super Admin approval.`,
+      });
       return;
     }
     const [removed] = db.pages.splice(idx, 1);
@@ -2128,7 +2286,7 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  // Department microsite sub-pages, faculty & labs CRUD (enforces department_admin scoping!)
+  // Department microsite sub-pages, faculty & labs CRUD (enforces department_admin scoping + moderation)
   app.post(
     '/api/admin/departments/:deptId/subpages',
     requireAdmin('departments', (req) => Number(req.params.deptId)),
@@ -2140,13 +2298,15 @@ async function startServer() {
         res.status(404).json({ error: 'Department not found.' });
         return;
       }
-      const { title, slug, pageType, contentHtml, photos, items, isPublished } = req.body;
+      const { title, slug, pageType, contentHtml, photos, items, isPublished, isShareable } = req.body;
       if (!title || !slug) {
         res.status(400).json({ error: 'Title and slug are required.' });
         return;
       }
       const cleanSlug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '-');
       const nextId = Math.max(100, ...dept.subPages.map((s) => s.id)) + 1;
+      const desiredPublished = Boolean(isPublished ?? true);
+      const direct = canPublishDirectly(actor.role);
       const subPage = {
         id: nextId,
         departmentId: deptId,
@@ -2157,10 +2317,32 @@ async function startServer() {
         photos: Array.isArray(photos) ? photos : [],
         items: Array.isArray(items) ? items : [],
         sortOrder: dept.subPages.length + 1,
-        isPublished: Boolean(isPublished ?? true),
+        isPublished: direct ? desiredPublished : false,
+        isShareable: isShareable !== undefined ? Boolean(isShareable) : true,
+        status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
         updatedAt: new Date().toISOString().slice(0, 10),
       };
       dept.subPages.push(subPage);
+      if (!direct) {
+        const revision = recordModerationQueue(actor, {
+          entityTable: 'department_subpages',
+          entityId: subPage.id,
+          actionType: 'create',
+          entityTitle: `${dept.shortName} · ${subPage.title}`,
+          currentSnapshot: null,
+          proposedPayload: { ...subPage, isPublished: desiredPublished, status: 'published' },
+        });
+        addAudit(actor, 'QUEUE_CREATE_DEPT_SUBPAGE', dept.shortName, subPage.title);
+        saveDatabase();
+        res.status(202).json({
+          ok: true,
+          queuedForApproval: true,
+          revision,
+          item: subPage,
+          message: `"${subPage.title}" submitted for Super Admin approval before publishing.`,
+        });
+        return;
+      }
       addAudit(actor, 'CREATE_DEPT_SUBPAGE', dept.shortName, subPage.title);
       saveDatabase();
       res.status(201).json(subPage);
@@ -2198,17 +2380,40 @@ async function startServer() {
         res.status(404).json({ error: 'Department sub-page not found.' });
         return;
       }
-      if (req.body.title !== undefined) sub.title = String(req.body.title);
-      if (req.body.slug !== undefined) {
-        sub.slug = String(req.body.slug).toLowerCase().replace(/[^a-z0-9-]/g, '-');
+      const patch: Record<string, unknown> = {
+        ...(req.body.title !== undefined ? { title: String(req.body.title) } : {}),
+        ...(req.body.slug !== undefined ? { slug: String(req.body.slug).toLowerCase().replace(/[^a-z0-9-]/g, '-') } : {}),
+        ...(req.body.pageType !== undefined ? { pageType: req.body.pageType } : {}),
+        ...(req.body.contentHtml !== undefined ? { contentHtml: String(req.body.contentHtml) } : {}),
+        ...(Array.isArray(req.body.photos) ? { photos: req.body.photos } : {}),
+        ...(Array.isArray(req.body.items) ? { items: req.body.items } : {}),
+        ...(req.body.sortOrder !== undefined ? { sortOrder: Number(req.body.sortOrder) } : {}),
+        ...(req.body.isPublished !== undefined ? { isPublished: Boolean(req.body.isPublished) } : {}),
+        ...(req.body.isShareable !== undefined ? { isShareable: Boolean(req.body.isShareable) } : {}),
+        updatedAt: new Date().toISOString().slice(0, 10),
+      };
+      if (!canPublishDirectly(actor.role)) {
+        const currentSnapshot = structuredClone(sub) as unknown as Record<string, unknown>;
+        const revision = recordModerationQueue(actor, {
+          entityTable: 'department_subpages',
+          entityId: sub.id,
+          actionType: 'update',
+          entityTitle: `${dept.shortName} · ${String(patch.title || sub.title)}`,
+          currentSnapshot,
+          proposedPayload: { ...currentSnapshot, ...patch, status: 'published' },
+        });
+        addAudit(actor, 'QUEUE_UPDATE_DEPT_SUBPAGE', dept.shortName, sub.title);
+        saveDatabase();
+        res.status(202).json({
+          ok: true,
+          queuedForApproval: true,
+          revision,
+          item: sub,
+          message: `Edits to "${sub.title}" queued for Super Admin approval.`,
+        });
+        return;
       }
-      if (req.body.pageType !== undefined) sub.pageType = req.body.pageType;
-      if (req.body.contentHtml !== undefined) sub.contentHtml = String(req.body.contentHtml);
-      if (Array.isArray(req.body.photos)) sub.photos = req.body.photos;
-      if (Array.isArray(req.body.items)) sub.items = req.body.items;
-      if (req.body.sortOrder !== undefined) sub.sortOrder = Number(req.body.sortOrder);
-      if (req.body.isPublished !== undefined) sub.isPublished = Boolean(req.body.isPublished);
-      sub.updatedAt = new Date().toISOString().slice(0, 10);
+      Object.assign(sub, patch, { status: 'published' });
       addAudit(actor, 'UPDATE_DEPT_SUBPAGE', dept.shortName, sub.title);
       saveDatabase();
       res.json(sub);
@@ -2230,6 +2435,26 @@ async function startServer() {
       const idx = dept.subPages.findIndex((s) => s.id === subId);
       if (idx === -1) {
         res.status(404).json({ error: 'Sub-page not found.' });
+        return;
+      }
+      const target = dept.subPages[idx];
+      if (!canPublishDirectly(actor.role)) {
+        const revision = recordModerationQueue(actor, {
+          entityTable: 'department_subpages',
+          entityId: target.id,
+          actionType: 'delete',
+          entityTitle: `${dept.shortName} · ${target.title}`,
+          currentSnapshot: structuredClone(target) as unknown as Record<string, unknown>,
+          proposedPayload: null,
+        });
+        addAudit(actor, 'QUEUE_DELETE_DEPT_SUBPAGE', dept.shortName, target.title);
+        saveDatabase();
+        res.status(202).json({
+          ok: true,
+          queuedForApproval: true,
+          revision,
+          message: `Deletion of "${target.title}" queued for Super Admin approval.`,
+        });
         return;
       }
       const [removed] = dept.subPages.splice(idx, 1);
@@ -2515,6 +2740,8 @@ async function startServer() {
       vision: String(vision || 'To deliver excellence in technical education and applied research.'),
       mission: String(mission || 'Prepare industry-ready engineers with strong ethical foundations.'),
       heroImageUrl: String(heroImageUrl || '/src/assets/images/hero_robotics_lab_1794512596365.jpg'),
+      isShareable: req.body.isShareable !== undefined ? Boolean(req.body.isShareable) : true,
+      status: 'published' as ContentModerationStatus,
       subPages: [
         {
           id: nextId * 100 + 1,
@@ -2524,6 +2751,8 @@ async function startServer() {
           contentHtml: `<h2>About ${String(name).trim()}</h2><p>${String(overview || 'Department profile and academic highlights.')}</p>`,
           sortOrder: 1,
           isPublished: true,
+          isShareable: true,
+          status: 'published' as ContentModerationStatus,
           updatedAt: new Date().toISOString().slice(0, 10),
         },
         {
@@ -2534,6 +2763,8 @@ async function startServer() {
           contentHtml: `<h2>Message from ${String(hodName || 'Head of Department')}</h2><p>${String(hodMessage || 'Welcome to our department.')}</p>`,
           sortOrder: 2,
           isPublished: true,
+          isShareable: true,
+          status: 'published' as ContentModerationStatus,
           updatedAt: new Date().toISOString().slice(0, 10),
         },
       ],
@@ -2556,6 +2787,7 @@ async function startServer() {
         res.status(404).json({ error: 'Department not found.' });
         return;
       }
+      const patch: Record<string, unknown> = {};
       const fields = [
         'name',
         'shortName',
@@ -2570,17 +2802,44 @@ async function startServer() {
       ] as const;
       for (const f of fields) {
         if (req.body[f] !== undefined) {
-          (dept as unknown as Record<string, string>)[f] = String(req.body[f]);
+          patch[f] = String(req.body[f]);
         }
       }
-      if (req.body.establishedYear !== undefined) dept.establishedYear = Number(req.body.establishedYear);
-      if (req.body.intakeCapacity !== undefined) dept.intakeCapacity = Number(req.body.intakeCapacity);
+      if (req.body.establishedYear !== undefined) patch.establishedYear = Number(req.body.establishedYear);
+      if (req.body.intakeCapacity !== undefined) patch.intakeCapacity = Number(req.body.intakeCapacity);
       if (req.body.library !== undefined) {
-        dept.library = req.body.library ? { ...req.body.library } : undefined;
+        patch.library = req.body.library ? { ...req.body.library } : undefined;
       }
       if (Array.isArray(req.body.facultyFieldSchema)) {
-        dept.facultyFieldSchema = req.body.facultyFieldSchema.map((s: unknown) => String(s).trim()).filter(Boolean);
+        patch.facultyFieldSchema = req.body.facultyFieldSchema.map((s: unknown) => String(s).trim()).filter(Boolean);
       }
+      if (req.body.isShareable !== undefined) {
+        patch.isShareable = Boolean(req.body.isShareable);
+      }
+
+      if (!canPublishDirectly(actor.role)) {
+        const currentSnapshot = structuredClone(dept) as unknown as Record<string, unknown>;
+        const revision = recordModerationQueue(actor, {
+          entityTable: 'departments',
+          entityId: dept.id,
+          actionType: 'update',
+          entityTitle: String(patch.name || dept.name),
+          currentSnapshot,
+          proposedPayload: { ...currentSnapshot, ...patch, status: 'published' },
+        });
+        addAudit(actor, 'QUEUE_UPDATE_DEPARTMENT', 'Department', dept.name);
+        saveDatabase();
+        res.status(202).json({
+          ok: true,
+          queuedForApproval: true,
+          revision,
+          item: dept,
+          message: `Updates to "${dept.name}" queued for Super Admin approval.`,
+        });
+        return;
+      }
+
+      Object.assign(dept, patch, { status: 'published' });
       addAudit(actor, 'UPDATE_DEPARTMENT', 'Department', dept.name);
       saveDatabase();
       res.json(dept);
@@ -2653,6 +2912,7 @@ async function startServer() {
       res.status(400).json({ error: 'Slide title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(1, ...db.sliders.map((s) => s.id)) + 1;
     const slide = {
       id: nextId,
@@ -2662,9 +2922,24 @@ async function startServer() {
       ctaLabel: String(ctaLabel || 'Learn More'),
       ctaLink: String(ctaLink || '/page/about-overview'),
       sortOrder: db.sliders.length + 1,
-      isActive: Boolean(isActive ?? true),
+      isActive: direct ? Boolean(isActive ?? true) : false,
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
     };
     db.sliders.push(slide);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sliders',
+        entityId: slide.id,
+        actionType: 'create',
+        entityTitle: slide.title,
+        currentSnapshot: null,
+        proposedPayload: { ...slide, isActive: Boolean(isActive ?? true), status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_SLIDE', 'Slider', slide.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: slide, message: `Hero slide "${slide.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_SLIDE', 'Slider', slide.title);
     saveDatabase();
     res.status(201).json(slide);
@@ -2690,12 +2965,29 @@ async function startServer() {
       res.status(404).json({ error: 'Slide not found.' });
       return;
     }
-    if (req.body.title !== undefined) slide.title = String(req.body.title);
-    if (req.body.caption !== undefined) slide.caption = String(req.body.caption);
-    if (req.body.imageUrl !== undefined) slide.imageUrl = String(req.body.imageUrl);
-    if (req.body.ctaLabel !== undefined) slide.ctaLabel = String(req.body.ctaLabel);
-    if (req.body.ctaLink !== undefined) slide.ctaLink = String(req.body.ctaLink);
-    if (req.body.isActive !== undefined) slide.isActive = Boolean(req.body.isActive);
+    const patch: Record<string, unknown> = {};
+    if (req.body.title !== undefined) patch.title = String(req.body.title);
+    if (req.body.caption !== undefined) patch.caption = String(req.body.caption);
+    if (req.body.imageUrl !== undefined) patch.imageUrl = String(req.body.imageUrl);
+    if (req.body.ctaLabel !== undefined) patch.ctaLabel = String(req.body.ctaLabel);
+    if (req.body.ctaLink !== undefined) patch.ctaLink = String(req.body.ctaLink);
+    if (req.body.isActive !== undefined) patch.isActive = Boolean(req.body.isActive);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(slide) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sliders',
+        entityId: slide.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || slide.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_SLIDE', 'Slider', slide.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: slide, message: `Updates to slide "${slide.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(slide, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_SLIDE', 'Slider', slide.title);
     saveDatabase();
     res.json(slide);
@@ -2706,6 +2998,22 @@ async function startServer() {
     const idx = db.sliders.findIndex((s) => s.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Slide not found.' });
+      return;
+    }
+    const target = db.sliders[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sliders',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_SLIDE', 'Slider', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of slide "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = db.sliders.splice(idx, 1);
@@ -2721,6 +3029,7 @@ async function startServer() {
       res.status(400).json({ error: 'Ticker text is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(1, ...db.ticker.map((t) => t.id)) + 1;
     db.ticker.forEach((t, idx) => {
       t.sortOrder = (t.sortOrder ?? idx + 1) + 1;
@@ -2730,10 +3039,25 @@ async function startServer() {
       text: String(text),
       linkUrl: String(linkUrl || '/page/circulars-notices'),
       badgeText: badgeText ? String(badgeText) : 'Notice',
-      isActive: true,
+      isActive: direct,
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: 1,
     };
     db.ticker.unshift(item);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'ticker',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: item.text,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isActive: true, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_TICKER', 'Ticker', item.text);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Ticker notice "${item.text}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_TICKER', 'Ticker', item.text);
     saveDatabase();
     res.status(201).json(item);
@@ -2759,6 +3083,22 @@ async function startServer() {
       res.status(404).json({ error: 'Ticker item not found.' });
       return;
     }
+    const target = db.ticker[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'ticker',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.text,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_TICKER', 'Ticker', target.text);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of ticker item submitted for Super Admin approval.` });
+      return;
+    }
     const [removed] = db.ticker.splice(idx, 1);
     addAudit(actor, 'DELETE_TICKER', 'Ticker', removed.text);
     saveDatabase();
@@ -2767,11 +3107,12 @@ async function startServer() {
 
   app.post('/api/admin/events', requireAdmin('sliders_events'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
-    const { title, eventDate, category, summary, contentHtml, imageUrl, isFeatured } = req.body;
+    const { title, eventDate, category, summary, contentHtml, imageUrl, isFeatured, isShareable } = req.body;
     if (!title || !eventDate) {
       res.status(400).json({ error: 'Event title and date are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(1, ...db.events.map((e) => e.id)) + 1;
     db.events.forEach((e, idx) => {
       e.sortOrder = (e.sortOrder ?? idx + 1) + 1;
@@ -2785,9 +3126,25 @@ async function startServer() {
       contentHtml: String(contentHtml || `<p>${summary || ''}</p>`),
       imageUrl: imageUrl ? String(imageUrl) : undefined,
       isFeatured: Boolean(isFeatured ?? true),
+      isShareable: isShareable !== undefined ? Boolean(isShareable) : true,
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: 1,
     };
     db.events.unshift(ev);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'campus_events',
+        entityId: ev.id,
+        actionType: 'create',
+        entityTitle: ev.title,
+        currentSnapshot: null,
+        proposedPayload: { ...ev, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_EVENT', ev.category, ev.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: ev, message: `Event "${ev.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_EVENT', ev.category, ev.title);
     saveDatabase();
     res.status(201).json(ev);
@@ -2813,14 +3170,32 @@ async function startServer() {
       res.status(404).json({ error: 'Event not found.' });
       return;
     }
-    if (req.body.title !== undefined) ev.title = String(req.body.title);
-    if (req.body.eventDate !== undefined) ev.eventDate = String(req.body.eventDate);
-    if (req.body.category !== undefined) ev.category = req.body.category;
-    if (req.body.summary !== undefined) ev.summary = String(req.body.summary);
-    if (req.body.contentHtml !== undefined) ev.contentHtml = String(req.body.contentHtml);
-    if (req.body.imageUrl !== undefined) ev.imageUrl = req.body.imageUrl ? String(req.body.imageUrl) : undefined;
-    if (req.body.isFeatured !== undefined) ev.isFeatured = Boolean(req.body.isFeatured);
-    if (req.body.sortOrder !== undefined) ev.sortOrder = Number(req.body.sortOrder);
+    const patch: Record<string, unknown> = {};
+    if (req.body.title !== undefined) patch.title = String(req.body.title);
+    if (req.body.eventDate !== undefined) patch.eventDate = String(req.body.eventDate);
+    if (req.body.category !== undefined) patch.category = req.body.category;
+    if (req.body.summary !== undefined) patch.summary = String(req.body.summary);
+    if (req.body.contentHtml !== undefined) patch.contentHtml = String(req.body.contentHtml);
+    if (req.body.imageUrl !== undefined) patch.imageUrl = req.body.imageUrl ? String(req.body.imageUrl) : undefined;
+    if (req.body.isFeatured !== undefined) patch.isFeatured = Boolean(req.body.isFeatured);
+    if (req.body.isShareable !== undefined) patch.isShareable = Boolean(req.body.isShareable);
+    if (req.body.sortOrder !== undefined) patch.sortOrder = Number(req.body.sortOrder);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(ev) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'campus_events',
+        entityId: ev.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || ev.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_EVENT', ev.category, ev.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: ev, message: `Updates to "${ev.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(ev, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_EVENT', ev.category, ev.title);
     saveDatabase();
     res.json(ev);
@@ -2831,6 +3206,22 @@ async function startServer() {
     const idx = db.events.findIndex((e) => e.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Event not found.' });
+      return;
+    }
+    const target = db.events[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'campus_events',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_EVENT', 'Event', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = db.events.splice(idx, 1);
@@ -2847,6 +3238,7 @@ async function startServer() {
       res.status(400).json({ error: 'Role title and officer name are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(1, ...db.leadership.map((l) => l.id)) + 1;
     const maxOrder = Math.max(0, ...db.leadership.map((l) => l.sortOrder ?? 0));
     const profile = {
@@ -2859,10 +3251,25 @@ async function startServer() {
       photoUrl: String(photoUrl || '/src/assets/images/leadership_principal_1794512597061.jpg'),
       bio: String(bio || ''),
       committeeGroup: String(committeeGroup || 'Statutory Officer').trim() || 'Statutory Officer',
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: sortOrder !== undefined && Number(sortOrder) > 0 ? Number(sortOrder) : maxOrder + 1,
     };
     db.leadership.push(profile);
     db.leadership = sortByOrder(db.leadership);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'leadership',
+        entityId: profile.id,
+        actionType: 'create',
+        entityTitle: `${profile.name} (${profile.roleTitle})`,
+        currentSnapshot: null,
+        proposedPayload: { ...profile, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_LEADERSHIP', 'Leadership', profile.name);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: profile, message: `Leadership profile "${profile.name}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_LEADERSHIP', 'Leadership', `${profile.name} (${profile.roleTitle})`);
     saveDatabase();
     res.status(201).json(profile);
@@ -2888,14 +3295,31 @@ async function startServer() {
       res.status(404).json({ error: 'Leadership profile not found.' });
       return;
     }
+    const patch: Record<string, unknown> = {};
     for (const f of ['roleTitle', 'name', 'qualification', 'email', 'phone', 'photoUrl', 'bio', 'committeeGroup'] as const) {
       if (req.body[f] !== undefined) {
-        (profile as unknown as Record<string, string>)[f] = String(req.body[f]);
+        patch[f] = String(req.body[f]);
       }
     }
     if (req.body.sortOrder !== undefined && Number(req.body.sortOrder) > 0) {
-      profile.sortOrder = Number(req.body.sortOrder);
+      patch.sortOrder = Number(req.body.sortOrder);
     }
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(profile) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'leadership',
+        entityId: profile.id,
+        actionType: 'update',
+        entityTitle: String(patch.name || profile.name),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_LEADERSHIP', 'Leadership', profile.name);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: profile, message: `Updates to "${profile.name}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(profile, patch, { status: 'published' });
     db.leadership = sortByOrder(db.leadership);
     addAudit(actor, 'UPDATE_LEADERSHIP', 'Leadership', profile.name);
     saveDatabase();
@@ -2907,6 +3331,22 @@ async function startServer() {
     const idx = db.leadership.findIndex((l) => l.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Leadership profile not found.' });
+      return;
+    }
+    const target = db.leadership[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'leadership',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.name,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_LEADERSHIP', 'Leadership', target.name);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.name}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = db.leadership.splice(idx, 1);
@@ -2923,6 +3363,7 @@ async function startServer() {
       res.status(400).json({ error: 'Album title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(1, ...db.gallery.map((g) => g.id)) + 1;
     db.gallery.forEach((g, idx) => {
       g.sortOrder = (g.sortOrder ?? idx + 1) + 1;
@@ -2934,6 +3375,7 @@ async function startServer() {
       category: String(category || 'Campus'),
       eventDate: String(eventDate || new Date().toISOString().slice(0, 10)),
       coverUrl: cover,
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: 1,
       photos: [
         {
@@ -2945,6 +3387,20 @@ async function startServer() {
       ],
     };
     db.gallery.unshift(album);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'gallery_albums',
+        entityId: album.id,
+        actionType: 'create',
+        entityTitle: album.title,
+        currentSnapshot: null,
+        proposedPayload: { ...album, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_ALBUM', 'Gallery', album.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: album, message: `Gallery album "${album.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_ALBUM', 'Gallery', album.title);
     saveDatabase();
     res.status(201).json(album);
@@ -2968,6 +3424,22 @@ async function startServer() {
     const idx = db.gallery.findIndex((g) => g.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Album not found.' });
+      return;
+    }
+    const target = db.gallery[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'gallery_albums',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_ALBUM', 'Gallery', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of album "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = db.gallery.splice(idx, 1);
@@ -3027,6 +3499,7 @@ async function startServer() {
       res.status(400).json({ error: 'Section and officer name are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(1, ...db.telephoneDirectory.map((t) => t.id)) + 1;
     const maxOrder = Math.max(0, ...db.telephoneDirectory.map((t) => t.sortOrder ?? t.id));
     const entry = {
@@ -3037,9 +3510,24 @@ async function startServer() {
       extension: String(extension || ''),
       directPhone: String(directPhone || ''),
       email: String(email || ''),
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: maxOrder + 1,
     };
     db.telephoneDirectory.push(entry);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'telephone_directory',
+        entityId: entry.id,
+        actionType: 'create',
+        entityTitle: `${entry.section} - ${entry.officerName}`,
+        currentSnapshot: null,
+        proposedPayload: { ...entry, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_ADD_DIRECTORY_ENTRY', 'Directory', entry.officerName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: entry, message: `Directory entry "${entry.officerName}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'ADD_DIRECTORY_ENTRY', 'Directory', `${entry.section} - ${entry.officerName}`);
     saveDatabase();
     res.status(201).json(entry);
@@ -3063,6 +3551,22 @@ async function startServer() {
     const idx = db.telephoneDirectory.findIndex((t) => t.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Directory entry not found.' });
+      return;
+    }
+    const target = db.telephoneDirectory[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'telephone_directory',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: `${target.section} - ${target.officerName}`,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_DIRECTORY_ENTRY', 'Directory', target.officerName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of directory entry "${target.officerName}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = db.telephoneDirectory.splice(idx, 1);
@@ -3108,6 +3612,7 @@ async function startServer() {
       } catch {
         displayFileName = urlCheck.normalizedUrl.slice(0, 80);
       }
+      const direct = canPublishDirectly(actor.role);
       const doc = {
         id: nextId,
         title: String(title).trim(),
@@ -3120,9 +3625,24 @@ async function startServer() {
         uploadedAt: new Date().toISOString().slice(0, 10),
         uploadedBy: actor.fullName,
         isQuickLink: Boolean(isQuickLink ?? true),
+        status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
         sortOrder: 1,
       };
       db.documents.unshift(doc);
+      if (!direct) {
+        const revision = recordModerationQueue(actor, {
+          entityTable: 'documents',
+          entityId: doc.id,
+          actionType: 'create',
+          entityTitle: doc.title,
+          currentSnapshot: null,
+          proposedPayload: { ...doc, status: 'published' },
+        });
+        addAudit(actor, 'QUEUE_ADD_EXTERNAL_DOCUMENT', 'Document', doc.title);
+        saveDatabase();
+        res.status(202).json({ ok: true, queuedForApproval: true, revision, item: doc, message: `Document "${doc.title}" submitted for Super Admin approval.` });
+        return;
+      }
       addAudit(actor, 'ADD_EXTERNAL_DOCUMENT', 'Document', doc.title);
       saveDatabase();
       res.status(201).json(doc);
@@ -3161,6 +3681,7 @@ async function startServer() {
       fileUrl = `/uploads/${validation.safeFilename}`;
     }
 
+    const directDoc = canPublishDirectly(actor.role);
     const doc = {
       id: nextId,
       title: String(title).trim(),
@@ -3173,9 +3694,24 @@ async function startServer() {
       uploadedAt: new Date().toISOString().slice(0, 10),
       uploadedBy: actor.fullName,
       isQuickLink: Boolean(isQuickLink ?? true),
+      status: (directDoc ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: 1,
     };
     db.documents.unshift(doc);
+    if (!directDoc) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'documents',
+        entityId: doc.id,
+        actionType: 'create',
+        entityTitle: doc.title,
+        currentSnapshot: null,
+        proposedPayload: { ...doc, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPLOAD_DOCUMENT', 'Document', doc.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: doc, message: `Document "${doc.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'UPLOAD_DOCUMENT', 'Document', doc.title);
     saveDatabase();
     res.status(201).json(doc);
@@ -3201,13 +3737,29 @@ async function startServer() {
       res.status(404).json({ error: 'Document not found.' });
       return;
     }
+    const target = db.documents[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'documents',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_DOCUMENT', 'Document', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of document "${target.title}" queued for Super Admin approval.` });
+      return;
+    }
     const [removed] = db.documents.splice(idx, 1);
     addAudit(actor, 'DELETE_DOCUMENT', 'Document', removed.title);
     saveDatabase();
     res.json({ ok: true });
   });
 
-  // Homepage Custom HTML Components Builder CRUD (Super Admin or Content Editor)
+  // Homepage Custom HTML Components Builder CRUD (Super Admin publishes directly; others queue)
   app.post('/api/admin/home-components', requireAdmin('sliders_events'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const { title, placement, contentHtml, isActive } = req.body as {
@@ -3220,6 +3772,7 @@ async function startServer() {
       res.status(400).json({ error: 'Component title and HTML content are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const validPlacements: HomeComponentPlacement[] = [
       'after-hero',
       'after-about',
@@ -3236,10 +3789,25 @@ async function startServer() {
       title: String(title).trim(),
       placement: safePlacement,
       sortOrder: list.length + 1,
-      isActive: Boolean(isActive ?? true),
+      isActive: direct ? Boolean(isActive ?? true) : false,
+      status: direct ? 'published' : 'pending_approval',
       contentHtml: String(contentHtml),
     };
     db.settings.customHomeComponents = [...list, created];
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'home_components',
+        entityId: created.id,
+        actionType: 'create',
+        entityTitle: created.title,
+        currentSnapshot: null,
+        proposedPayload: { ...created, isActive: Boolean(isActive ?? true), status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_HOME_COMPONENT', 'HomeComponent', created.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: created, message: `Home component "${created.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_HOME_COMPONENT', 'HomeComponent', created.title);
     saveDatabase();
     res.status(201).json(created);
@@ -3272,11 +3840,28 @@ async function startServer() {
       res.status(404).json({ error: 'Homepage component not found.' });
       return;
     }
-    if (req.body.title !== undefined) comp.title = String(req.body.title).trim();
-    if (req.body.placement !== undefined) comp.placement = req.body.placement;
-    if (req.body.contentHtml !== undefined) comp.contentHtml = String(req.body.contentHtml);
-    if (req.body.isActive !== undefined) comp.isActive = Boolean(req.body.isActive);
-    if (req.body.sortOrder !== undefined) comp.sortOrder = Number(req.body.sortOrder);
+    const patch: Record<string, unknown> = {};
+    if (req.body.title !== undefined) patch.title = String(req.body.title).trim();
+    if (req.body.placement !== undefined) patch.placement = req.body.placement;
+    if (req.body.contentHtml !== undefined) patch.contentHtml = String(req.body.contentHtml);
+    if (req.body.isActive !== undefined) patch.isActive = Boolean(req.body.isActive);
+    if (req.body.sortOrder !== undefined) patch.sortOrder = Number(req.body.sortOrder);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(comp) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'home_components',
+        entityId: comp.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || comp.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_HOME_COMPONENT', 'HomeComponent', comp.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: comp, message: `Updates to "${comp.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(comp, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_HOME_COMPONENT', 'HomeComponent', comp.title);
     saveDatabase();
     res.json(comp);
@@ -3288,6 +3873,22 @@ async function startServer() {
     const idx = list.findIndex((c) => c.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Homepage component not found.' });
+      return;
+    }
+    const target = list[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'home_components',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_HOME_COMPONENT', 'HomeComponent', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = list.splice(idx, 1);
@@ -3454,20 +4055,21 @@ async function startServer() {
 
     const fmt = String(req.query.format || 'csv').toLowerCase();
     const stamp = new Date().toISOString().slice(0, 10);
+    const brandSlug = getBrandShortCode().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'campus';
     addAudit(actor, 'EXPORT_VISITOR_LOGS', 'Analytics', `Exported ${filtered.length} logs (${fmt.toUpperCase()})`);
     saveDatabase();
 
     if (fmt === 'json') {
-      res.setHeader('Content-Disposition', `attachment; filename="svcoer-visitor-logs-${stamp}.json"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${brandSlug}-visitor-logs-${stamp}.json"`);
       res.type('application/json').send(JSON.stringify(filtered, null, 2));
       return;
     }
     if (fmt === 'log' || fmt === 'txt') {
-      res.setHeader('Content-Disposition', `attachment; filename="svcoer-access-security-${stamp}.log"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${brandSlug}-access-security-${stamp}.log"`);
       res.type('text/plain').send(formatVisitorLogsCombinedText(filtered));
       return;
     }
-    res.setHeader('Content-Disposition', `attachment; filename="svcoer-visitor-logs-${stamp}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${brandSlug}-visitor-logs-${stamp}.csv"`);
     res.type('text/csv').send(formatVisitorLogsCsv(filtered, Boolean(securityConfig.maskExportedIps)));
   });
 
@@ -3708,6 +4310,8 @@ async function startServer() {
   app.put('/api/admin/settings', requireAdmin('settings'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
     const incoming = req.body || {};
+    const prevShortCode = String(db.settings.shortCode || 'SVCOER').trim();
+    const prevInstitutionName = String(db.settings.institutionName || '').trim();
     const nextPhotoMb = clampUploadLimitMb(
       incoming.maxPhotoUploadMb,
       db.settings.maxPhotoUploadMb ?? 2,
@@ -3736,9 +4340,23 @@ async function startServer() {
       ? normalizeSocialSharingConfig(incoming.socialSharing)
       : db.settings.socialSharing;
 
+    const nextShortCode = String(incoming.shortCode ?? db.settings.shortCode ?? '').trim() || prevShortCode;
+    const nextInstitutionName = String(incoming.institutionName ?? db.settings.institutionName ?? '').trim() || prevInstitutionName;
+
+    if (nextSocialSharing && (nextShortCode !== prevShortCode || !nextSocialSharing.defaultHashtags)) {
+      const cleanTag = nextShortCode.replace(/[^A-Za-z0-9_]/g, '') || nextShortCode;
+      const curTags = String(nextSocialSharing.defaultHashtags || '').split(',').map((t) => t.trim()).filter(Boolean);
+      const replacedTags = curTags.map((t) => (t.toLowerCase() === prevShortCode.toLowerCase() || t.toLowerCase() === 'svcoer' ? cleanTag : t));
+      if (replacedTags.length > 0) {
+        nextSocialSharing.defaultHashtags = Array.from(new Set(replacedTags)).join(',');
+      }
+    }
+
     db.settings = {
       ...db.settings,
       ...incoming,
+      shortCode: nextShortCode,
+      institutionName: nextInstitutionName,
       socialMediaLinks: nextSocialMediaLinks,
       socialLinks: Array.isArray(nextSocialMediaLinks)
         ? syncLegacySocialLinks(nextSocialMediaLinks)
@@ -3751,6 +4369,47 @@ async function startServer() {
           ? incoming.autoCropImages
           : (db.settings.autoCropImages ?? true),
     };
+
+    // Sync default SEO & Email Push sender identity when institution shortCode / name changes
+    if (nextShortCode !== prevShortCode || nextInstitutionName !== prevInstitutionName) {
+      const swapTokens = (text: string): string => {
+        let out = String(text || '');
+        if (prevShortCode && nextShortCode && prevShortCode !== nextShortCode) {
+          out = out.split(prevShortCode).join(nextShortCode);
+        }
+        if (nextShortCode && nextShortCode !== 'SVCOER') {
+          out = out.split('SVCOER').join(nextShortCode);
+        }
+        if (prevInstitutionName && nextInstitutionName && prevInstitutionName !== nextInstitutionName) {
+          out = out.split(prevInstitutionName).join(nextInstitutionName);
+        }
+        return out;
+      };
+      if (db.seo) {
+        db.seo = {
+          ...db.seo,
+          defaultTitle: swapTokens(db.seo.defaultTitle),
+          titleSuffix: swapTokens(db.seo.titleSuffix),
+          defaultDescription: swapTokens(db.seo.defaultDescription),
+          pageOverrides: (db.seo.pageOverrides || []).map((ov) => ({
+            ...ov,
+            title: swapTokens(ov.title),
+            description: swapTokens(ov.description),
+          })),
+        };
+      }
+      if (!db.emailPushConfig) {
+        db.emailPushConfig = structuredClone(DEFAULT_EMAIL_PUSH_CONFIG);
+      }
+      const curFromName = String(db.emailPushConfig.fromName || '').trim();
+      if (!curFromName || curFromName.includes(prevShortCode) || curFromName.includes('SVCOER') || curFromName === `${prevInstitutionName} Portal`) {
+        db.emailPushConfig = {
+          ...db.emailPushConfig,
+          fromName: `${nextInstitutionName} (${nextShortCode}) Portal`,
+        };
+      }
+    }
+
     addAudit(actor, 'UPDATE_SITE_SETTINGS', 'Settings', db.settings.institutionName);
     saveDatabase();
     res.json(db.settings);
@@ -4564,6 +5223,7 @@ async function startServer() {
       res.status(409).json({ error: `Conference slug "${cleanSlug}" already exists.` });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...db.conferences.map((c) => c.id)) + 1;
     const nextSort = Math.max(0, ...db.conferences.map((c) => c.sortOrder)) + 1;
     const created: Conference = {
@@ -4575,12 +5235,12 @@ async function startServer() {
       theme: String(b.theme || '').trim(),
       startDate: String(b.startDate || new Date().toISOString().slice(0, 10)).trim(),
       endDate: String(b.endDate || b.startDate || new Date().toISOString().slice(0, 10)).trim(),
-      venue: String(b.venue || "SVERI's COE Auditorium, Pandharpur").trim(),
+      venue: String(b.venue || "Campus Auditorium").trim(),
       mode: String(b.mode || 'Hybrid (On-Campus + Online)').trim(),
       organizingDepartment: String(b.organizingDepartment || 'All Engineering Departments').trim(),
       indexingPartners: Array.isArray(b.indexingPartners) ? b.indexingPartners.map(String) : [],
-      contactEmail: String(b.contactEmail || 'conference@coe.sveri.ac.in').trim(),
-      contactPhone: String(b.contactPhone || '+91-02186-216063').trim(),
+      contactEmail: String(b.contactEmail || db.settings.email || 'conference@coe.sveri.ac.in').trim(),
+      contactPhone: String(b.contactPhone || db.settings.phone || '+91-02186-216063').trim(),
       bannerUrl: String(b.bannerUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg').trim(),
       heroSlides:
         Array.isArray(b.heroSlides) && b.heroSlides.length > 0
@@ -4610,7 +5270,9 @@ async function startServer() {
       overviewHtml: String(b.overviewHtml || '<p>Conference overview and technical scope.</p>'),
       cfpHtml: String(b.cfpHtml || '<p>Original unpublished research papers are invited.</p>'),
       customSections: Array.isArray(b.customSections) ? b.customSections : [],
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      status: direct ? 'published' : 'pending_approval',
       isFeatured: Boolean(b.isFeatured ?? true),
       sortOrder: Number(b.sortOrder ?? nextSort),
       tracks: Array.isArray(b.tracks) ? b.tracks : [],
@@ -4620,6 +5282,20 @@ async function startServer() {
       feeTiers: Array.isArray(b.feeTiers) ? b.feeTiers : [],
     };
     db.conferences.push(created);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'conferences',
+        entityId: created.id,
+        actionType: 'create',
+        entityTitle: `${created.shortName} (${created.scope})`,
+        currentSnapshot: null,
+        proposedPayload: { ...created, isPublished: b.isPublished !== false, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_CONFERENCE', 'Conference', created.shortName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: created, message: `Conference "${created.shortName}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_CONFERENCE', 'Conference', `${created.shortName} (${created.scope})`);
     saveDatabase();
     res.status(201).json(created);
@@ -4658,7 +5334,22 @@ async function startServer() {
     }
     const patch = req.body as Partial<Conference>;
     const { id: _ignoreId, ...rest } = patch;
-    Object.assign(conf, rest);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(conf) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'conferences',
+        entityId: conf.id,
+        actionType: 'update',
+        entityTitle: String(rest.shortName || conf.shortName),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_CONFERENCE', 'Conference', conf.shortName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: conf, message: `Updates to "${conf.shortName}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(conf, rest, { status: 'published' });
     addAudit(actor, 'UPDATE_CONFERENCE', 'Conference', conf.shortName);
     saveDatabase();
     res.json(conf);
@@ -4670,6 +5361,22 @@ async function startServer() {
     const idx = list.findIndex((c) => c.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Conference not found.' });
+      return;
+    }
+    const target = list[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'conferences',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.shortName,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_CONFERENCE', 'Conference', target.shortName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.shortName}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = list.splice(idx, 1);
@@ -4776,12 +5483,13 @@ async function startServer() {
 
   app.post('/api/admin/research/projects', requireAdmin('conferences'), (req, res) => {
     const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
-    const rp = ensureResearchPortfolioState();
+    ensureResearchPortfolioState();
     const b = req.body || {};
     if (!String(b.title || '').trim()) {
       res.status(400).json({ error: 'Project title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const list = db.researchPortfolio!.projects;
     const nextId = Math.max(0, ...list.map((p) => p.id)) + 1;
     const item: ResearchProjectItem = {
@@ -4798,10 +5506,26 @@ async function startServer() {
       projectCode: String(b.projectCode || '').trim(),
       summary: String(b.summary || '').trim(),
       documentUrl: String(b.documentUrl || '').trim(),
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      moderationStatus: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder || list.length + 1),
     };
     list.push(item);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'research_projects',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: item.title,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_RESEARCH_PROJECT', 'ResearchProject', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Research project "${item.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_RESEARCH_PROJECT', 'ResearchProject', item.title);
     saveDatabase();
     res.status(201).json(item);
@@ -4831,20 +5555,38 @@ async function startServer() {
       return;
     }
     const b = req.body || {};
-    if (b.title !== undefined) item.title = String(b.title).trim();
-    if (b.fundingAgency !== undefined) item.fundingAgency = String(b.fundingAgency).trim();
-    if (b.principalInvestigator !== undefined) item.principalInvestigator = String(b.principalInvestigator).trim();
-    if (b.coInvestigator !== undefined) item.coInvestigator = String(b.coInvestigator).trim();
-    if (b.departmentCode !== undefined) item.departmentCode = String(b.departmentCode).trim();
-    if (b.grantAmountLakhs !== undefined) item.grantAmountLakhs = String(b.grantAmountLakhs).trim();
-    if (b.sanctionYear !== undefined) item.sanctionYear = String(b.sanctionYear).trim();
-    if (b.duration !== undefined) item.duration = String(b.duration).trim();
-    if (b.status !== undefined) item.status = String(b.status).trim();
-    if (b.projectCode !== undefined) item.projectCode = String(b.projectCode).trim();
-    if (b.summary !== undefined) item.summary = String(b.summary).trim();
-    if (b.documentUrl !== undefined) item.documentUrl = String(b.documentUrl).trim();
-    if (b.isPublished !== undefined) item.isPublished = Boolean(b.isPublished);
-    if (b.sortOrder !== undefined) item.sortOrder = Number(b.sortOrder);
+    const patch: Record<string, unknown> = {};
+    if (b.title !== undefined) patch.title = String(b.title).trim();
+    if (b.fundingAgency !== undefined) patch.fundingAgency = String(b.fundingAgency).trim();
+    if (b.principalInvestigator !== undefined) patch.principalInvestigator = String(b.principalInvestigator).trim();
+    if (b.coInvestigator !== undefined) patch.coInvestigator = String(b.coInvestigator).trim();
+    if (b.departmentCode !== undefined) patch.departmentCode = String(b.departmentCode).trim();
+    if (b.grantAmountLakhs !== undefined) patch.grantAmountLakhs = String(b.grantAmountLakhs).trim();
+    if (b.sanctionYear !== undefined) patch.sanctionYear = String(b.sanctionYear).trim();
+    if (b.duration !== undefined) patch.duration = String(b.duration).trim();
+    if (b.status !== undefined) patch.status = String(b.status).trim();
+    if (b.projectCode !== undefined) patch.projectCode = String(b.projectCode).trim();
+    if (b.summary !== undefined) patch.summary = String(b.summary).trim();
+    if (b.documentUrl !== undefined) patch.documentUrl = String(b.documentUrl).trim();
+    if (b.isPublished !== undefined) patch.isPublished = Boolean(b.isPublished);
+    if (b.isShareable !== undefined) patch.isShareable = Boolean(b.isShareable);
+    if (b.sortOrder !== undefined) patch.sortOrder = Number(b.sortOrder);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'research_projects',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || item.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_RESEARCH_PROJECT', 'ResearchProject', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, patch, { moderationStatus: 'published' });
     addAudit(actor, 'UPDATE_RESEARCH_PROJECT', 'ResearchProject', item.title);
     saveDatabase();
     res.json(item);
@@ -4857,6 +5599,22 @@ async function startServer() {
     const idx = list.findIndex((p) => p.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Research project not found.' });
+      return;
+    }
+    const target = list[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'research_projects',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_RESEARCH_PROJECT', 'ResearchProject', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = list.splice(idx, 1);
@@ -4873,6 +5631,7 @@ async function startServer() {
       res.status(400).json({ error: 'Patent / IPR / Start-up title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const list = db.researchPortfolio!.patents;
     const nextId = Math.max(0, ...list.map((p) => p.id)) + 1;
     const item: ResearchPatentItem = {
@@ -4887,10 +5646,26 @@ async function startServer() {
       partnerOrAgency: String(b.partnerOrAgency || '').trim(),
       summary: String(b.summary || '').trim(),
       externalUrl: String(b.externalUrl || '').trim(),
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      moderationStatus: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder || list.length + 1),
     };
     list.push(item);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'research_patents',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: item.title,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_RESEARCH_PATENT', 'ResearchPatent', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Patent/IPR entry "${item.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_RESEARCH_PATENT', 'ResearchPatent', item.title);
     saveDatabase();
     res.status(201).json(item);
@@ -4920,18 +5695,36 @@ async function startServer() {
       return;
     }
     const b = req.body || {};
-    if (b.itemType !== undefined) item.itemType = String(b.itemType).trim();
-    if (b.title !== undefined) item.title = String(b.title).trim();
-    if (b.inventorsOrLead !== undefined) item.inventorsOrLead = String(b.inventorsOrLead).trim();
-    if (b.departmentCode !== undefined) item.departmentCode = String(b.departmentCode).trim();
-    if (b.referenceNumber !== undefined) item.referenceNumber = String(b.referenceNumber).trim();
-    if (b.filingOrGrantDate !== undefined) item.filingOrGrantDate = String(b.filingOrGrantDate).trim();
-    if (b.status !== undefined) item.status = String(b.status).trim();
-    if (b.partnerOrAgency !== undefined) item.partnerOrAgency = String(b.partnerOrAgency).trim();
-    if (b.summary !== undefined) item.summary = String(b.summary).trim();
-    if (b.externalUrl !== undefined) item.externalUrl = String(b.externalUrl).trim();
-    if (b.isPublished !== undefined) item.isPublished = Boolean(b.isPublished);
-    if (b.sortOrder !== undefined) item.sortOrder = Number(b.sortOrder);
+    const patch: Record<string, unknown> = {};
+    if (b.itemType !== undefined) patch.itemType = String(b.itemType).trim();
+    if (b.title !== undefined) patch.title = String(b.title).trim();
+    if (b.inventorsOrLead !== undefined) patch.inventorsOrLead = String(b.inventorsOrLead).trim();
+    if (b.departmentCode !== undefined) patch.departmentCode = String(b.departmentCode).trim();
+    if (b.referenceNumber !== undefined) patch.referenceNumber = String(b.referenceNumber).trim();
+    if (b.filingOrGrantDate !== undefined) patch.filingOrGrantDate = String(b.filingOrGrantDate).trim();
+    if (b.status !== undefined) patch.status = String(b.status).trim();
+    if (b.partnerOrAgency !== undefined) patch.partnerOrAgency = String(b.partnerOrAgency).trim();
+    if (b.summary !== undefined) patch.summary = String(b.summary).trim();
+    if (b.externalUrl !== undefined) patch.externalUrl = String(b.externalUrl).trim();
+    if (b.isPublished !== undefined) patch.isPublished = Boolean(b.isPublished);
+    if (b.isShareable !== undefined) patch.isShareable = Boolean(b.isShareable);
+    if (b.sortOrder !== undefined) patch.sortOrder = Number(b.sortOrder);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'research_patents',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || item.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_RESEARCH_PATENT', 'ResearchPatent', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, patch, { moderationStatus: 'published' });
     addAudit(actor, 'UPDATE_RESEARCH_PATENT', 'ResearchPatent', item.title);
     saveDatabase();
     res.json(item);
@@ -4944,6 +5737,22 @@ async function startServer() {
     const idx = list.findIndex((p) => p.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Research patent / IPR entry not found.' });
+      return;
+    }
+    const target = list[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'research_patents',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_RESEARCH_PATENT', 'ResearchPatent', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = list.splice(idx, 1);
@@ -4985,6 +5794,7 @@ async function startServer() {
       res.status(400).json({ error: 'Academic year and branch are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...pl.stats.map((s) => s.id)) + 1;
     const stat: PlacementYearStat = {
       id: nextId,
@@ -4995,9 +5805,24 @@ async function startServer() {
       highestPackageLpa: Number(b.highestPackageLpa || 10),
       averagePackageLpa: Number(b.averagePackageLpa || 4.8),
       topRecruitersList: String(b.topRecruitersList || '').trim(),
+      status: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? pl.stats.length + 1),
     };
     pl.stats.push(stat);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_stats',
+        entityId: stat.id,
+        actionType: 'create',
+        entityTitle: `${stat.branch} (${stat.academicYear})`,
+        currentSnapshot: null,
+        proposedPayload: { ...stat, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_PLACEMENT_STAT', 'Placements', stat.branch);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: stat, message: `Placement stat "${stat.branch}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_PLACEMENT_STAT', 'Placements', `${stat.branch} (${stat.academicYear})`);
     saveDatabase();
     res.status(201).json(stat);
@@ -5011,7 +5836,23 @@ async function startServer() {
       res.status(404).json({ error: 'Placement stat not found.' });
       return;
     }
-    Object.assign(item, req.body);
+    const { id: _id, ...patch } = req.body as Partial<PlacementYearStat>;
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_stats',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: `${String(patch.branch || item.branch)} (${String(patch.academicYear || item.academicYear)})`,
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_PLACEMENT_STAT', 'Placements', item.branch);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.branch}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_PLACEMENT_STAT', 'Placements', item.branch);
     saveDatabase();
     res.json(item);
@@ -5023,6 +5864,22 @@ async function startServer() {
     const idx = pl.stats.findIndex((s) => s.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Placement stat not found.' });
+      return;
+    }
+    const target = pl.stats[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_stats',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: `${target.branch} (${target.academicYear})`,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_PLACEMENT_STAT', 'Placements', target.branch);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.branch}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = pl.stats.splice(idx, 1);
@@ -5039,6 +5896,7 @@ async function startServer() {
       res.status(400).json({ error: 'Student name and company / organization are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...pl.stories.map((s) => s.id)) + 1;
     const story: PlacementStory = {
       id: nextId,
@@ -5053,9 +5911,25 @@ async function startServer() {
       headline: String(b.headline || '').trim(),
       roleOrAward: String(b.roleOrAward || '').trim(),
       isFeatured: Boolean(b.isFeatured),
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      status: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? pl.stories.length + 1),
     };
     pl.stories.push(story);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_stories',
+        entityId: story.id,
+        actionType: 'create',
+        entityTitle: `${story.studentName} (${story.company})`,
+        currentSnapshot: null,
+        proposedPayload: { ...story, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_PLACEMENT_STORY', 'Placements', story.studentName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: story, message: `Placement story "${story.studentName}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_PLACEMENT_STORY', 'Placements', story.studentName);
     saveDatabase();
     res.status(201).json(story);
@@ -5067,6 +5941,22 @@ async function startServer() {
     const idx = pl.stories.findIndex((s) => s.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Placement story not found.' });
+      return;
+    }
+    const target = pl.stories[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_stories',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: `${target.studentName} (${target.company})`,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_PLACEMENT_STORY', 'Placements', target.studentName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.studentName}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = pl.stories.splice(idx, 1);
@@ -5502,22 +6392,23 @@ async function startServer() {
       (reportType === 'security_alert' ? emailPushConfig.alertRecipientEmails : emailPushConfig.reportRecipientEmails) ||
       db.settings.email;
 
-    let subject = 'SVCOER Portal SMTP / Email Push Test Confirmation';
-    let bodyText = `Email notification pipeline test triggered by ${actor.fullName} (${actor.email}).`;
+    const brandShort = getBrandShortCode();
+    let subject = `${brandShort} Portal SMTP / Email Push Test Confirmation`;
+    let bodyText = `Email notification pipeline test for ${db.settings.institutionName || brandShort} triggered by ${actor.fullName} (${actor.email}).`;
 
     if (reportType === 'visitor_report') {
       const logs = db.visitorLogs ?? [];
       const summary = aggregateVisitorLogs(logs);
-      subject = `SVCOER Visitor & Geo Analytics Report (${summary.totalHits} Logged Events)`;
+      subject = `${brandShort} Visitor & Geo Analytics Report (${summary.totalHits} Logged Events)`;
       bodyText = `Total Hits: ${db.hitCounter?.totalHits || summary.totalHits}\nUnique IPs: ${summary.uniqueIps}\nTop Countries: ${summary.byCountry.slice(0, 5).map((c) => `${c.name} (${c.hits})`).join(', ')}`;
       emailPushConfig.lastDigestSentAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
     } else if (reportType === 'security_alert') {
       const alerts = (db.visitorLogs ?? []).filter((l) => l.severity === 'critical' || l.eventType === 'security_block');
-      subject = `SVCOER Security & WAF Alert Digest (${alerts.length} Critical Blocks)`;
+      subject = `${brandShort} Security & WAF Alert Digest (${alerts.length} Critical Blocks)`;
       bodyText = `Blocked IPs: ${(db.blockedIps ?? []).length}\nRecent Threats:\n${alerts.slice(0, 8).map((a) => `${a.timestamp} ${a.ipAddress} [${a.country}] ${a.threatCategory || a.path}`).join('\n')}`;
     } else if (reportType === 'feedback') {
       const m = computeFeedbackMetrics(feedbackEntries);
-      subject = `SVCOER Complaint & Feedback Digest (${m.open} Open / ${m.total} Total)`;
+      subject = `${brandShort} Complaint & Feedback Digest (${m.open} Open / ${m.total} Total)`;
       bodyText = `Total Submissions: ${m.total}\nOpen / Under Review: ${m.open}\nAvg Rating: ${m.avgRating}/5`;
     }
 
@@ -5573,7 +6464,23 @@ async function startServer() {
       res.status(404).json({ error: 'Placement story not found.' });
       return;
     }
-    Object.assign(story, req.body);
+    const { id: _id, ...patch } = req.body as Partial<PlacementStory>;
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(story) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_stories',
+        entityId: story.id,
+        actionType: 'update',
+        entityTitle: `${String(patch.studentName || story.studentName)} (${String(patch.company || story.company)})`,
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_PLACEMENT_STORY', 'Placements', story.studentName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: story, message: `Updates to "${story.studentName}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(story, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_PLACEMENT_STORY', 'Placements', story.studentName);
     saveDatabase();
     res.json(story);
@@ -5676,8 +6583,9 @@ async function startServer() {
       res.status(400).json({ error: 'Notice title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...pl.notices.map((n) => n.id)) + 1;
-    const notice = {
+    const notice: PlacementNotice = {
       id: nextId,
       title: String(b.title).trim(),
       noticeDate: String(b.noticeDate || new Date().toISOString().slice(0, 10)).trim(),
@@ -5686,9 +6594,25 @@ async function startServer() {
       attachmentUrl: b.attachmentUrl ? String(b.attachmentUrl).trim() : '',
       linkLabel: b.linkLabel ? String(b.linkLabel).trim() : '',
       isPinned: Boolean(b.isPinned),
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      status: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? pl.notices.length + 1),
     };
     pl.notices.push(notice);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_notices',
+        entityId: notice.id,
+        actionType: 'create',
+        entityTitle: notice.title,
+        currentSnapshot: null,
+        proposedPayload: { ...notice, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_PLACEMENT_NOTICE', 'Placements', notice.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: notice, message: `Placement notice "${notice.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_PLACEMENT_NOTICE', 'Placements', notice.title);
     saveDatabase();
     res.status(201).json(notice);
@@ -5720,7 +6644,23 @@ async function startServer() {
       res.status(404).json({ error: 'Placement notice not found.' });
       return;
     }
-    Object.assign(notice, req.body);
+    const { id: _id, ...patch } = req.body as Partial<PlacementNotice>;
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(notice) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_notices',
+        entityId: notice.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || notice.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_PLACEMENT_NOTICE', 'Placements', notice.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: notice, message: `Updates to "${notice.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(notice, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_PLACEMENT_NOTICE', 'Placements', notice.title);
     saveDatabase();
     res.json(notice);
@@ -5733,6 +6673,22 @@ async function startServer() {
     const idx = pl.notices.findIndex((n) => n.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Placement notice not found.' });
+      return;
+    }
+    const target = pl.notices[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_notices',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_PLACEMENT_NOTICE', 'Placements', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = pl.notices.splice(idx, 1);
@@ -5751,6 +6707,7 @@ async function startServer() {
       res.status(400).json({ error: 'Custom section title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...pl.customSections.map((s) => s.id)) + 1;
     const section = {
       id: nextId,
@@ -5765,10 +6722,25 @@ async function startServer() {
       cards: Array.isArray(b.cards) ? b.cards : [],
       ctaLabel: b.ctaLabel ? String(b.ctaLabel).trim() : '',
       ctaUrl: b.ctaUrl ? String(b.ctaUrl).trim() : '',
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      status: (direct ? 'published' : 'pending_approval') as ContentModerationStatus,
       sortOrder: Number(b.sortOrder ?? pl.customSections.length + 1),
     };
     pl.customSections.push(section);
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_custom_sections',
+        entityId: section.id,
+        actionType: 'create',
+        entityTitle: section.title,
+        currentSnapshot: null,
+        proposedPayload: { ...section, isPublished: b.isPublished !== false, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_PLACEMENT_CUSTOM_SECTION', 'Placements', section.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: section, message: `Custom section "${section.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_PLACEMENT_CUSTOM_SECTION', 'Placements', section.title);
     saveDatabase();
     res.status(201).json(section);
@@ -5800,7 +6772,23 @@ async function startServer() {
       res.status(404).json({ error: 'Custom placement section not found.' });
       return;
     }
-    Object.assign(sec, req.body);
+    const { id: _id, ...patch } = req.body as Record<string, unknown>;
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(sec) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_custom_sections',
+        entityId: sec.id,
+        actionType: 'update',
+        entityTitle: String(patch.title || sec.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...patch, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_PLACEMENT_CUSTOM_SECTION', 'Placements', sec.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: sec, message: `Updates to "${sec.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(sec, patch, { status: 'published' });
     addAudit(actor, 'UPDATE_PLACEMENT_CUSTOM_SECTION', 'Placements', sec.title);
     saveDatabase();
     res.json(sec);
@@ -5813,6 +6801,22 @@ async function startServer() {
     const idx = pl.customSections.findIndex((s) => s.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Custom placement section not found.' });
+      return;
+    }
+    const target = pl.customSections[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'placement_custom_sections',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_PLACEMENT_CUSTOM_SECTION', 'Placements', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = pl.customSections.splice(idx, 1);
@@ -5861,6 +6865,7 @@ async function startServer() {
       res.status(400).json({ error: 'Sports facility name is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...sp.facilities.map((x) => x.id)) + 1;
     const item: SportsFacility = {
       id: nextId,
@@ -5874,11 +6879,26 @@ async function startServer() {
       customFields: Array.isArray(b.customFields)
         ? b.customFields.filter((cf) => cf && cf.label?.trim()).map((cf) => ({ label: cf.label.trim(), value: String(cf.value || '').trim() }))
         : [],
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      moderationStatus: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? sp.facilities.length + 1),
     };
     sp.facilities.push(item);
     db.sports = sp;
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_facilities',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: item.name,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_SPORTS_FACILITY', 'Sports', item.name);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Sports facility "${item.name}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_SPORTS_FACILITY', 'Sports', item.name);
     saveDatabase();
     res.status(201).json(item);
@@ -5893,7 +6913,22 @@ async function startServer() {
       return;
     }
     const { id: _id, ...rest } = req.body as Partial<SportsFacility>;
-    Object.assign(item, rest);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_facilities',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(rest.name || item.name),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_SPORTS_FACILITY', 'Sports', item.name);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.name}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, rest, { moderationStatus: 'published' });
     db.sports = sp;
     addAudit(actor, 'UPDATE_SPORTS_FACILITY', 'Sports', item.name);
     saveDatabase();
@@ -5906,6 +6941,22 @@ async function startServer() {
     const idx = sp.facilities.findIndex((x) => x.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Sports facility not found.' });
+      return;
+    }
+    const target = sp.facilities[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_facilities',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.name,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_SPORTS_FACILITY', 'Sports', target.name);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.name}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = sp.facilities.splice(idx, 1);
@@ -5923,6 +6974,7 @@ async function startServer() {
       res.status(400).json({ error: 'Sports event title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...sp.events.map((x) => x.id)) + 1;
     const item: SportsEvent = {
       id: nextId,
@@ -5936,11 +6988,27 @@ async function startServer() {
       registrationUrl: String(b.registrationUrl || '').trim(),
       description: String(b.description || '').trim(),
       bannerUrl: String(b.bannerUrl || '/src/assets/images/sports_complex_1794991330591.jpg').trim(),
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      moderationStatus: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? sp.events.length + 1),
     };
     sp.events.push(item);
     db.sports = sp;
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_events',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: item.title,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_SPORTS_EVENT', 'Sports', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Sports event "${item.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_SPORTS_EVENT', 'Sports', item.title);
     saveDatabase();
     res.status(201).json(item);
@@ -5955,7 +7023,22 @@ async function startServer() {
       return;
     }
     const { id: _id, ...rest } = req.body as Partial<SportsEvent>;
-    Object.assign(item, rest);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_events',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(rest.title || item.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_SPORTS_EVENT', 'Sports', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, rest, { moderationStatus: 'published' });
     db.sports = sp;
     addAudit(actor, 'UPDATE_SPORTS_EVENT', 'Sports', item.title);
     saveDatabase();
@@ -5968,6 +7051,22 @@ async function startServer() {
     const idx = sp.events.findIndex((x) => x.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Sports event not found.' });
+      return;
+    }
+    const target = sp.events[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_events',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_SPORTS_EVENT', 'Sports', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = sp.events.splice(idx, 1);
@@ -5985,6 +7084,7 @@ async function startServer() {
       res.status(400).json({ error: 'Student/Team name and sport name are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...sp.achievements.map((x) => x.id)) + 1;
     const item: SportsAchievement = {
       id: nextId,
@@ -5999,10 +7099,25 @@ async function startServer() {
       photoUrl: String(b.photoUrl || '/src/assets/images/sports_complex_1794991330591.jpg').trim(),
       highlights: String(b.highlights || '').trim(),
       isFeatured: b.isFeatured !== false,
+      status: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? sp.achievements.length + 1),
     };
     sp.achievements.push(item);
     db.sports = sp;
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_achievements',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: `${item.studentOrTeamName} (${item.sportName})`,
+        currentSnapshot: null,
+        proposedPayload: { ...item, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_SPORTS_ACHIEVEMENT', 'Sports', item.studentOrTeamName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Achievement for "${item.studentOrTeamName}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_SPORTS_ACHIEVEMENT', 'Sports', `${item.studentOrTeamName} (${item.level})`);
     saveDatabase();
     res.status(201).json(item);
@@ -6017,7 +7132,22 @@ async function startServer() {
       return;
     }
     const { id: _id, ...rest } = req.body as Partial<SportsAchievement>;
-    Object.assign(item, rest);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_achievements',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(rest.studentOrTeamName || item.studentOrTeamName),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_SPORTS_ACHIEVEMENT', 'Sports', item.studentOrTeamName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.studentOrTeamName}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, rest, { status: 'published' });
     db.sports = sp;
     addAudit(actor, 'UPDATE_SPORTS_ACHIEVEMENT', 'Sports', item.studentOrTeamName);
     saveDatabase();
@@ -6030,6 +7160,22 @@ async function startServer() {
     const idx = sp.achievements.findIndex((x) => x.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Sports achievement not found.' });
+      return;
+    }
+    const target = sp.achievements[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_achievements',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.studentOrTeamName,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_SPORTS_ACHIEVEMENT', 'Sports', target.studentOrTeamName);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.studentOrTeamName}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = sp.achievements.splice(idx, 1);
@@ -6047,6 +7193,7 @@ async function startServer() {
       res.status(400).json({ error: 'Gallery item title and media URL are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...sp.gallery.map((x) => x.id)) + 1;
     const item: SportsGalleryItem = {
       id: nextId,
@@ -6057,11 +7204,26 @@ async function startServer() {
       thumbnailUrl: String(b.thumbnailUrl || '/src/assets/images/sports_complex_1794991330591.jpg').trim(),
       eventDate: String(b.eventDate || new Date().toISOString().slice(0, 10)).trim(),
       caption: String(b.caption || '').trim(),
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      status: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? sp.gallery.length + 1),
     };
     sp.gallery.push(item);
     db.sports = sp;
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_gallery',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: item.title,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_SPORTS_GALLERY', 'Sports', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Gallery item "${item.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_SPORTS_GALLERY', 'Sports', item.title);
     saveDatabase();
     res.status(201).json(item);
@@ -6076,7 +7238,22 @@ async function startServer() {
       return;
     }
     const { id: _id, ...rest } = req.body as Partial<SportsGalleryItem>;
-    Object.assign(item, rest);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_gallery',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(rest.title || item.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_SPORTS_GALLERY', 'Sports', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, rest, { status: 'published' });
     db.sports = sp;
     addAudit(actor, 'UPDATE_SPORTS_GALLERY', 'Sports', item.title);
     saveDatabase();
@@ -6089,6 +7266,22 @@ async function startServer() {
     const idx = sp.gallery.findIndex((x) => x.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Gallery item not found.' });
+      return;
+    }
+    const target = sp.gallery[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_gallery',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_SPORTS_GALLERY', 'Sports', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = sp.gallery.splice(idx, 1);
@@ -6106,6 +7299,7 @@ async function startServer() {
       res.status(400).json({ error: 'Sports notice title is required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...sp.notices.map((x) => x.id)) + 1;
     const item: SportsNotice = {
       id: nextId,
@@ -6116,11 +7310,26 @@ async function startServer() {
       attachmentUrl: String(b.attachmentUrl || '').trim(),
       registrationLink: String(b.registrationLink || '').trim(),
       isPinned: Boolean(b.isPinned),
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      status: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? sp.notices.length + 1),
     };
     sp.notices.unshift(item);
     db.sports = sp;
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_notices',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: item.title,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_SPORTS_NOTICE', 'Sports', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Sports notice "${item.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_SPORTS_NOTICE', 'Sports', item.title);
     saveDatabase();
     res.status(201).json(item);
@@ -6135,7 +7344,22 @@ async function startServer() {
       return;
     }
     const { id: _id, ...rest } = req.body as Partial<SportsNotice>;
-    Object.assign(item, rest);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_notices',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(rest.title || item.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_SPORTS_NOTICE', 'Sports', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, rest, { status: 'published' });
     db.sports = sp;
     addAudit(actor, 'UPDATE_SPORTS_NOTICE', 'Sports', item.title);
     saveDatabase();
@@ -6148,6 +7372,22 @@ async function startServer() {
     const idx = sp.notices.findIndex((x) => x.id === Number(req.params.id));
     if (idx === -1) {
       res.status(404).json({ error: 'Sports notice not found.' });
+      return;
+    }
+    const target = sp.notices[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'sports_notices',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_SPORTS_NOTICE', 'Sports', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
       return;
     }
     const [removed] = sp.notices.splice(idx, 1);
@@ -6187,6 +7427,7 @@ async function startServer() {
       res.status(400).json({ error: 'Facility title and category are required.' });
       return;
     }
+    const direct = canPublishDirectly(actor.role);
     const nextId = Math.max(0, ...fac.items.map((x) => x.id)) + 1;
     const item: FacilityItem = {
       id: nextId,
@@ -6208,11 +7449,27 @@ async function startServer() {
             .map((cf) => ({ label: String(cf.label).trim(), value: String(cf.value || '').trim() }))
         : [],
       isFeatured: Boolean(b.isFeatured),
-      isPublished: b.isPublished !== false,
+      isPublished: direct ? b.isPublished !== false : false,
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      status: direct ? 'published' : 'pending_approval',
       sortOrder: Number(b.sortOrder ?? fac.items.length + 1),
     };
     fac.items.push(item);
     db.facilities = fac;
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'facilities',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: `${item.title} (${item.category})`,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_FACILITY', 'Facilities', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Facility "${item.title}" submitted for Super Admin approval.` });
+      return;
+    }
     addAudit(actor, 'CREATE_FACILITY', 'Facilities', `${item.title} (${item.category})`);
     saveDatabase();
     res.status(201).json(item);
@@ -6242,7 +7499,22 @@ async function startServer() {
       return;
     }
     const { id: _id, ...rest } = req.body as Partial<FacilityItem>;
-    Object.assign(item, rest);
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'facilities',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: String(rest.title || item.title),
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, status: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_FACILITY', 'Facilities', item.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item, message: `Updates to "${item.title}" queued for Super Admin approval.` });
+      return;
+    }
+    Object.assign(item, rest, { status: 'published' });
     db.facilities = fac;
     addAudit(actor, 'UPDATE_FACILITY', 'Facilities', item.title);
     saveDatabase();
@@ -6257,11 +7529,275 @@ async function startServer() {
       res.status(404).json({ error: 'Facility item not found.' });
       return;
     }
+    const target = fac.items[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'facilities',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: target.title,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_FACILITY', 'Facilities', target.title);
+      saveDatabase();
+      res.status(202).json({ ok: true, queuedForApproval: true, revision, item: target, message: `Deletion of "${target.title}" queued for Super Admin approval.` });
+      return;
+    }
     const [removed] = fac.items.splice(idx, 1);
     db.facilities = fac;
     addAudit(actor, 'DELETE_FACILITY', 'Facilities', removed.title);
     saveDatabase();
     res.json({ ok: true });
+  });
+
+  // ============================================================================
+  // SUPER ADMIN CONTENT APPROVAL & MODERATION WORKFLOW API
+  // ============================================================================
+  function getModeratedCollectionTarget(entityTable: string): {
+    list: any[];
+    statusField: 'status' | 'moderationStatus';
+    afterMutate?: () => void;
+  } | null {
+    switch (entityTable) {
+      case 'pages':
+        return { list: db.pages, statusField: 'status' };
+      case 'departments':
+        return { list: db.departments, statusField: 'status' };
+      case 'leadership':
+        return {
+          list: db.leadership,
+          statusField: 'status',
+          afterMutate: () => {
+            db.leadership = sortByOrder(db.leadership);
+          },
+        };
+      case 'sliders':
+        return { list: db.sliders, statusField: 'status' };
+      case 'ticker':
+        return { list: db.ticker, statusField: 'status' };
+      case 'campus_events':
+        return { list: db.events, statusField: 'status' };
+      case 'documents':
+        return { list: db.documents, statusField: 'status' };
+      case 'gallery_albums':
+        return { list: db.gallery, statusField: 'status' };
+      case 'telephone_directory':
+        return { list: db.telephoneDirectory, statusField: 'status' };
+      case 'conferences':
+        db.conferences = db.conferences ?? [];
+        return { list: db.conferences, statusField: 'status' };
+      case 'research_projects': {
+        const rp = ensureResearchPortfolioState();
+        db.researchPortfolio = rp;
+        return { list: rp.projects, statusField: 'moderationStatus' };
+      }
+      case 'research_patents': {
+        const rp = ensureResearchPortfolioState();
+        db.researchPortfolio = rp;
+        return { list: rp.patents, statusField: 'moderationStatus' };
+      }
+      case 'placement_stats': {
+        const pl = ensurePlacementsState();
+        return { list: pl.stats, statusField: 'status' };
+      }
+      case 'placement_stories': {
+        const pl = ensurePlacementsState();
+        return { list: pl.stories, statusField: 'status' };
+      }
+      case 'placement_notices': {
+        const pl = ensurePlacementsState();
+        pl.notices = pl.notices ?? [];
+        return { list: pl.notices, statusField: 'status' };
+      }
+      case 'placement_custom_sections': {
+        const pl = ensurePlacementsState();
+        pl.customSections = pl.customSections ?? [];
+        return { list: pl.customSections, statusField: 'status' };
+      }
+      case 'sports_facilities': {
+        const sp = ensureSportsState();
+        db.sports = sp;
+        return { list: sp.facilities, statusField: 'moderationStatus' };
+      }
+      case 'sports_events': {
+        const sp = ensureSportsState();
+        db.sports = sp;
+        return { list: sp.events, statusField: 'moderationStatus' };
+      }
+      case 'sports_achievements': {
+        const sp = ensureSportsState();
+        db.sports = sp;
+        return { list: sp.achievements, statusField: 'status' };
+      }
+      case 'sports_gallery': {
+        const sp = ensureSportsState();
+        db.sports = sp;
+        return { list: sp.gallery, statusField: 'status' };
+      }
+      case 'sports_notices': {
+        const sp = ensureSportsState();
+        db.sports = sp;
+        return { list: sp.notices, statusField: 'status' };
+      }
+      case 'facilities': {
+        const fac = ensureFacilitiesState();
+        db.facilities = fac;
+        return { list: fac.items, statusField: 'status' };
+      }
+      case 'home_components':
+        db.settings.customHomeComponents = db.settings.customHomeComponents ?? [];
+        return { list: db.settings.customHomeComponents, statusField: 'status' };
+      default:
+        return null;
+    }
+  }
+
+  function findModeratedItem(entityTable: string, entityId?: number | null): {
+    list: any[];
+    index: number;
+    item: any;
+    statusField: 'status' | 'moderationStatus';
+    afterMutate?: () => void;
+  } | null {
+    if (!entityId) return null;
+    if (entityTable === 'department_subpages') {
+      for (const d of db.departments) {
+        const idx = d.subPages.findIndex((sp) => sp.id === Number(entityId));
+        if (idx !== -1) {
+          return { list: d.subPages, index: idx, item: d.subPages[idx], statusField: 'status' };
+        }
+      }
+      return null;
+    }
+    const target = getModeratedCollectionTarget(entityTable);
+    if (!target) return null;
+    const idx = target.list.findIndex((x) => x.id === Number(entityId));
+    if (idx === -1) return null;
+    return {
+      list: target.list,
+      index: idx,
+      item: target.list[idx],
+      statusField: target.statusField,
+      afterMutate: target.afterMutate,
+    };
+  }
+
+  app.get('/api/admin/pending-approvals', requireAdmin('settings'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    if (!canPublishDirectly(actor.role)) {
+      res.status(403).json({ error: 'Only Super Admin can review pending content approvals.' });
+      return;
+    }
+    const statusFilter = String(req.query.status || 'all');
+    const list = ensurePendingRevisions().filter((r) => (statusFilter === 'all' ? true : r.status === statusFilter));
+    res.json({ revisions: list });
+  });
+
+  app.post('/api/admin/pending-approvals/:id/approve', requireAdmin('settings'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    if (!canPublishDirectly(actor.role)) {
+      res.status(403).json({ error: 'Only Super Admin can approve content submissions.' });
+      return;
+    }
+    const list = ensurePendingRevisions();
+    const rev = list.find((r) => r.id === Number(req.params.id));
+    if (!rev) {
+      res.status(404).json({ error: 'Pending revision not found.' });
+      return;
+    }
+    if (rev.status !== 'pending_approval') {
+      res.status(400).json({ error: `Revision has already been ${rev.status}.` });
+      return;
+    }
+
+    const reviewNote = String(req.body?.reviewNote || '').trim();
+    const found = findModeratedItem(rev.entityTable, rev.entityId);
+
+    if (rev.actionType === 'delete') {
+      if (found) {
+        found.list.splice(found.index, 1);
+        if (rev.entityTable === 'conferences') {
+          db.conferenceSubmissions = (db.conferenceSubmissions ?? []).filter((s) => s.conferenceId !== rev.entityId);
+          db.conferenceRegistrations = (db.conferenceRegistrations ?? []).filter((r) => r.conferenceId !== rev.entityId);
+        }
+        found.afterMutate?.();
+      }
+    } else if (found) {
+      const payload = (rev.proposedPayload || {}) as Record<string, unknown>;
+      const { id: _ignoreId, ...safePayload } = payload;
+      Object.assign(found.item, safePayload, {
+        [found.statusField]: 'published',
+      });
+      if ('isPublished' in found.item && payload.isPublished === undefined) {
+        found.item.isPublished = true;
+      }
+      if ('isActive' in found.item && payload.isActive === undefined) {
+        found.item.isActive = true;
+      }
+      found.afterMutate?.();
+    } else if (rev.actionType === 'create' && rev.proposedPayload) {
+      const target = getModeratedCollectionTarget(rev.entityTable);
+      if (target) {
+        const clone = structuredClone(rev.proposedPayload) as Record<string, unknown>;
+        clone[target.statusField] = 'published';
+        target.list.push(clone);
+        target.afterMutate?.();
+      }
+    }
+
+    rev.status = 'approved';
+    rev.reviewedAt = new Date().toISOString();
+    rev.reviewedBy = actor.email;
+    rev.reviewerEmail = actor.email;
+    if (reviewNote) {
+      rev.reviewNote = reviewNote;
+      rev.reviewerNote = reviewNote;
+    }
+
+    addAudit(actor, 'APPROVE_CONTENT_REVISION', rev.entityTable, `${rev.actionType.toUpperCase()}: ${rev.entityTitle}`);
+    saveDatabase();
+    res.json({ ok: true, revision: rev });
+  });
+
+  app.post('/api/admin/pending-approvals/:id/reject', requireAdmin('settings'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    if (!canPublishDirectly(actor.role)) {
+      res.status(403).json({ error: 'Only Super Admin can reject content submissions.' });
+      return;
+    }
+    const list = ensurePendingRevisions();
+    const rev = list.find((r) => r.id === Number(req.params.id));
+    if (!rev) {
+      res.status(404).json({ error: 'Pending revision not found.' });
+      return;
+    }
+    if (rev.status !== 'pending_approval') {
+      res.status(400).json({ error: `Revision has already been ${rev.status}.` });
+      return;
+    }
+
+    const reviewNote = String(req.body?.reviewNote || '').trim();
+    if (rev.actionType === 'create') {
+      const found = findModeratedItem(rev.entityTable, rev.entityId);
+      if (found) {
+        found.item[found.statusField] = 'rejected';
+        if ('isPublished' in found.item) found.item.isPublished = false;
+        if ('isActive' in found.item) found.item.isActive = false;
+      }
+    }
+
+    rev.status = 'rejected';
+    rev.reviewedAt = new Date().toISOString();
+    rev.reviewedBy = actor.email;
+    rev.reviewerEmail = actor.email;
+    rev.reviewNote = reviewNote || 'Rejected by Super Admin';
+    rev.reviewerNote = rev.reviewNote;
+
+    addAudit(actor, 'REJECT_CONTENT_REVISION', rev.entityTable, `${rev.actionType.toUpperCase()}: ${rev.entityTitle}`);
+    saveDatabase();
+    res.json({ ok: true, revision: rev });
   });
 
   // Complete Website Migration Package (.zip: Code + DB + Uploaded Photos/Media)

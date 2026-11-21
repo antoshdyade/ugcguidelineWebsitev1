@@ -139,6 +139,7 @@ export function ConferenceAdminPanel({
   const [projCode, setProjCode] = useState('');
   const [projSummary, setProjSummary] = useState('');
   const [projDocUrl, setProjDocUrl] = useState('');
+  const [projShareable, setProjShareable] = useState(true);
 
   const [editingPatId, setEditingPatId] = useState<number | null>(null);
   const [patType, setPatType] = useState<string>(RESEARCH_PATENT_TYPE_PRESETS[0]);
@@ -151,6 +152,7 @@ export function ConferenceAdminPanel({
   const [patPartner, setPatPartner] = useState('Indian Patent Office');
   const [patSummary, setPatSummary] = useState('');
   const [patUrl, setPatUrl] = useState('');
+  const [patShareable, setPatShareable] = useState(true);
 
   useEffect(() => {
     setResearchSlides(settings.researchSliderSlides || []);
@@ -171,9 +173,10 @@ export function ConferenceAdminPanel({
   const [newTheme, setNewTheme] = useState('');
   const [newStart, setNewStart] = useState(new Date().toISOString().slice(0, 10));
   const [newEnd, setNewEnd] = useState(new Date().toISOString().slice(0, 10));
-  const [newVenue, setNewVenue] = useState("SVERI's COE Auditorium, Pandharpur");
+  const [newVenue, setNewVenue] = useState(`${settings.shortCode || 'Institute'} Auditorium`);
   const [newDept, setNewDept] = useState(departments[0]?.name || 'All Engineering Departments');
   const [newBanner, setNewBanner] = useState('/src/assets/images/hero_campus_aerial_1794512596442.jpg');
+  const [newShareable, setNewShareable] = useState(true);
 
   const selectedConf = useMemo(
     () => conferences.find((c) => c.id === selectedId) || conferences[0],
@@ -239,8 +242,12 @@ export function ConferenceAdminPanel({
 
   const saveConferencePatch = async (updatedConf: Conference, msg = 'Saved conference changes.') => {
     try {
-      await adminFetch(`/api/admin/conferences/${updatedConf.id}`, 'PUT', updatedConf);
-      notify('ok', msg);
+      const res = await adminFetch<{ queuedForApproval?: boolean; message?: string; item?: Conference }>(
+        `/api/admin/conferences/${updatedConf.id}`,
+        'PUT',
+        updatedConf,
+      );
+      notify('ok', res?.queuedForApproval && res.message ? res.message : msg);
     } catch (err) {
       notify('err', (err as Error).message);
     }
@@ -296,6 +303,7 @@ export function ConferenceAdminPanel({
               style={!showCreate && selectedConf?.id === c.id ? { backgroundColor: 'var(--primary-color)' } : undefined}
             >
               {c.shortName} ({c.scope})
+              {c.status === 'pending_approval' ? ' [Pending]' : c.status === 'rejected' ? ' [Rejected]' : ''}
             </button>
           ))}
         </div>
@@ -360,28 +368,40 @@ export function ConferenceAdminPanel({
           onSubmit={async (e) => {
             e.preventDefault();
             try {
-              const created = await adminFetch<Conference>('/api/admin/conferences', 'POST', {
-                title: newTitle,
-                shortName: newShort,
-                slug: newSlug,
-                scope: newScope,
-                mode: newMode,
-                theme: newTheme,
-                startDate: newStart,
-                endDate: newEnd,
-                venue: newVenue,
-                organizingDepartment: newDept,
-                bannerUrl: newBanner,
-                isPublished: true,
-                isFeatured: true,
-              });
+              const res = await adminFetch<Conference & { queuedForApproval?: boolean; message?: string; item?: Conference }>(
+                '/api/admin/conferences',
+                'POST',
+                {
+                  title: newTitle,
+                  shortName: newShort,
+                  slug: newSlug,
+                  scope: newScope,
+                  mode: newMode,
+                  theme: newTheme,
+                  startDate: newStart,
+                  endDate: newEnd,
+                  venue: newVenue,
+                  organizingDepartment: newDept,
+                  bannerUrl: newBanner,
+                  isPublished: true,
+                  isFeatured: true,
+                  isShareable: newShareable,
+                },
+              );
+              const created = (res?.item ?? res) as Conference;
               setNewTitle('');
               setNewShort('');
               setNewSlug('');
               setNewTheme('');
+              setNewShareable(true);
               setShowCreate(false);
               if (created?.id) setSelectedId(created.id);
-              notify('ok', `Created conference microsite "${created?.shortName || newShort}".`);
+              notify(
+                'ok',
+                res?.queuedForApproval && res.message
+                  ? res.message
+                  : `Created conference microsite "${created?.shortName || newShort}".`,
+              );
             } catch (err) {
               notify('err', (err as Error).message);
             }
@@ -497,6 +517,14 @@ export function ConferenceAdminPanel({
             maxPhotoMb={maxPhotoMb}
             autoCropEnabled={autoCrop}
           />
+          <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
+            <input
+              type="checkbox"
+              checked={newShareable}
+              onChange={(e) => setNewShareable(e.target.checked)}
+            />
+            <span>Allow Social Media Sharing on this Conference Microsite</span>
+          </label>
           <button
             type="submit"
             className="px-5 py-2.5 rounded-lg text-xs font-bold text-white"
@@ -538,7 +566,17 @@ export function ConferenceAdminPanel({
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {draft.status === 'pending_approval' && (
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[11px] font-bold">
+                  Pending Super Admin Approval
+                </span>
+              )}
+              {draft.status === 'rejected' && (
+                <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[11px] font-bold">
+                  Rejected
+                </span>
+              )}
               <span className="text-[11px] font-mono text-stone-500">
                 Public URL: /conference/{draft.slug}
               </span>
@@ -547,9 +585,21 @@ export function ConferenceAdminPanel({
                   <button
                     type="button"
                     onClick={async () => {
-                      await adminFetch(`/api/admin/conferences/${draft.id}`, 'DELETE');
-                      setConfirmDeleteId(null);
-                      notify('ok', `Deleted conference "${draft.shortName}".`);
+                      try {
+                        const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                          `/api/admin/conferences/${draft.id}`,
+                          'DELETE',
+                        );
+                        setConfirmDeleteId(null);
+                        notify(
+                          'ok',
+                          res?.queuedForApproval && res.message
+                            ? res.message
+                            : `Deleted conference "${draft.shortName}".`,
+                        );
+                      } catch (err) {
+                        notify('err', (err as Error).message);
+                      }
                     }}
                     className="px-2.5 py-1 rounded bg-rose-700 text-white text-xs font-bold"
                   >
@@ -1315,6 +1365,14 @@ export function ConferenceAdminPanel({
                     onChange={(e) => setDraft({ ...draft, isFeatured: e.target.checked })}
                   />
                   <span>Featured Conference</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draft.isShareable !== false}
+                    onChange={(e) => setDraft({ ...draft, isShareable: e.target.checked })}
+                  />
+                  <span>Allow Social Media Sharing on this Microsite</span>
                 </label>
               </div>
 
@@ -2346,21 +2404,41 @@ export function ConferenceAdminPanel({
                   summary: projSummary,
                   documentUrl: projDocUrl,
                   isPublished: true,
+                  isShareable: projShareable,
                 };
-                if (editingProjId) {
-                  await adminFetch(`/api/admin/research/projects/${editingProjId}`, 'PUT', payload);
-                  notify('ok', 'Updated funded research project.');
-                } else {
-                  await adminFetch('/api/admin/research/projects', 'POST', payload);
-                  notify('ok', 'Added new funded research project.');
+                try {
+                  if (editingProjId) {
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      `/api/admin/research/projects/${editingProjId}`,
+                      'PUT',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message ? res.message : 'Updated funded research project.',
+                    );
+                  } else {
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      '/api/admin/research/projects',
+                      'POST',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message ? res.message : 'Added new funded research project.',
+                    );
+                  }
+                  setEditingProjId(null);
+                  setProjTitle('');
+                  setProjPi('');
+                  setProjCoPi('');
+                  setProjCode('');
+                  setProjSummary('');
+                  setProjDocUrl('');
+                  setProjShareable(true);
+                } catch (err) {
+                  notify('err', (err as Error).message);
                 }
-                setEditingProjId(null);
-                setProjTitle('');
-                setProjPi('');
-                setProjCoPi('');
-                setProjCode('');
-                setProjSummary('');
-                setProjDocUrl('');
               }}
               className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
             >
@@ -2469,6 +2547,14 @@ export function ConferenceAdminPanel({
                 placeholder="Sanction Order PDF / URL (optional)"
                 className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
+              <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={projShareable}
+                  onChange={(e) => setProjShareable(e.target.checked)}
+                />
+                <span>Allow Social Media Sharing on this Research Project</span>
+              </label>
               <button
                 type="submit"
                 className="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-white"
@@ -2492,10 +2578,20 @@ export function ConferenceAdminPanel({
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${p.isPublished ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                           {p.isPublished ? 'Visible' : 'Hidden'}
                         </span>
+                        {p.moderationStatus === 'pending_approval' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Pending Super Admin Approval
+                          </span>
+                        )}
+                        {p.moderationStatus === 'rejected' && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Rejected
+                          </span>
+                        )}
                       </div>
                       <p className="font-semibold text-sm text-stone-900 dark:text-white">{p.title}</p>
                       <p className="text-stone-500">
-                        PI: {p.principalInvestigator} ({p.departmentCode}) · {p.sanctionYear} · {p.status}
+                        PI: {p.principalInvestigator} ({p.departmentCode}) · {p.sanctionYear} · {p.status} · {p.isShareable === false ? 'Share Hidden' : 'Shareable'}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
@@ -2526,8 +2622,23 @@ export function ConferenceAdminPanel({
                       <button
                         type="button"
                         onClick={async () => {
-                          await adminFetch(`/api/admin/research/projects/${p.id}`, 'PUT', { isPublished: !p.isPublished });
-                          notify('ok', p.isPublished ? 'Project hidden from public Research tab.' : 'Project published on Research tab.');
+                          try {
+                            const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                              `/api/admin/research/projects/${p.id}`,
+                              'PUT',
+                              { isPublished: !p.isPublished },
+                            );
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res.message
+                                ? res.message
+                                : p.isPublished
+                                  ? 'Project hidden from public Research tab.'
+                                  : 'Project published on Research tab.',
+                            );
+                          } catch (err) {
+                            notify('err', (err as Error).message);
+                          }
                         }}
                         className="px-2 py-1 rounded border text-[11px] font-semibold"
                       >
@@ -2549,6 +2660,7 @@ export function ConferenceAdminPanel({
                           setProjCode(p.projectCode || '');
                           setProjSummary(p.summary || '');
                           setProjDocUrl(p.documentUrl || '');
+                          setProjShareable(p.isShareable !== false);
                         }}
                         className="px-2 py-1 rounded border text-[11px] font-semibold"
                       >
@@ -2557,8 +2669,18 @@ export function ConferenceAdminPanel({
                       <button
                         type="button"
                         onClick={async () => {
-                          await adminFetch(`/api/admin/research/projects/${p.id}`, 'DELETE');
-                          notify('ok', 'Deleted research project.');
+                          try {
+                            const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                              `/api/admin/research/projects/${p.id}`,
+                              'DELETE',
+                            );
+                            notify(
+                              'ok',
+                              res?.queuedForApproval && res.message ? res.message : 'Deleted research project.',
+                            );
+                          } catch (err) {
+                            notify('err', (err as Error).message);
+                          }
                         }}
                         className="p-1 text-rose-600"
                       >
@@ -2592,20 +2714,40 @@ export function ConferenceAdminPanel({
                 summary: patSummary,
                 externalUrl: patUrl,
                 isPublished: true,
+                isShareable: patShareable,
               };
-              if (editingPatId) {
-                await adminFetch(`/api/admin/research/patents/${editingPatId}`, 'PUT', payload);
-                notify('ok', 'Updated Patent / IPR / Start-up record.');
-              } else {
-                await adminFetch('/api/admin/research/patents', 'POST', payload);
-                notify('ok', 'Added Patent / IPR / Start-up record.');
+              try {
+                if (editingPatId) {
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    `/api/admin/research/patents/${editingPatId}`,
+                    'PUT',
+                    payload,
+                  );
+                  notify(
+                    'ok',
+                    res?.queuedForApproval && res.message ? res.message : 'Updated Patent / IPR / Start-up record.',
+                  );
+                } else {
+                  const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                    '/api/admin/research/patents',
+                    'POST',
+                    payload,
+                  );
+                  notify(
+                    'ok',
+                    res?.queuedForApproval && res.message ? res.message : 'Added Patent / IPR / Start-up record.',
+                  );
+                }
+                setEditingPatId(null);
+                setPatTitle('');
+                setPatInventors('');
+                setPatRef('');
+                setPatSummary('');
+                setPatUrl('');
+                setPatShareable(true);
+              } catch (err) {
+                notify('err', (err as Error).message);
               }
-              setEditingPatId(null);
-              setPatTitle('');
-              setPatInventors('');
-              setPatRef('');
-              setPatSummary('');
-              setPatUrl('');
             }}
             className="xl:col-span-5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3"
           >
@@ -2702,6 +2844,14 @@ export function ConferenceAdminPanel({
               placeholder="Verification Link / Gazette PDF URL (optional)"
               className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
             />
+            <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={patShareable}
+                onChange={(e) => setPatShareable(e.target.checked)}
+              />
+              <span>Allow Social Media Sharing on this Patent / IPR Record</span>
+            </label>
             <button
               type="submit"
               className="w-full px-4 py-2.5 rounded-lg text-xs font-bold text-white"
@@ -2725,10 +2875,20 @@ export function ConferenceAdminPanel({
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${pat.isPublished ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
                         {pat.isPublished ? 'Visible' : 'Hidden'}
                       </span>
+                      {pat.moderationStatus === 'pending_approval' && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          Pending Super Admin Approval
+                        </span>
+                      )}
+                      {pat.moderationStatus === 'rejected' && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                          Rejected
+                        </span>
+                      )}
                     </div>
                     <p className="font-semibold text-sm text-stone-900 dark:text-white">{pat.title}</p>
                     <p className="text-stone-500">
-                      {pat.inventorsOrLead} ({pat.departmentCode}) · {pat.status}
+                      {pat.inventorsOrLead} ({pat.departmentCode}) · {pat.status} · {pat.isShareable === false ? 'Share Hidden' : 'Shareable'}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -2759,8 +2919,23 @@ export function ConferenceAdminPanel({
                     <button
                       type="button"
                       onClick={async () => {
-                        await adminFetch(`/api/admin/research/patents/${pat.id}`, 'PUT', { isPublished: !pat.isPublished });
-                        notify('ok', pat.isPublished ? 'Record hidden.' : 'Record published.');
+                        try {
+                          const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                            `/api/admin/research/patents/${pat.id}`,
+                            'PUT',
+                            { isPublished: !pat.isPublished },
+                          );
+                          notify(
+                            'ok',
+                            res?.queuedForApproval && res.message
+                              ? res.message
+                              : pat.isPublished
+                                ? 'Record hidden.'
+                                : 'Record published.',
+                          );
+                        } catch (err) {
+                          notify('err', (err as Error).message);
+                        }
                       }}
                       className="px-2 py-1 rounded border text-[11px] font-semibold"
                     >
@@ -2780,6 +2955,7 @@ export function ConferenceAdminPanel({
                         setPatPartner(pat.partnerOrAgency || '');
                         setPatSummary(pat.summary || '');
                         setPatUrl(pat.externalUrl || '');
+                        setPatShareable(pat.isShareable !== false);
                       }}
                       className="px-2 py-1 rounded border text-[11px] font-semibold"
                     >
@@ -2788,8 +2964,18 @@ export function ConferenceAdminPanel({
                     <button
                       type="button"
                       onClick={async () => {
-                        await adminFetch(`/api/admin/research/patents/${pat.id}`, 'DELETE');
-                        notify('ok', 'Deleted patent / IPR record.');
+                        try {
+                          const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                            `/api/admin/research/patents/${pat.id}`,
+                            'DELETE',
+                          );
+                          notify(
+                            'ok',
+                            res?.queuedForApproval && res.message ? res.message : 'Deleted patent / IPR record.',
+                          );
+                        } catch (err) {
+                          notify('err', (err as Error).message);
+                        }
                       }}
                       className="p-1 text-rose-600"
                     >

@@ -821,21 +821,49 @@ export function resolveRouteSeo(
   const cleanPath = pathname.split('?')[0] || '/';
   const baseOrigin = (seo.canonicalBaseUrl || origin || 'https://coe.sveri.ac.in').replace(/\/+$/, '');
   const canonicalUrl = `${baseOrigin}${cleanPath === '/' ? '' : cleanPath}`;
-  const suffix = seo.titleSuffix || settings.shortCode || 'SVCOER';
+  const customShort = (settings.shortCode || '').trim();
+  const customName = (settings.institutionName || '').trim();
+  const brandShort = customShort || customName || 'Campus';
+  const applyBrandDefaults = (val: string): string => {
+    let out = val;
+    if (customName && customName !== DEFAULT_SEO_SETTINGS.defaultTitle) {
+      out = out
+        .replace(/SVERI's College of Engineering, Pandharpur \(Autonomous\)/g, customName)
+        .replace(/SVERI's College of Engineering, Pandharpur/g, customName);
+    }
+    if (customShort && customShort !== 'SVCOER') {
+      out = out.replace(/\bSVCOER\b/g, customShort);
+    }
+    return out;
+  };
 
-  let title = seo.defaultTitle || settings.institutionName;
-  let description = seo.defaultDescription;
-  let keywords = seo.defaultKeywords;
+  const suffix =
+    seo.titleSuffix && seo.titleSuffix !== DEFAULT_SEO_SETTINGS.titleSuffix
+      ? applyBrandDefaults(seo.titleSuffix)
+      : customShort && customShort !== 'SVCOER'
+        ? `${customShort} — ${customName || customShort}`
+        : seo.titleSuffix || brandShort;
+
+  let title = applyBrandDefaults(
+    seo.defaultTitle && seo.defaultTitle !== DEFAULT_SEO_SETTINGS.defaultTitle
+      ? seo.defaultTitle
+      : customName || DEFAULT_SEO_SETTINGS.defaultTitle,
+  );
+  let description = applyBrandDefaults(seo.defaultDescription || '');
+  let keywords = applyBrandDefaults(seo.defaultKeywords || '');
   let ogImageUrl = seo.ogImageUrl || '/src/assets/images/hero_campus_aerial_1794512596442.jpg';
   let noIndex = !seo.allowIndexing || cleanPath.startsWith('/admin');
 
   const override = (seo.pageOverrides || []).find(
     (ov) => ov.routePattern === cleanPath || (ov.routePattern !== '/' && cleanPath.startsWith(ov.routePattern)),
   );
-  if (override) {
-    if (override.title) title = override.title;
-    if (override.description) description = override.description;
-    if (override.keywords) keywords = override.keywords;
+  if (cleanPath.startsWith('/admin')) {
+    title = `${brandShort} Admin Portal | ${customName || brandShort}`;
+    description = `Administrative CMS console for ${customName || brandShort}.`;
+  } else if (override) {
+    if (override.title) title = applyBrandDefaults(override.title);
+    if (override.description) description = applyBrandDefaults(override.description);
+    if (override.keywords) keywords = applyBrandDefaults(override.keywords);
     if (override.ogImageUrl) ogImageUrl = override.ogImageUrl;
     if (override.noIndex) noIndex = true;
   } else if (cleanPath.startsWith('/page/')) {
@@ -843,27 +871,27 @@ export function resolveRouteSeo(
     const pg = pages.find((p) => p.slug === slug);
     if (pg) {
       title = `${pg.title} | ${suffix}`;
-      description = pg.subtitle || `${pg.title} — Official information and statutory disclosure at ${settings.institutionName}.`;
+      description = pg.subtitle || `${pg.title} — Official information and statutory disclosure at ${customName || brandShort}.`;
     }
   } else if (cleanPath.startsWith('/category/')) {
     const slug = cleanPath.replace('/category/', '').split('/')[0];
     const cat = categories.find((c) => c.slug === slug);
     if (cat) {
       title = `${cat.name} | ${suffix}`;
-      description = cat.description || seo.defaultDescription;
+      description = cat.description || description;
     }
   } else if (cleanPath.startsWith('/department/')) {
     const slug = cleanPath.replace('/department/', '').split('/')[0];
     const dept = departments.find((d) => d.slug === slug);
     if (dept) {
       title = `${dept.name} (${dept.shortName}) | ${suffix}`;
-      description = dept.overview || seo.defaultDescription;
+      description = dept.overview || description;
     }
   } else if (cleanPath.startsWith('/conference/')) {
     const slug = cleanPath.replace('/conference/', '').split('/')[0];
     const conf = conferences.find((c) => c.slug === slug);
     if (conf) {
-      title = `${conf.shortName}: ${conf.title}`;
+      title = `${conf.shortName}: ${conf.title} | ${suffix}`;
       description = `${conf.scope} (${conf.startDate} to ${conf.endDate}) — ${conf.theme}`;
     }
   }
@@ -995,15 +1023,17 @@ export function buildSitemapXml(baseUrl: string, db: CmsDatabase): string {
     }
   }
   for (const pg of db.pages || []) {
-    if (pg.isPublished) {
+    if (pg.isPublished && (!pg.status || pg.status === 'published')) {
       urls.push({ loc: `${origin}/page/${pg.slug}`, priority: '0.8', changefreq: 'weekly' });
     }
   }
   for (const dept of db.departments || []) {
-    urls.push({ loc: `${origin}/department/${dept.slug}`, priority: '0.85', changefreq: 'weekly' });
+    if (!dept.status || dept.status === 'published') {
+      urls.push({ loc: `${origin}/department/${dept.slug}`, priority: '0.85', changefreq: 'weekly' });
+    }
   }
   for (const conf of db.conferences || []) {
-    if (conf.isPublished) {
+    if (conf.isPublished && (!conf.status || conf.status === 'published')) {
       urls.push({ loc: `${origin}/conference/${conf.slug}`, priority: '0.85', changefreq: 'weekly' });
     }
   }

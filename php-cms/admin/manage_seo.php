@@ -248,7 +248,15 @@ require_once __DIR__ . '/../includes/admin_layout_top.php';
       <div style="padding:1rem;border:1px solid #E7E5E4;border-radius:8px;background:#fff;">
         <div style="font-size:0.76rem;color:#0F766E;margin-bottom:0.2rem;"><?= e($canonicalBase) ?>/index.php</div>
         <div style="font-size:1.1rem;font-weight:700;color:#1D4ED8;margin-bottom:0.25rem;">
-          <?= e(($siteSettings['institution_name'] ?? 'SVCOER Pandharpur') . ' | ' . $seo['siteTitleSuffix']) ?>
+          <?php
+            $serpInst = trim((string)($siteSettings['institution_name'] ?? 'Campus Portal'));
+            $serpShort = trim((string)($siteSettings['short_code'] ?? ''));
+            $serpSuffix = trim((string)($seo['siteTitleSuffix'] ?? ''));
+            if ($serpShort !== '' && $serpShort !== 'SVCOER' && str_contains($serpSuffix, 'SVCOER')) {
+                $serpSuffix = $serpShort . ' — ' . $serpInst;
+            }
+          ?>
+          <?= e($serpInst . ($serpSuffix !== '' ? ' | ' . $serpSuffix : '')) ?>
         </div>
         <div style="font-size:0.84rem;color:#44403C;line-height:1.45;">
           <?= e(mb_substr((string)$seo['defaultDescription'], 0, 165)) ?>

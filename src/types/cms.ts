@@ -27,6 +27,8 @@ export interface PendingContentRevision {
   status: 'pending_approval' | 'approved' | 'rejected';
   reviewerEmail?: string;
   reviewerNote?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
   submittedAt: string;
   reviewedAt?: string;
 }

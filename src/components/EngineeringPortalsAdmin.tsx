@@ -108,6 +108,7 @@ export function EngineeringPortalsAdmin({
   const [ntAttachmentUrl, setNtAttachmentUrl] = useState('');
   const [ntLinkLabel, setNtLinkLabel] = useState('View Circular / PDF');
   const [ntPinned, setNtPinned] = useState(false);
+  const [ntShareable, setNtShareable] = useState(true);
 
   // Congratulations Desk (Placed Student & Winner Photo Cards) State
   const [editingStoryId, setEditingStoryId] = useState<number | null>(null);
@@ -122,6 +123,7 @@ export function EngineeringPortalsAdmin({
   const [stuHeadline, setStuHeadline] = useState('');
   const [stuRoleOrAward, setStuRoleOrAward] = useState('');
   const [stuFeatured, setStuFeatured] = useState(false);
+  const [stuShareable, setStuShareable] = useState(true);
 
   // Upcoming Placement Drive State
   const [editingDriveId, setEditingDriveId] = useState<number | null>(null);
@@ -374,12 +376,30 @@ export function EngineeringPortalsAdmin({
                       topRecruitersList: stRecruiters,
                     };
                     if (editingStatId) {
-                      await adminFetch(`/api/admin/placements/stats/${editingStatId}`, 'PUT', payload);
-                      notify('ok', `Updated placement statistics for ${stBranch} (${stYear}).`);
+                      const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                        `/api/admin/placements/stats/${editingStatId}`,
+                        'PUT',
+                        payload,
+                      );
+                      notify(
+                        'ok',
+                        res?.queuedForApproval && res.message
+                          ? res.message
+                          : `Updated placement statistics for ${stBranch} (${stYear}).`,
+                      );
                       setEditingStatId(null);
                     } else {
-                      await adminFetch('/api/admin/placements/stats', 'POST', payload);
-                      notify('ok', `Added placement statistics for ${stBranch} (${stYear}).`);
+                      const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                        '/api/admin/placements/stats',
+                        'POST',
+                        payload,
+                      );
+                      notify(
+                        'ok',
+                        res?.queuedForApproval && res.message
+                          ? res.message
+                          : `Added placement statistics for ${stBranch} (${stYear}).`,
+                      );
                     }
                   } catch (err) {
                     notify('err', (err as Error).message);
@@ -507,7 +527,19 @@ export function EngineeringPortalsAdmin({
                         <tr key={row.id}>
                           <td className="font-mono font-semibold">{row.academicYear}</td>
                           <td>
-                            <p className="font-bold text-stone-900 dark:text-white">{row.branch}</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="font-bold text-stone-900 dark:text-white">{row.branch}</p>
+                              {row.status === 'pending_approval' && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                                  Pending Approval
+                                </span>
+                              )}
+                              {row.status === 'rejected' && (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                                  Rejected
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-stone-500">{row.topRecruitersList}</p>
                           </td>
                           <td className="tabular-nums font-semibold">
@@ -569,9 +601,19 @@ export function EngineeringPortalsAdmin({
                               <button
                                 type="button"
                                 onClick={() =>
-                                  adminFetch(`/api/admin/placements/stats/${row.id}`, 'DELETE').then(() =>
-                                    notify('ok', 'Removed placement record.'),
+                                  adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                                    `/api/admin/placements/stats/${row.id}`,
+                                    'DELETE',
                                   )
+                                    .then((res) =>
+                                      notify(
+                                        'ok',
+                                        res?.queuedForApproval && res.message
+                                          ? res.message
+                                          : 'Removed placement record.',
+                                      ),
+                                    )
+                                    .catch((err) => notify('err', (err as Error).message))
                                 }
                                 className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                               >
@@ -604,19 +646,35 @@ export function EngineeringPortalsAdmin({
                     attachmentUrl: ntAttachmentUrl,
                     linkLabel: ntLinkLabel,
                     isPinned: ntPinned,
+                    isShareable: ntShareable,
                   };
                   if (editingNoticeId) {
-                    await adminFetch(`/api/admin/placements/notices/${editingNoticeId}`, 'PUT', payload);
-                    notify('ok', `Updated notice "${ntTitle}".`);
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      `/api/admin/placements/notices/${editingNoticeId}`,
+                      'PUT',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message ? res.message : `Updated notice "${ntTitle}".`,
+                    );
                     setEditingNoticeId(null);
                   } else {
-                    await adminFetch('/api/admin/placements/notices', 'POST', payload);
-                    notify('ok', `Published notice "${ntTitle}".`);
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      '/api/admin/placements/notices',
+                      'POST',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message ? res.message : `Published notice "${ntTitle}".`,
+                    );
                   }
                   setNtTitle('');
                   setNtSummary('');
                   setNtAttachmentUrl('');
                   setNtPinned(false);
+                  setNtShareable(true);
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -637,6 +695,7 @@ export function EngineeringPortalsAdmin({
                       setNtSummary('');
                       setNtAttachmentUrl('');
                       setNtPinned(false);
+                      setNtShareable(true);
                     }}
                     className="text-xs underline"
                   >
@@ -709,14 +768,24 @@ export function EngineeringPortalsAdmin({
                 placeholder="Attachment URL / Google Form Link (optional)"
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ntPinned}
-                  onChange={(e) => setNtPinned(e.target.checked)}
-                />
-                Pin Notice as Priority Alert at Top of Placement Portal
-              </label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ntPinned}
+                    onChange={(e) => setNtPinned(e.target.checked)}
+                  />
+                  Pin Notice as Priority Alert at Top of Placement Portal
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ntShareable}
+                    onChange={(e) => setNtShareable(e.target.checked)}
+                  />
+                  Allow Social Media Sharing on this Placement Notice
+                </label>
+              </div>
               <button
                 type="submit"
                 className="w-full py-2 rounded-lg text-xs font-bold text-white"
@@ -732,10 +801,22 @@ export function EngineeringPortalsAdmin({
                 {(placements.notices || []).map((nt, idx) => (
                   <div key={nt.id} className="py-3 flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
-                      <p className="font-mono text-[11px] text-stone-500">
-                        {nt.noticeDate} · <strong className="text-amber-700 dark:text-amber-400">{nt.category}</strong>
-                        {nt.isPinned ? ' · PINNED' : ''}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="font-mono text-[11px] text-stone-500">
+                          {nt.noticeDate} · <strong className="text-amber-700 dark:text-amber-400">{nt.category}</strong>
+                          {nt.isPinned ? ' · PINNED' : ''} · {nt.isShareable === false ? 'Share Hidden' : 'Shareable'}
+                        </p>
+                        {nt.status === 'pending_approval' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Pending Super Admin Approval
+                          </span>
+                        )}
+                        {nt.status === 'rejected' && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Rejected
+                          </span>
+                        )}
+                      </div>
                       <p className="font-bold text-stone-900 dark:text-white">{nt.title}</p>
                       <p className="text-stone-500 line-clamp-2">{nt.summary}</p>
                     </div>
@@ -779,6 +860,7 @@ export function EngineeringPortalsAdmin({
                           setNtAttachmentUrl(nt.attachmentUrl || '');
                           setNtLinkLabel(nt.linkLabel || 'View Circular / PDF');
                           setNtPinned(Boolean(nt.isPinned));
+                          setNtShareable(nt.isShareable !== false);
                         }}
                         className="p-1 rounded border"
                       >
@@ -787,9 +869,19 @@ export function EngineeringPortalsAdmin({
                       <button
                         type="button"
                         onClick={() =>
-                          adminFetch(`/api/admin/placements/notices/${nt.id}`, 'DELETE').then(() =>
-                            notify('ok', `Deleted notice "${nt.title}".`),
+                          adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                            `/api/admin/placements/notices/${nt.id}`,
+                            'DELETE',
                           )
+                            .then((res) =>
+                              notify(
+                                'ok',
+                                res?.queuedForApproval && res.message
+                                  ? res.message
+                                  : `Deleted notice "${nt.title}".`,
+                              ),
+                            )
+                            .catch((err) => notify('err', (err as Error).message))
                         }
                         className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                       >
@@ -1067,14 +1159,33 @@ export function EngineeringPortalsAdmin({
                     headline: stuHeadline,
                     roleOrAward: stuRoleOrAward,
                     isFeatured: stuFeatured,
+                    isShareable: stuShareable,
                   };
                   if (editingStoryId) {
-                    await adminFetch(`/api/admin/placements/stories/${editingStoryId}`, 'PUT', payload);
-                    notify('ok', `Updated Congratulations Desk entry for ${stuName}.`);
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      `/api/admin/placements/stories/${editingStoryId}`,
+                      'PUT',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message
+                        ? res.message
+                        : `Updated Congratulations Desk entry for ${stuName}.`,
+                    );
                     setEditingStoryId(null);
                   } else {
-                    await adminFetch('/api/admin/placements/stories', 'POST', payload);
-                    notify('ok', `Published Congratulations Desk spotlight for ${stuName}.`);
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      '/api/admin/placements/stories',
+                      'POST',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message
+                        ? res.message
+                        : `Published Congratulations Desk spotlight for ${stuName}.`,
+                    );
                   }
                   setStuName('');
                   setStuCompany('');
@@ -1083,6 +1194,7 @@ export function EngineeringPortalsAdmin({
                   setStuHeadline('');
                   setStuRoleOrAward('');
                   setStuFeatured(false);
+                  setStuShareable(true);
                 } catch (err) {
                   notify('err', (err as Error).message);
                 }
@@ -1106,6 +1218,7 @@ export function EngineeringPortalsAdmin({
                       setStuHeadline('');
                       setStuRoleOrAward('');
                       setStuFeatured(false);
+                      setStuShareable(true);
                     }}
                     className="text-xs underline"
                   >
@@ -1191,14 +1304,24 @@ export function EngineeringPortalsAdmin({
                 placeholder="Student experience quote or commendation note..."
                 className="w-full px-3 py-1.5 text-xs rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-800"
               />
-              <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={stuFeatured}
-                  onChange={(e) => setStuFeatured(e.target.checked)}
-                />
-                Highlight First on Congratulations Desk
-              </label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={stuFeatured}
+                    onChange={(e) => setStuFeatured(e.target.checked)}
+                  />
+                  Highlight First on Congratulations Desk
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={stuShareable}
+                    onChange={(e) => setStuShareable(e.target.checked)}
+                  />
+                  Allow Social Media Sharing on this Congratulations Card
+                </label>
+              </div>
               <button
                 type="submit"
                 className="w-full py-2 rounded-lg text-xs font-bold text-white"
@@ -1220,15 +1343,27 @@ export function EngineeringPortalsAdmin({
                         className="w-12 h-12 rounded-lg object-cover border shrink-0"
                       />
                       <div className="min-w-0">
-                        <p className="text-[11px] font-bold uppercase text-amber-700 dark:text-amber-400">
-                          {st.entryType || 'Campus Placement'}
-                          {st.isFeatured ? ' · FEATURED' : ''}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-[11px] font-bold uppercase text-amber-700 dark:text-amber-400">
+                            {st.entryType || 'Campus Placement'}
+                            {st.isFeatured ? ' · FEATURED' : ''}
+                          </p>
+                          {st.status === 'pending_approval' && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                              Pending Super Admin Approval
+                            </span>
+                          )}
+                          {st.status === 'rejected' && (
+                            <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                              Rejected
+                            </span>
+                          )}
+                        </div>
                         <p className="font-bold text-stone-900 dark:text-white">
                           {st.studentName} · {st.company} {st.packageLpa ? `(${st.packageLpa})` : ''}
                         </p>
                         <p className="text-stone-500">
-                          {st.branch} · Batch {st.batchYear} {st.roleOrAward ? `· ${st.roleOrAward}` : ''}
+                          {st.branch} · Batch {st.batchYear} {st.roleOrAward ? `· ${st.roleOrAward}` : ''} · {st.isShareable === false ? 'Share Hidden' : 'Shareable'}
                         </p>
                         {st.headline && <p className="text-[11px] text-emerald-700 dark:text-emerald-400 truncate">{st.headline}</p>}
                       </div>
@@ -1277,6 +1412,7 @@ export function EngineeringPortalsAdmin({
                           setStuHeadline(st.headline || '');
                           setStuRoleOrAward(st.roleOrAward || '');
                           setStuFeatured(Boolean(st.isFeatured));
+                          setStuShareable(st.isShareable !== false);
                         }}
                         className="p-1 rounded border"
                       >
@@ -1285,9 +1421,19 @@ export function EngineeringPortalsAdmin({
                       <button
                         type="button"
                         onClick={() =>
-                          adminFetch(`/api/admin/placements/stories/${st.id}`, 'DELETE').then(() =>
-                            notify('ok', `Removed entry for ${st.studentName}.`),
+                          adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                            `/api/admin/placements/stories/${st.id}`,
+                            'DELETE',
                           )
+                            .then((res) =>
+                              notify(
+                                'ok',
+                                res?.queuedForApproval && res.message
+                                  ? res.message
+                                  : `Removed entry for ${st.studentName}.`,
+                              ),
+                            )
+                            .catch((err) => notify('err', (err as Error).message))
                         }
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded"
                       >
@@ -1332,12 +1478,30 @@ export function EngineeringPortalsAdmin({
                 };
                 try {
                   if (editingCustomId) {
-                    await adminFetch(`/api/admin/placements/custom-sections/${editingCustomId}`, 'PUT', payload);
-                    notify('ok', `Updated custom placement section "${csTitle}".`);
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      `/api/admin/placements/custom-sections/${editingCustomId}`,
+                      'PUT',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message
+                        ? res.message
+                        : `Updated custom placement section "${csTitle}".`,
+                    );
                     setEditingCustomId(null);
                   } else {
-                    await adminFetch('/api/admin/placements/custom-sections', 'POST', payload);
-                    notify('ok', `Added custom placement section "${csTitle}".`);
+                    const res = await adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                      '/api/admin/placements/custom-sections',
+                      'POST',
+                      payload,
+                    );
+                    notify(
+                      'ok',
+                      res?.queuedForApproval && res.message
+                        ? res.message
+                        : `Added custom placement section "${csTitle}".`,
+                    );
                   }
                   setCsTitle('');
                   setCsSubtitle('');
@@ -1591,9 +1755,21 @@ export function EngineeringPortalsAdmin({
                 {(placements.customSections || []).map((sec, idx) => (
                   <div key={sec.id} className="py-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[11px] font-bold uppercase text-amber-700 dark:text-amber-400">
-                        {sec.sectionType} · {sec.isPublished !== false ? 'Published' : 'Hidden'}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-[11px] font-bold uppercase text-amber-700 dark:text-amber-400">
+                          {sec.sectionType} · {sec.isPublished !== false ? 'Published' : 'Hidden'}
+                        </p>
+                        {sec.status === 'pending_approval' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Pending Super Admin Approval
+                          </span>
+                        )}
+                        {sec.status === 'rejected' && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold">
+                            Rejected
+                          </span>
+                        )}
+                      </div>
                       <p className="font-bold text-stone-900 dark:text-white truncate">{sec.title}</p>
                       {sec.subtitle && <p className="text-stone-500 truncate">{sec.subtitle}</p>}
                     </div>
@@ -1648,9 +1824,19 @@ export function EngineeringPortalsAdmin({
                       <button
                         type="button"
                         onClick={() =>
-                          adminFetch(`/api/admin/placements/custom-sections/${sec.id}`, 'DELETE').then(() =>
-                            notify('ok', `Deleted section "${sec.title}".`),
+                          adminFetch<{ queuedForApproval?: boolean; message?: string }>(
+                            `/api/admin/placements/custom-sections/${sec.id}`,
+                            'DELETE',
                           )
+                            .then((res) =>
+                              notify(
+                                'ok',
+                                res?.queuedForApproval && res.message
+                                  ? res.message
+                                  : `Deleted section "${sec.title}".`,
+                              ),
+                            )
+                            .catch((err) => notify('err', (err as Error).message))
                         }
                         className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                       >
