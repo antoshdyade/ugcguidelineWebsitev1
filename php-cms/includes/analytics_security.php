@@ -101,6 +101,15 @@ function defaultSeoSettings(): array
                 'ogImageUrl'  => 'assets/images/hero_campus.jpg',
                 'noIndex'     => false,
             ],
+            [
+                'id'          => 7,
+                'path'        => 'tenders.php',
+                'title'       => 'Tenders, Quotations & Purchase Notices | Central Purchase Cell',
+                'description' => 'Official invitations to bid (NITs), Bill of Quantities (BOQ), corrigenda, vendor eligibility criteria, and contract award disclosures.',
+                'keywords'    => 'Tenders, NIT, Purchase Notices, GeM Procurement, BOQ, Quotations',
+                'ogImageUrl'  => 'assets/images/hero_campus.jpg',
+                'noIndex'     => false,
+            ],
         ],
     ];
 }
@@ -1058,6 +1067,7 @@ function buildPhpSitemapXml(PDO $pdo, string $baseUrl): string
     $urls = [
         ['loc' => $base . '/index.php', 'priority' => '1.0', 'changefreq' => 'daily'],
         ['loc' => $base . '/facilities.php', 'priority' => '0.9', 'changefreq' => 'weekly'],
+        ['loc' => $base . '/tenders.php', 'priority' => '0.85', 'changefreq' => 'daily'],
         ['loc' => $base . '/sports.php', 'priority' => '0.85', 'changefreq' => 'weekly'],
         ['loc' => $base . '/placements.php', 'priority' => '0.9', 'changefreq' => 'weekly'],
         ['loc' => $base . '/conferences.php', 'priority' => '0.9', 'changefreq' => 'weekly'],

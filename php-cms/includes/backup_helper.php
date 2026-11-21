@@ -47,6 +47,7 @@ function backupTablesList(): array
         'sports_gallery',
         'sports_notices',
         'facilities',
+        'tender_notices',
         'research_projects',
         'research_patents',
         'social_media_links',

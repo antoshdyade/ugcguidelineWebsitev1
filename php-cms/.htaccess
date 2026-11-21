@@ -63,5 +63,5 @@ DirectoryIndex index.php index.html
 
   # Clean top-level standalone portal routes
   RewriteRule ^(credits|developer|developers)/?$ credits.php [L,QSA,NC]
-  RewriteRule ^(conferences|placements|grievance|alumni|gallery|contact|quick-links|sports|facilities|feedback|search|credits)/?$ $1.php [L,QSA]
+  RewriteRule ^(conferences|placements|grievance|alumni|gallery|contact|quick-links|sports|facilities|tenders|feedback|search|credits)/?$ $1.php [L,QSA]
 </IfModule>

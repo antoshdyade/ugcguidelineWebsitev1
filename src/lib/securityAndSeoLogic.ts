@@ -89,6 +89,14 @@ export const DEFAULT_SEO_SETTINGS: SeoSettings = {
         'Submit academic, examination, hostel, infrastructure, IT, or placement feedback and complaints routed directly to concerned campus section heads.',
       keywords: 'SVCOER Feedback, Campus Complaint Portal, Student Suggestions, Section Email Routing',
     },
+    {
+      id: 'seo-tenders',
+      routePattern: '/tenders',
+      title: 'Tenders, Quotations & Purchase Notices | SVCOER Pandharpur',
+      description:
+        'Official purchase notices (NIT), BOQs, corrigenda, GeM bids, vendor eligibility rules, and contract awards issued by the Central Purchase Cell.',
+      keywords: 'SVCOER Tenders, Purchase Notices, GeM Bids, Lab Equipment Tender, Civil Works NIT',
+    },
   ],
 };
 
@@ -1021,6 +1029,7 @@ export function buildSitemapXml(baseUrl: string, db: CmsDatabase): string {
     { loc: `${origin}/gallery`, priority: '0.7', changefreq: 'monthly' },
     { loc: `${origin}/grievance`, priority: '0.7', changefreq: 'monthly' },
     { loc: `${origin}/feedback`, priority: '0.75', changefreq: 'weekly' },
+    { loc: `${origin}/tenders`, priority: '0.85', changefreq: 'daily' },
     { loc: `${origin}/contact`, priority: '0.7', changefreq: 'monthly' },
     { loc: `${origin}/credits`, priority: '0.6', changefreq: 'monthly' },
   ];

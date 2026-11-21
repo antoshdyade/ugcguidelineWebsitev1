@@ -226,6 +226,8 @@ $resolvedSeo = resolvePhpRouteSeo(
                 <a href="<?= e(baseUrl('sports.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Sports, Athletics &amp; Recreation &rarr;</a>
                 <a href="<?= e(baseUrl('placements.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Training &amp; Placement (T&amp;P) Hub &rarr;</a>
                 <a href="<?= e(baseUrl('grievance.php')) ?>" style="background:#FFFBEB;color:#92400E;font-weight:700;">Online Grievance Redressal &rarr;</a>
+              <?php elseif ($cat['slug'] === 'information-corner' || $cat['slug'] === 'administration'): ?>
+                <a href="<?= e(baseUrl('tenders.php')) ?>" style="background:#EFF6FF;color:#0F294A;font-weight:700;">Tenders, Quotations &amp; Purchase Notices &rarr;</a>
               <?php endif; ?>
               <?php foreach ($pagesByCat[$cat['id']] ?? [] as $pg): ?>
                 <a href="<?= e(baseUrl('page.php?slug=' . urlencode($pg['slug']))) ?>"><?= e($pg['title']) ?></a>
@@ -261,6 +263,8 @@ $resolvedSeo = resolvePhpRouteSeo(
                   <a href="<?= e(baseUrl('sports.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Sports, Athletics &amp; Recreation</a>
                   <a href="<?= e(baseUrl('placements.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Training &amp; Placement Hub</a>
                   <a href="<?= e(baseUrl('grievance.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Grievance &amp; Anti-Ragging Helpdesk</a>
+                <?php elseif ($ocat['slug'] === 'information-corner' || $ocat['slug'] === 'administration'): ?>
+                  <a href="<?= e(baseUrl('tenders.php')) ?>" style="padding-left:1.25rem;font-size:0.8rem;font-weight:700;">Tenders, Quotations &amp; Purchase Notices</a>
                 <?php endif; ?>
                 <?php foreach (array_slice($pagesByCat[$ocat['id']] ?? [], 0, 3) as $pg): ?>
                   <a href="<?= e(baseUrl('page.php?slug=' . urlencode($pg['slug']))) ?>" style="padding-left:1.25rem;font-size:0.8rem;"><?= e($pg['title']) ?></a>

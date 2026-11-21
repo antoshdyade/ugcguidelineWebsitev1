@@ -574,6 +574,18 @@ export function PublicHeader({
                             Conferences, Workshops, FDPs &amp; Events Portal &rarr;
                           </button>
                         )}
+                        {(cat.slug === 'information-corner' || cat.slug === 'administration') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenDropdown(null);
+                              onNavigate('/tenders');
+                            }}
+                            className="w-full text-left px-2.5 py-2 text-xs font-bold rounded bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 mb-1"
+                          >
+                            Tenders, Quotations &amp; Purchase Notices &rarr;
+                          </button>
+                        )}
                         {cat.slug === 'student-life' && (
                           <div className="space-y-1 mb-1">
                             <button
@@ -748,6 +760,18 @@ export function PublicHeader({
                                 Conferences, Workshops &amp; Events Portal &rarr;
                               </button>
                             )}
+                            {(cat.slug === 'information-corner' || cat.slug === 'administration') && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdown(null);
+                                  onNavigate('/tenders');
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs font-bold rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 my-1"
+                              >
+                                Tenders &amp; Purchase Notices &rarr;
+                              </button>
+                            )}
                             {cat.slug === 'student-life' && (
                               <div className="space-y-1 my-1">
                                 <button
@@ -863,6 +887,18 @@ export function PublicHeader({
                         className="block w-full text-left py-1 text-xs font-bold text-amber-800"
                       >
                         Conferences, Workshops &amp; Events Portal &rarr;
+                      </button>
+                    )}
+                    {(cat.slug === 'information-corner' || cat.slug === 'administration') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          onNavigate('/tenders');
+                        }}
+                        className="block w-full text-left py-1 text-xs font-bold text-amber-800"
+                      >
+                        Tenders &amp; Purchase Notices &rarr;
                       </button>
                     )}
                     {cat.slug === 'student-life' && (

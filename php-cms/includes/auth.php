@@ -233,6 +233,7 @@ function canAccessResource(array $user, string $resource, ?int $targetDeptId = n
         case 'placements':
         case 'sports':
         case 'facilities':
+        case 'tenders':
         case 'seo':
             return in_array($role, ['content_editor', 'iqac_officer'], true);
         case 'grievances':
@@ -260,6 +261,7 @@ function rbacModuleOptions(): array
         'placements'     => 'Placements Desk (T&P)',
         'sports'         => 'Student Life — Sports Portal',
         'facilities'     => 'Campus Facilities & Infrastructure',
+        'tenders'        => 'Tenders & Purchase Notices',
         'grievances'     => 'Grievance Redressal Desk',
         'seo'            => 'SEO Studio & Hit Counter',
         'analytics'      => 'Log Analyzer & Security Shield',
@@ -336,6 +338,80 @@ function facilityCategoryPresets(): array
         'Library & Digital Resources',
         'Green & Barrier-Free Campus',
     ];
+}
+
+function tenderCategoryPresets(): array
+{
+    return [
+        'Lab Equipment & Machinery',
+        'IT Hardware, Networking & Software',
+        'Civil & Electrical Works',
+        'AMC & Campus Services',
+        'Furniture & Fixtures',
+        'Stationery, Books & Consumables',
+    ];
+}
+
+function tenderModePresets(): array
+{
+    return [
+        'Open Tender (Two-Bid System)',
+        'Limited Tender Enquiry',
+        'GeM Portal Bid',
+        'Sealed Quotation Invite',
+        'Annual Rate Contract',
+    ];
+}
+
+function tenderStatusPresets(): array
+{
+    return [
+        'Open',
+        'Corrigendum Issued',
+        'Under Evaluation',
+        'Awarded',
+        'Closed',
+    ];
+}
+
+function defaultTenderPortalConfig(): array
+{
+    return [
+        'heroBadge'               => 'Central Purchase & Procurement Cell · Store & Finance Division',
+        'heroTitle'               => 'Tenders, Quotations & Purchase Notices',
+        'heroSubtitle'            => 'Official invitations to bid (NITs), Bill of Quantities (BOQ), corrigenda, vendor eligibility criteria, pre-bid schedules, and contract award disclosures for laboratory, IT, civil, and campus services.',
+        'officerName'             => 'Prof. A. B. Deshpande',
+        'officerTitle'            => 'Purchase Officer & Convenor, Central Purchase Committee',
+        'officerEmail'            => 'purchase@coe.sveri.ac.in',
+        'officerPhone'            => '+91-02186-216063',
+        'officeAddress'           => 'Central Store & Purchase Office, Administrative Block, Gopalpur, Pandharpur - 413304',
+        'eProcurementPortalUrl'   => 'https://gem.gov.in/',
+        'eProcurementPortalLabel' => 'GeM / e-Tendering Portal',
+        'generalTermsHtml'        => '<ul><li>All sealed quotations / technical &amp; financial bids must quote the exact <strong>NIT Reference Number</strong> on the envelope and reach the Central Purchase Office before the notified deadline.</li><li>GST registration, PAN copy, OEM authorization (for IT/Lab equipment), and Earnest Money Deposit (EMD) DD drawn in favour of the Principal are mandatory unless exempted under MSME/NSIC norms.</li><li>The Central Purchase Committee reserves the right to accept, split, or reject any tender without assigning reasons.</li></ul>',
+        'customFieldPresets'      => ['Technical Specifications', 'Delivery Period', 'Warranty / DLP', 'Bid Validity', 'Payment Terms'],
+    ];
+}
+
+function getTenderPortalConfig(PDO $pdo): array
+{
+    $def = defaultTenderPortalConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'tender_portal_config' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                return array_merge($def, $dec);
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function saveTenderPortalConfig(PDO $pdo, array $cfg): void
+{
+    $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('tender_portal_config', ?) ON DUPLICATE KEY UPDATE val_json = VALUES(val_json)")
+        ->execute([json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
 }
 
 function conferenceModePresets(): array
@@ -462,10 +538,11 @@ function defaultPortalMenuItems(): array
         ['id' => 'placements',  'label' => 'Placements',  'href' => 'placements.php',  'matchScripts' => ['placements.php'], 'menuLocation' => 'main', 'sortOrder' => 3, 'isSystem' => true, 'openInNewTab' => false],
         ['id' => 'grievance',   'label' => 'Grievance & Anti-Ragging', 'href' => 'grievance.php', 'matchScripts' => ['grievance.php'], 'menuLocation' => 'main', 'sortOrder' => 4, 'isSystem' => true, 'openInNewTab' => false],
         ['id' => 'feedback',    'label' => 'Feedback Cell', 'href' => 'feedback.php', 'matchScripts' => ['feedback.php'], 'menuLocation' => 'more', 'sortOrder' => 5, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'alumni',      'label' => 'Alumni',      'href' => 'alumni.php',      'matchScripts' => ['alumni.php'], 'menuLocation' => 'main', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'gallery',     'label' => 'Gallery',     'href' => 'gallery.php',     'matchScripts' => ['gallery.php'], 'menuLocation' => 'more', 'sortOrder' => 7, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'contact',     'label' => 'Contact Us',  'href' => 'contact.php',     'matchScripts' => ['contact.php'], 'menuLocation' => 'more', 'sortOrder' => 8, 'isSystem' => true, 'openInNewTab' => false],
-        ['id' => 'quick-links', 'label' => 'Quick Links & Disclosures', 'href' => 'quick-links.php', 'matchScripts' => ['quick-links.php'], 'menuLocation' => 'more', 'sortOrder' => 9, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'tenders',     'label' => 'Tenders & Notices', 'href' => 'tenders.php', 'matchScripts' => ['tenders.php'], 'menuLocation' => 'more', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'alumni',      'label' => 'Alumni',      'href' => 'alumni.php',      'matchScripts' => ['alumni.php'], 'menuLocation' => 'main', 'sortOrder' => 7, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'gallery',     'label' => 'Gallery',     'href' => 'gallery.php',     'matchScripts' => ['gallery.php'], 'menuLocation' => 'more', 'sortOrder' => 8, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'contact',     'label' => 'Contact Us',  'href' => 'contact.php',     'matchScripts' => ['contact.php'], 'menuLocation' => 'more', 'sortOrder' => 9, 'isSystem' => true, 'openInNewTab' => false],
+        ['id' => 'quick-links', 'label' => 'Quick Links & Disclosures', 'href' => 'quick-links.php', 'matchScripts' => ['quick-links.php'], 'menuLocation' => 'more', 'sortOrder' => 10, 'isSystem' => true, 'openInNewTab' => false],
     ];
 }
 
@@ -1376,6 +1453,7 @@ function resolveConfigurableLinkUrl(string $rawUrl): string
         'developer'   => 'credits.php',
         'developers'  => 'credits.php',
         'facilities'  => 'facilities.php',
+        'tenders'     => 'tenders.php',
         'sports'      => 'sports.php',
         'placements'  => 'placements.php',
         'conferences' => 'conferences.php',
@@ -1474,6 +1552,7 @@ function defaultTopBarLinks(): array
 {
     return [
         ['label' => 'Quick Links',             'url' => 'quick-links.php'],
+        ['label' => 'Tenders & Notices',       'url' => 'tenders.php'],
         ['label' => 'Conferences & Workshops', 'url' => 'conferences.php'],
         ['label' => 'Examination Cell',        'url' => 'page.php?cat=examination'],
         ['label' => 'Alumni Network',          'url' => 'alumni.php'],
@@ -1552,6 +1631,7 @@ function defaultFooterColumns(): array
             'title' => 'Repositories & Contact',
             'links' => [
                 ['label' => 'Campus Facilities',         'url' => 'facilities.php'],
+                ['label' => 'Tenders & Purchase Notices', 'url' => 'tenders.php'],
                 ['label' => 'Sports & Gymkhana',         'url' => 'sports.php'],
                 ['label' => 'Downloadable Repository',   'url' => 'quick-links.php'],
                 ['label' => 'Conferences & Events',      'url' => 'conferences.php'],
@@ -3279,13 +3359,126 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
         } catch (Throwable $ignoredShareSync) {
         }
 
+        // Schema v12: Tenders & Purchase Notices Portal (non-destructive)
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS tender_notices (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                reference_number VARCHAR(120) NOT NULL,
+                title VARCHAR(280) NOT NULL,
+                category VARCHAR(140) NOT NULL DEFAULT 'Lab Equipment & Machinery',
+                department_name VARCHAR(180) NOT NULL DEFAULT 'Central Purchase Cell',
+                procurement_mode VARCHAR(140) NOT NULL DEFAULT 'Open Tender (Two-Bid System)',
+                estimated_value VARCHAR(100) DEFAULT '',
+                emd_amount VARCHAR(100) DEFAULT '',
+                tender_fee VARCHAR(100) DEFAULT '',
+                publish_date VARCHAR(40) NOT NULL,
+                pre_bid_date VARCHAR(140) DEFAULT '',
+                submission_deadline VARCHAR(100) NOT NULL,
+                bid_opening_date VARCHAR(100) DEFAULT '',
+                lifecycle_status VARCHAR(60) NOT NULL DEFAULT 'Open',
+                summary TEXT NULL,
+                eligibility_html MEDIUMTEXT NULL,
+                nit_pdf_url VARCHAR(500) DEFAULT '',
+                boq_url VARCHAR(500) DEFAULT '',
+                corrigendum_note TEXT NULL,
+                corrigendum_url VARCHAR(500) DEFAULT '',
+                awarded_to VARCHAR(220) DEFAULT '',
+                awarded_value VARCHAR(100) DEFAULT '',
+                po_reference VARCHAR(160) DEFAULT '',
+                custom_fields_json MEDIUMTEXT NULL,
+                is_pinned TINYINT(1) DEFAULT 0,
+                is_published TINYINT(1) DEFAULT 1,
+                is_shareable TINYINT(1) NOT NULL DEFAULT 1,
+                moderation_status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published',
+                sort_order INT DEFAULT 1
+            ) ENGINE=InnoDB"
+        );
+        try {
+            $tnChk = $pdo->prepare("SELECT val_json FROM cms_kv_store WHERE key_name = 'tenders_seeded_v1' LIMIT 1");
+            $tnChk->execute();
+            if (!$tnChk->fetchColumn()) {
+                if ((int)$pdo->query('SELECT COUNT(*) FROM tender_notices')->fetchColumn() === 0) {
+                    $insTn = $pdo->prepare(
+                        'INSERT INTO tender_notices (reference_number, title, category, department_name, procurement_mode, estimated_value, emd_amount, tender_fee, publish_date, pre_bid_date, submission_deadline, bid_opening_date, lifecycle_status, summary, eligibility_html, nit_pdf_url, boq_url, corrigendum_note, corrigendum_url, awarded_to, awarded_value, po_reference, custom_fields_json, is_pinned, is_published, is_shareable, moderation_status, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                    );
+                    $insTn->execute([
+                        'SVCOER/PUR/2026-27/014', 'Supply, Installation & Commissioning of 5-Axis CNC Machining Centre & Metrology Bench',
+                        'Lab Equipment & Machinery', 'Mechanical Engineering & IDEA Lab', 'Open Tender (Two-Bid System)',
+                        'Rs. 24,50,000', 'Rs. 49,000', 'Rs. 2,000 (Non-Refundable)', '2026-11-10',
+                        '2026-11-22 11:30 AM · R&D Seminar Hall', '2026-12-08 05:00 PM', '2026-12-10 11:00 AM', 'Open',
+                        'Sealed two-bid technical and commercial offers are invited from OEMs or authorized dealers for a 5-axis CNC milling trainer and digital coordinate measuring arm.',
+                        '<ul><li>Minimum 3 years OEM/authorized supply track record in AICTE engineering institutions.</li><li>Average annual turnover &ge; Rs. 75 Lakhs over preceding 3 FYs.</li></ul>',
+                        'quick-links.php', 'quick-links.php', '', '', '', '', '',
+                        json_encode([['label' => 'Delivery Period', 'value' => '6 Weeks from Purchase Order'], ['label' => 'Warranty / DLP', 'value' => '36 Months Comprehensive On-Site']], JSON_UNESCAPED_UNICODE),
+                        1, 1, 1, 'published', 1,
+                    ]);
+                    $insTn->execute([
+                        'SVCOER/IT/2026-27/011', 'Campus Wi-Fi 6 Access Points, Layer-3 Core Switches & Next-Gen Firewall Upgrade',
+                        'IT Hardware, Networking & Software', 'Central Computing & Network Cell', 'GeM Portal Bid',
+                        'Rs. 18,20,000', 'Rs. 36,000', 'Exempted (GeM)', '2026-11-04',
+                        '2026-11-18 03:00 PM · IT Data Centre', '2026-12-02 04:00 PM', '2026-12-03 12:00 PM', 'Corrigendum Issued',
+                        'Procurement of 48 enterprise Wi-Fi 6 indoor access points, 4 stackable 10G SFP+ L3 switches, and HA cluster firewall appliance with 5-year UTM license.',
+                        '<ul><li>OEM Authorization Form (MAF) referencing Tender No. SVCOER/IT/2026-27/011 is mandatory.</li><li>Bidder must have executed at least 2 campus LAN/Wi-Fi deployments of Rs. 10 Lakhs+ in Maharashtra.</li></ul>',
+                        'quick-links.php', 'quick-links.php',
+                        'Corrigendum-1 (15 Nov 2026): Submission deadline extended to 02 Dec 2026; SFP+ transceiver quantity revised from 24 to 32 units.', 'quick-links.php',
+                        '', '', '',
+                        json_encode([['label' => 'Technical Specifications', 'value' => '802.11ax Dual-Band MU-MIMO + 10G Uplink']], JSON_UNESCAPED_UNICODE),
+                        1, 1, 1, 'published', 2,
+                    ]);
+                    $insTn->execute([
+                        'SVCOER/EST/2026-27/008', 'Annual Maintenance Contract (AMC) for 520 kWp Rooftop Solar PV & Substation Switchgear',
+                        'AMC & Campus Services', 'Campus Estate & Electrical Division', 'Sealed Quotation Invite',
+                        'Rs. 6,40,000', 'Rs. 12,000', 'Rs. 1,000', '2026-10-25',
+                        '2026-11-02 11:00 AM', '2026-11-28 05:00 PM', '2026-11-30 11:30 AM', 'Under Evaluation',
+                        'Preventive quarterly servicing, thermal imaging inspection, string inverter calibration, and 11 kV HT/LT transformer filtration across campus solar blocks.',
+                        '<ul><li>Valid PWD Electrical Contractor License (HT Category) mandatory.</li></ul>',
+                        'quick-links.php', '', '', '', '', '', '',
+                        json_encode([['label' => 'Contract Tenure', 'value' => '12 Months (Extendable by 1 Year)']], JSON_UNESCAPED_UNICODE),
+                        0, 1, 1, 'published', 3,
+                    ]);
+                    $insTn->execute([
+                        'SVCOER/LIB/2026-27/003', 'Central Library RFID Self-Check Kiosk, Security Gate & UHF Smart Tagging Supply',
+                        'Stationery, Books & Consumables', 'Central Knowledge Resource Centre', 'Limited Tender Enquiry',
+                        'Rs. 9,80,000', 'Rs. 20,000', 'Rs. 1,000', '2026-09-12',
+                        '', '2026-10-05 05:00 PM', '2026-10-07 11:00 AM', 'Awarded',
+                        'Turnkey integration of 2 self-issue/return kiosks, dual-aisle UHF theft detection gate, and 25,000 RFID book tags integrated via SIP2 with KOHA ILMS.',
+                        '<ul><li>Full SIP2 compatibility with existing KOHA v23.11 server required.</li></ul>',
+                        'quick-links.php', '', '', '',
+                        'M/s LibTech Automation Systems Pvt. Ltd., Pune', 'Rs. 9,18,500 (Incl. GST)', 'PO/SVCOER/2026-27/118 (Dt. 2026-10-19)',
+                        json_encode([['label' => 'Integration Standard', 'value' => 'ISO 18000-6C UHF / KOHA SIP2']], JSON_UNESCAPED_UNICODE),
+                        0, 1, 1, 'published', 4,
+                    ]);
+                }
+                $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('tenders_seeded_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")->execute();
+            }
+            $pmRawTn = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'portal_menu_items' LIMIT 1")->fetchColumn();
+            if (is_string($pmRawTn) && $pmRawTn !== '') {
+                $pmArrTn = json_decode($pmRawTn, true);
+                if (is_array($pmArrTn)) {
+                    $hasTn = false;
+                    foreach ($pmArrTn as $pmRow) {
+                        if (($pmRow['id'] ?? '') === 'tenders') {
+                            $hasTn = true;
+                            break;
+                        }
+                    }
+                    if (!$hasTn) {
+                        $pmArrTn[] = ['id' => 'tenders', 'label' => 'Tenders & Notices', 'href' => 'tenders.php', 'menuLocation' => 'more', 'sortOrder' => 6, 'isSystem' => true, 'openInNewTab' => false];
+                        savePortalMenuItems($pdo, $pmArrTn);
+                    }
+                }
+            }
+        } catch (Throwable $ignoredTenders) {
+        }
+
         try {
             $kvSeedPairs = [
-                'header_config'       => json_encode(defaultHeaderConfig(), JSON_UNESCAPED_UNICODE),
-                'top_bar_links'       => json_encode(defaultTopBarLinks(), JSON_UNESCAPED_UNICODE),
-                'footer_columns'      => json_encode(defaultFooterColumns(), JSON_UNESCAPED_UNICODE),
-                'footer_config'       => json_encode(defaultFooterConfig(), JSON_UNESCAPED_UNICODE),
-                'credits_page_config' => json_encode(defaultCreditsPageConfig(), JSON_UNESCAPED_UNICODE),
+                'header_config'        => json_encode(defaultHeaderConfig(), JSON_UNESCAPED_UNICODE),
+                'top_bar_links'        => json_encode(defaultTopBarLinks(), JSON_UNESCAPED_UNICODE),
+                'footer_columns'       => json_encode(defaultFooterColumns(), JSON_UNESCAPED_UNICODE),
+                'footer_config'        => json_encode(defaultFooterConfig(), JSON_UNESCAPED_UNICODE),
+                'credits_page_config'  => json_encode(defaultCreditsPageConfig(), JSON_UNESCAPED_UNICODE),
+                'tender_portal_config' => json_encode(defaultTenderPortalConfig(), JSON_UNESCAPED_UNICODE),
             ];
             $kvCheck = $pdo->prepare('SELECT key_name FROM cms_kv_store WHERE key_name = ? LIMIT 1');
             $kvIns   = $pdo->prepare('INSERT IGNORE INTO cms_kv_store (key_name, val_json) VALUES (?, ?)');
@@ -3343,6 +3536,7 @@ function swapSortOrder(PDO $pdo, string $table, int $id, string $dir, ?string $s
         'sports_gallery',
         'sports_notices',
         'facilities',
+        'tender_notices',
         'social_media_links',
         'research_projects',
         'research_patents',

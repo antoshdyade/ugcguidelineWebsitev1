@@ -24,6 +24,7 @@ export const BACKUP_DATA_KEYS = [
   'placements',
   'sports',
   'facilities',
+  'tenders',
   'grievances',
   'users',
   'auditLogs',
@@ -59,6 +60,7 @@ export function extractSnapshotData(
     placements: db.placements,
     sports: db.sports,
     facilities: db.facilities,
+    tenders: db.tenders,
     grievances: db.grievances,
     users: db.users,
     auditLogs: db.auditLogs,
@@ -89,7 +91,7 @@ export function countDatabaseEntities(
       } else if (key === 'sports' && 'facilities' in val) {
         const sp = val as { facilities?: unknown[]; events?: unknown[]; achievements?: unknown[]; gallery?: unknown[]; notices?: unknown[] };
         counts[key] = (sp.facilities?.length ?? 0) + (sp.events?.length ?? 0) + (sp.achievements?.length ?? 0) + (sp.gallery?.length ?? 0) + (sp.notices?.length ?? 0);
-      } else if (key === 'facilities' && 'items' in val && Array.isArray((val as { items?: unknown[] }).items)) {
+      } else if ((key === 'facilities' || key === 'tenders') && 'items' in val && Array.isArray((val as { items?: unknown[] }).items)) {
         counts[key] = (val as { items: unknown[] }).items.length;
       } else {
         counts[key] = 1;

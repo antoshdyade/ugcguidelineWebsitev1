@@ -34,6 +34,9 @@ import type {
   SocialSharingConfig,
   SportsData,
   FacilitiesData,
+  TenderNotice,
+  TenderPortalConfig,
+  TendersData,
   UserRole,
   VisitorLogEntry,
 } from '../types/cms';
@@ -44,7 +47,7 @@ import {
   createSeedVisitorLogs,
 } from './securityAndSeoLogic';
 
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 export const CONTRIBUTOR_ROLE_PRESETS = [
   'Creator',
@@ -73,6 +76,7 @@ export const DEFAULT_FOOTER_CONFIG: FooterConfig = {
   showBottomLinks: true,
   bottomBarLinks: [
     { label: 'Campus Facilities', url: '/facilities' },
+    { label: 'Tenders & Notices', url: '/tenders' },
     { label: 'Sports & Gymkhana', url: '/sports' },
     { label: 'Conferences & Events', url: '/conferences' },
     { label: 'Training & Placements', url: '/placements' },
@@ -317,16 +321,59 @@ export const CONFERENCE_SUBMISSION_PLATFORM_PRESETS = [
   'Google Form',
 ] as const;
 
+export const TENDER_CATEGORY_PRESETS = [
+  'Lab Equipment & Machinery',
+  'IT Hardware, Networking & Software',
+  'Civil & Electrical Works',
+  'AMC & Campus Services',
+  'Furniture & Fixtures',
+  'Stationery, Books & Consumables',
+] as const;
+
+export const TENDER_MODE_PRESETS = [
+  'Open Tender (Two-Bid System)',
+  'Limited Tender Enquiry',
+  'GeM Portal Bid',
+  'Sealed Quotation Invite',
+  'Annual Rate Contract',
+] as const;
+
+export const TENDER_STATUS_PRESETS = [
+  'Open',
+  'Corrigendum Issued',
+  'Under Evaluation',
+  'Awarded',
+  'Closed',
+] as const;
+
+export const DEFAULT_TENDER_PORTAL_CONFIG: TenderPortalConfig = {
+  heroBadge: 'Central Purchase & Procurement Cell · Store & Finance Division',
+  heroTitle: 'Tenders, Quotations & Purchase Notices',
+  heroSubtitle:
+    'Official invitations to bid (NITs), Bill of Quantities (BOQ), corrigenda, vendor eligibility criteria, pre-bid schedules, and contract award disclosures for laboratory, IT, civil, and campus services.',
+  officerName: 'Prof. A. B. Deshpande',
+  officerTitle: 'Purchase Officer & Convenor, Central Purchase Committee',
+  officerEmail: 'purchase@coe.sveri.ac.in',
+  officerPhone: '+91-02186-216063',
+  officeAddress: 'Central Store & Purchase Office, Administrative Block, Gopalpur, Pandharpur - 413304',
+  eProcurementPortalUrl: 'https://gem.gov.in/',
+  eProcurementPortalLabel: 'GeM / e-Tendering Portal',
+  generalTermsHtml:
+    '<ul><li>All sealed quotations / technical &amp; financial bids must quote the exact <strong>NIT Reference Number</strong> on the envelope and reach the Central Purchase Office before the notified deadline.</li><li>GST registration, PAN copy, OEM authorization (for IT/Lab equipment), and Earnest Money Deposit (EMD) DD drawn in favour of the Principal are mandatory unless exempted under MSME/NSIC norms.</li><li>The Central Purchase Committee reserves the right to accept, split, or reject any tender without assigning reasons.</li></ul>',
+  customFieldPresets: ['Technical Specifications', 'Delivery Period', 'Warranty / DLP', 'Bid Validity', 'Payment Terms'],
+};
+
 export const DEFAULT_PORTAL_MENU_ITEMS: HeaderPortalMenuItem[] = [
   { id: 1, label: 'Conferences', url: '/conferences', menuLocation: 'main', sortOrder: 1 },
   { id: 8, label: 'Facilities', url: '/facilities', menuLocation: 'main', sortOrder: 2 },
   { id: 2, label: 'Placements', url: '/placements', menuLocation: 'main', sortOrder: 3 },
   { id: 3, label: 'Grievance & Anti-Ragging', url: '/grievance', menuLocation: 'main', sortOrder: 4 },
   { id: 4, label: 'Alumni', url: '/alumni', menuLocation: 'main', sortOrder: 5 },
-  { id: 5, label: 'Gallery', url: '/gallery', menuLocation: 'more', sortOrder: 6 },
-  { id: 6, label: 'Contact Us', url: '/contact', menuLocation: 'more', sortOrder: 7 },
-  { id: 7, label: 'Quick Links & Disclosures', url: '/quick-links', menuLocation: 'more', sortOrder: 8 },
-  { id: 9, label: 'Complaint & Feedback', url: '/feedback', menuLocation: 'more', sortOrder: 9 },
+  { id: 10, label: 'Tenders & Notices', url: '/tenders', menuLocation: 'more', sortOrder: 6 },
+  { id: 5, label: 'Gallery', url: '/gallery', menuLocation: 'more', sortOrder: 7 },
+  { id: 6, label: 'Contact Us', url: '/contact', menuLocation: 'more', sortOrder: 8 },
+  { id: 7, label: 'Quick Links & Disclosures', url: '/quick-links', menuLocation: 'more', sortOrder: 9 },
+  { id: 9, label: 'Complaint & Feedback', url: '/feedback', menuLocation: 'more', sortOrder: 10 },
 ];
 
 export const FEEDBACK_SUBMISSION_TYPE_PRESETS = [
@@ -1263,6 +1310,19 @@ export function migrateDatabaseInPlace(
         }
       : ((upgraded = true), structuredClone(seed.facilities!));
 
+  const mergedTenders: TendersData =
+    existing.tenders && Array.isArray(existing.tenders.items)
+      ? {
+          config: { ...DEFAULT_TENDER_PORTAL_CONFIG, ...(seed.tenders?.config || {}), ...(existing.tenders.config || {}) },
+          items: existing.tenders.items.map((item) => ({
+            ...item,
+            isShareable: item.isShareable ?? true,
+            moderationStatus: item.moderationStatus || 'published',
+            customFields: Array.isArray(item.customFields) ? item.customFields : [],
+          })),
+        }
+      : ((upgraded = true), structuredClone(seed.tenders || { config: DEFAULT_TENDER_PORTAL_CONFIG, items: [] }));
+
   const mergedResearchPortfolio: ResearchPortfolioData =
     existing.researchPortfolio && Array.isArray(existing.researchPortfolio.projects)
       ? {
@@ -1338,6 +1398,7 @@ export function migrateDatabaseInPlace(
     placements: mergedPlacements,
     sports: mergedSports,
     facilities: mergedFacilities,
+    tenders: mergedTenders,
     researchPortfolio: mergedResearchPortfolio,
     grievances,
     feedbackSections,
@@ -1489,6 +1550,36 @@ export function filterResearchPatents(
       );
     })
     .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+}
+
+export function filterTenderNotices(
+  tenders: TenderNotice[],
+  categoryFilter = 'All',
+  statusFilter = 'All',
+  query = '',
+): TenderNotice[] {
+  const q = query.trim().toLowerCase();
+  return [...(tenders || [])]
+    .filter((t) => {
+      if (categoryFilter && categoryFilter !== 'All' && t.category !== categoryFilter) return false;
+      if (statusFilter && statusFilter !== 'All' && t.lifecycleStatus !== statusFilter) return false;
+      if (!q) return true;
+      const cfText = (t.customFields || []).map((cf) => `${cf.label} ${cf.value}`).join(' ').toLowerCase();
+      return (
+        t.title.toLowerCase().includes(q) ||
+        t.referenceNumber.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.departmentName.toLowerCase().includes(q) ||
+        t.procurementMode.toLowerCase().includes(q) ||
+        t.summary.toLowerCase().includes(q) ||
+        cfText.includes(q)
+      );
+    })
+    .sort((a, b) => {
+      const pinDiff = Number(Boolean(b.isPinned)) - Number(Boolean(a.isPinned));
+      if (pinDiff !== 0) return pinDiff;
+      return (a.sortOrder ?? 999) - (b.sortOrder ?? 999);
+    });
 }
 
 export function validateFeedbackInput(input: {

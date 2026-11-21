@@ -5,6 +5,8 @@ import {
   buildRevisionDiffRows,
   canPublishDirectly,
   CURRENT_SCHEMA_VERSION,
+  DEFAULT_PORTAL_MENU_ITEMS,
+  filterTenderNotices,
   isEntityShareable,
   isRecordPublished,
   migrateDatabaseInPlace,
@@ -13,7 +15,7 @@ import {
   normalizeHeaderConfig,
   queuePendingRevision,
 } from './collegeFeaturesLogic';
-import { searchCmsContent } from './cmsLogic';
+import { canUserAccessResource, searchCmsContent } from './cmsLogic';
 import { buildSitemapXml, DEFAULT_SEO_SETTINGS, resolveRouteSeo } from './securityAndSeoLogic';
 
 test('canPublishDirectly allows only super_admin to bypass content moderation queue', () => {
@@ -231,10 +233,12 @@ test('migrateDatabaseInPlace upgrades pre-v11 databases with Header, Footer & Cr
   };
   const { db, upgraded } = migrateDatabaseInPlace(legacyDb, seed);
   assert.equal(upgraded, true);
-  assert.equal(db.schemaVersion, 11);
+  assert.equal(db.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.ok(db.settings.headerConfig);
   assert.ok(db.settings.footerConfig);
   assert.ok((db.settings.creditsPage?.contributors.length || 0) >= 1);
+  assert.ok((db.tenders?.items.length || 0) >= 1);
+  assert.ok(DEFAULT_PORTAL_MENU_ITEMS.some((m) => m.href === '/tenders'));
 
   const devSeo = resolveRouteSeo(
     '/developer',
@@ -250,8 +254,48 @@ test('migrateDatabaseInPlace upgrades pre-v11 databases with Header, Footer & Cr
 
   const xml = buildSitemapXml('https://portal.example.edu.in', db);
   assert.equal(xml.includes('https://portal.example.edu.in/credits'), true);
+  assert.equal(xml.includes('https://portal.example.edu.in/tenders'), true);
 
   const searchHits = searchCmsContent('developer', db);
   assert.equal(searchHits.some((h) => h.url === '/credits'), true);
 });
+
+test('Tenders portal supports filtering, RBAC access control, SEO routing, and global search', () => {
+  const seed = createSeedDatabase();
+  const notices = seed.tenders?.items || [];
+  assert.ok(notices.length >= 3);
+
+  const filteredOpen = filterTenderNotices(notices, 'All', 'Open', '');
+  assert.ok(filteredOpen.length >= 1);
+  assert.ok(filteredOpen.every((t) => t.lifecycleStatus === 'Open'));
+
+  const filteredRef = filterTenderNotices(notices, 'All', 'All', 'SVCOER/IT/2026-27/011');
+  assert.equal(filteredRef.length, 1);
+  assert.equal(filteredRef[0].lifecycleStatus, 'Corrigendum Issued');
+
+  assert.equal(canUserAccessResource({ role: 'super_admin' }, 'tenders'), true);
+  assert.equal(canUserAccessResource({ role: 'content_editor' }, 'tenders'), true);
+  assert.equal(canUserAccessResource({ role: 'iqac_officer' }, 'tenders'), true);
+  assert.equal(canUserAccessResource({ role: 'department_admin' }, 'tenders'), false);
+  assert.equal(
+    canUserAccessResource({ role: 'specific_page_editor', allowedModules: ['tenders'] }, 'tenders'),
+    true,
+  );
+
+  const tenderSeo = resolveRouteSeo(
+    '/tenders',
+    'https://portal.example.edu.in',
+    seed.settings,
+    DEFAULT_SEO_SETTINGS,
+    seed.categories,
+    seed.pages,
+    seed.departments,
+    seed.conferences || [],
+  );
+  assert.ok(tenderSeo.title.toLowerCase().includes('tender'));
+
+  const searchHits = searchCmsContent('5-Axis CNC', seed);
+  assert.equal(searchHits.some((h) => h.type === 'tender' && h.url.startsWith('/tenders?ref=')), true);
+});
+
 

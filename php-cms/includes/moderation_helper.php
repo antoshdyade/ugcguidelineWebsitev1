@@ -231,6 +231,22 @@ function cmsModerationTableConfig(): array
             'title_cols' => ['title'],
             'allowed_cols' => ['title', 'category', 'short_summary', 'description_html', 'location_block', 'capacity', 'timings', 'incharge_name', 'incharge_email', 'incharge_phone', 'image_url', 'brochure_url', 'custom_fields_json', 'is_featured', 'is_published', 'is_shareable', 'sort_order', 'status'],
         ],
+        'tender_notices' => [
+            'label'      => 'Tender / Purchase Notice',
+            'status_col' => 'moderation_status',
+            'pub_col'    => 'is_published',
+            'share_col'  => 'is_shareable',
+            'title_cols' => ['reference_number', 'title'],
+            'allowed_cols' => [
+                'reference_number', 'title', 'category', 'department_name', 'procurement_mode',
+                'estimated_value', 'emd_amount', 'tender_fee', 'publish_date', 'pre_bid_date',
+                'submission_deadline', 'bid_opening_date', 'lifecycle_status', 'summary',
+                'eligibility_html', 'nit_pdf_url', 'boq_url', 'corrigendum_note',
+                'corrigendum_url', 'awarded_to', 'awarded_value', 'po_reference',
+                'custom_fields_json', 'is_pinned', 'is_published', 'is_shareable',
+                'sort_order', 'moderation_status',
+            ],
+        ],
     ];
 }
 

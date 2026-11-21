@@ -1455,6 +1455,70 @@ export interface EmailDispatchLogEntry {
   detail: string;
 }
 
+export type TenderLifecycleStatus =
+  | 'Open'
+  | 'Corrigendum Issued'
+  | 'Under Evaluation'
+  | 'Awarded'
+  | 'Closed';
+
+export interface TenderCustomField {
+  label: string;
+  value: string;
+}
+
+export interface TenderPortalConfig {
+  heroBadge: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  officerName: string;
+  officerTitle: string;
+  officerEmail: string;
+  officerPhone: string;
+  officeAddress: string;
+  eProcurementPortalUrl: string;
+  eProcurementPortalLabel: string;
+  generalTermsHtml: string;
+  customFieldPresets: string[];
+}
+
+export interface TenderNotice {
+  id: number;
+  referenceNumber: string;
+  title: string;
+  category: string;
+  departmentName: string;
+  procurementMode: string;
+  estimatedValue: string;
+  emdAmount: string;
+  tenderFee: string;
+  publishDate: string;
+  preBidDate?: string;
+  submissionDeadline: string;
+  bidOpeningDate?: string;
+  lifecycleStatus: TenderLifecycleStatus | string;
+  summary: string;
+  eligibilityHtml: string;
+  nitPdfUrl?: string;
+  boqUrl?: string;
+  corrigendumNote?: string;
+  corrigendumUrl?: string;
+  awardedTo?: string;
+  awardedValue?: string;
+  poReference?: string;
+  customFields: TenderCustomField[];
+  isPinned: boolean;
+  isPublished: boolean;
+  isShareable?: boolean;
+  moderationStatus?: ContentModerationStatus;
+  sortOrder: number;
+}
+
+export interface TendersData {
+  config: TenderPortalConfig;
+  items: TenderNotice[];
+}
+
 export interface CmsDatabase {
   schemaVersion?: number;
   categories: CmsCategory[];
@@ -1474,6 +1538,7 @@ export interface CmsDatabase {
   placements?: PlacementsData;
   sports?: SportsData;
   facilities?: FacilitiesData;
+  tenders?: TendersData;
   researchPortfolio?: ResearchPortfolioData;
   grievances?: GrievanceTicket[];
   feedbackSections?: FeedbackSectionConfig[];
@@ -1495,9 +1560,10 @@ export interface CmsDatabase {
 
 export interface SearchResultItem {
   id: string;
-  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni' | 'conference' | 'placement' | 'sports' | 'facility' | 'research';
+  type: 'page' | 'department' | 'faculty' | 'document' | 'notice' | 'alumni' | 'conference' | 'placement' | 'sports' | 'facility' | 'research' | 'tender';
   title: string;
   subtitle: string;
   url: string;
   meta: string;
 }
+

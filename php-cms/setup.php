@@ -81,6 +81,7 @@ try {
         && in_array('alumni_pledges', $tables, true)
         && in_array('sports_facilities', $tables, true)
         && in_array('facilities', $tables, true)
+        && in_array('tender_notices', $tables, true)
         && in_array('content_pending_revisions', $tables, true);
     if (in_array('users', $tables, true)) {
         $usersCount = (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();

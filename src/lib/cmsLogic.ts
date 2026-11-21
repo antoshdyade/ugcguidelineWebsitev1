@@ -174,6 +174,7 @@ export type AdminResource =
   | 'placements'
   | 'sports'
   | 'facilities'
+  | 'tenders'
   | 'grievances'
   | 'seo'
   | 'analytics';
@@ -194,6 +195,7 @@ export const ALL_RBAC_MODULE_OPTIONS: RbacModuleOption[] = [
   { id: 'placements', label: 'Training & Placement Hub', description: 'Branch placement stats, notices & congratulations desk' },
   { id: 'sports', label: 'Student Life — Sports Portal', description: 'Facilities, events, student medals, gallery & notices' },
   { id: 'facilities', label: 'Campus Facilities & Infrastructure', description: 'Infrastructural, IT, student facilities & custom fields' },
+  { id: 'tenders', label: 'Tenders & Purchase Notices', description: 'NITs, BOQs, corrigenda, procurement rules & awards' },
   { id: 'grievances', label: 'Grievance & Anti-Ragging Helpdesk', description: 'Review tickets & post resolution responses' },
   { id: 'alumni', label: 'Alumni Network, Jobs & Forum', description: 'Profiles, jobs, achievers, discussions & pledges' },
   { id: 'gallery', label: 'Picture Gallery', description: 'Campus photo albums & event pictures' },
@@ -272,6 +274,7 @@ export function canUserAccessResource(
     case 'placements':
     case 'sports':
     case 'facilities':
+    case 'tenders':
     case 'grievances':
       return role === 'content_editor' || role === 'iqac_officer';
     case 'pages':
@@ -410,7 +413,7 @@ export function searchCmsContent(
   query: string,
   db: Pick<
     CmsDatabase,
-    'pages' | 'departments' | 'documents' | 'events' | 'conferences' | 'sports' | 'facilities' | 'researchPortfolio'
+    'pages' | 'departments' | 'documents' | 'events' | 'conferences' | 'sports' | 'facilities' | 'tenders' | 'researchPortfolio'
   > & { settings?: CmsDatabase['settings'] },
 ): SearchResultItem[] {
   const q = query.trim().toLowerCase();
@@ -645,6 +648,32 @@ export function searchCmsContent(
         subtitle: `${pat.itemType} · ${pat.inventorsOrLead}`,
         url: '/page/research-development-cell',
         meta: `${pat.referenceNumber} · ${pat.status}`,
+      });
+    }
+  }
+
+  for (const td of db.tenders?.items || []) {
+    if (td.isPublished === false || !isRecordPublished(td, 'moderationStatus')) continue;
+    const plainElig = (td.eligibilityHtml || '').replace(/<[^>]+>/g, ' ').toLowerCase();
+    const cfMatch = (td.customFields || []).some(
+      (f) => f.label.toLowerCase().includes(q) || f.value.toLowerCase().includes(q),
+    );
+    if (
+      td.title.toLowerCase().includes(q) ||
+      td.referenceNumber.toLowerCase().includes(q) ||
+      td.category.toLowerCase().includes(q) ||
+      td.departmentName.toLowerCase().includes(q) ||
+      td.summary.toLowerCase().includes(q) ||
+      plainElig.includes(q) ||
+      cfMatch
+    ) {
+      results.push({
+        id: `tender-${td.id}`,
+        type: 'tender',
+        title: `${td.referenceNumber}: ${td.title}`,
+        subtitle: `${td.category} · Due ${td.submissionDeadline} · ${td.lifecycleStatus}`,
+        url: `/tenders?ref=${encodeURIComponent(td.referenceNumber)}`,
+        meta: `${td.procurementMode} · ${td.departmentName}`,
       });
     }
   }

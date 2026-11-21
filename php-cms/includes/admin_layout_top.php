@@ -154,6 +154,9 @@ $uploadPolicy = isset($pdo)
         <?php if (canAccessResource($user, 'facilities')): ?>
           <a href="<?= e(baseUrl('admin/manage_facilities.php')) ?>" class="<?= $activePage === 'manage_facilities.php' ? 'active' : '' ?>"><?= $icons['landmark'] ?><span>Campus Facilities</span></a>
         <?php endif; ?>
+        <?php if (canAccessResource($user, 'tenders')): ?>
+          <a href="<?= e(baseUrl('admin/manage_tenders.php')) ?>" class="<?= $activePage === 'manage_tenders.php' ? 'active' : '' ?>"><?= $icons['folder'] ?><span>Tenders &amp; Purchase</span></a>
+        <?php endif; ?>
         <?php if (canAccessResource($user, 'gallery')): ?>
           <a href="<?= e(baseUrl('admin/manage_gallery.php')) ?>" class="<?= $activePage === 'manage_gallery.php' ? 'active' : '' ?>"><?= $icons['image'] ?><span>Picture Gallery</span></a>
         <?php endif; ?>

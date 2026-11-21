@@ -72,6 +72,12 @@ if (mb_strlen($q) >= 2) {
             $results[] = ['type' => 'Research · ' . $r['item_type'], 'title' => $r['title'], 'url' => 'page.php?slug=research-development-cell'];
         }
 
+        $tnStmt = $pdo->prepare("SELECT reference_number, title, lifecycle_status FROM tender_notices WHERE is_published = 1 AND moderation_status = 'published' AND (reference_number LIKE ? OR title LIKE ? OR category LIKE ? OR department_name LIKE ? OR summary LIKE ? OR custom_fields_json LIKE ?) LIMIT 6");
+        $tnStmt->execute([$like, $like, $like, $like, $like, $like]);
+        foreach ($tnStmt->fetchAll() as $r) {
+            $results[] = ['type' => 'Tender (' . $r['lifecycle_status'] . ') · ' . $r['reference_number'], 'title' => $r['title'], 'url' => 'tenders.php?ref=' . urlencode((string)$r['reference_number'])];
+        }
+
         if (function_exists('getCreditsPageConfig')) {
             $cpCfg = getCreditsPageConfig($pdo);
             $ql = strtolower($q);

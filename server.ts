@@ -4,7 +4,16 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createServer as createViteServer } from 'vite';
-import { createSeedAlumniData, createSeedDatabase, createSeedFacilitiesData, createSeedResearchPortfolio, createSeedSportsData, hashPassword, verifyPassword } from './src/data/seedDatabase';
+import {
+  createSeedAlumniData,
+  createSeedDatabase,
+  createSeedFacilitiesData,
+  createSeedResearchPortfolio,
+  createSeedSportsData,
+  createSeedTendersData,
+  hashPassword,
+  verifyPassword,
+} from './src/data/seedDatabase';
 import {
   canUserAccessCategory,
   canUserAccessPage,
@@ -137,6 +146,9 @@ import type {
   SportsFacility,
   SportsGalleryItem,
   SportsNotice,
+  TenderCustomField,
+  TenderNotice,
+  TendersData,
   UserRole,
   VisitorLogEntry,
 } from './src/types/cms';
@@ -795,6 +807,7 @@ async function startServer() {
     const { seo, hitCounter } = ensureSecurityState();
     const sportsRaw = db.sports ?? createSeedSportsData();
     const facilitiesRaw = db.facilities ?? createSeedFacilitiesData();
+    const tendersRaw = db.tenders ?? createSeedTendersData();
     const researchRaw = db.researchPortfolio ?? createSeedResearchPortfolio();
     const placementsRaw = db.placements ?? createSeedDatabase().placements!;
     const publicSettings = {
@@ -849,6 +862,14 @@ async function startServer() {
       facilities: {
         config: facilitiesRaw.config,
         items: sortByOrder((facilitiesRaw.items ?? []).filter((item) => item.isPublished && isRecordPublished(item))),
+      },
+      tenders: {
+        config: tendersRaw.config,
+        items: sortByOrder(
+          (tendersRaw.items ?? []).filter(
+            (item) => item.isPublished && isRecordPublished(item, 'moderationStatus'),
+          ),
+        ),
       },
       researchPortfolio: {
         config: researchRaw.config,
@@ -1816,6 +1837,7 @@ async function startServer() {
       placements: db.placements ?? createSeedDatabase().placements,
       sports: ensureSportsState(),
       facilities: ensureFacilitiesState(),
+      tenders: ensureTendersState(),
       researchPortfolio: ensureResearchPortfolioState(),
       grievances: db.grievances ?? [],
       feedbackSections: sortByOrder(db.feedbackSections ?? DEFAULT_FEEDBACK_SECTIONS),
@@ -1871,6 +1893,16 @@ async function startServer() {
     return {
       config: db.facilities.config,
       items: sortByOrder(db.facilities.items ?? []),
+    };
+  }
+
+  function ensureTendersState(): TendersData {
+    if (!db.tenders) {
+      db.tenders = createSeedTendersData();
+    }
+    return {
+      config: db.tenders.config,
+      items: sortByOrder(db.tenders.items ?? []),
     };
   }
 
@@ -7592,6 +7624,198 @@ async function startServer() {
   });
 
   // ============================================================================
+  // TENDERS & PURCHASE NOTICES ADMIN CRUD
+  // ============================================================================
+  app.put('/api/admin/tenders/config', requireAdmin('tenders'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const tn = ensureTendersState();
+    const b = req.body as Partial<TendersData['config']>;
+    tn.config = {
+      ...tn.config,
+      ...(b.heroBadge !== undefined ? { heroBadge: String(b.heroBadge).trim() } : {}),
+      ...(b.heroTitle !== undefined ? { heroTitle: String(b.heroTitle).trim() } : {}),
+      ...(b.heroSubtitle !== undefined ? { heroSubtitle: String(b.heroSubtitle).trim() } : {}),
+      ...(b.officerName !== undefined ? { officerName: String(b.officerName).trim() } : {}),
+      ...(b.officerTitle !== undefined ? { officerTitle: String(b.officerTitle).trim() } : {}),
+      ...(b.officerEmail !== undefined ? { officerEmail: String(b.officerEmail).trim() } : {}),
+      ...(b.officerPhone !== undefined ? { officerPhone: String(b.officerPhone).trim() } : {}),
+      ...(b.officeAddress !== undefined ? { officeAddress: String(b.officeAddress).trim() } : {}),
+      ...(b.eProcurementPortalUrl !== undefined ? { eProcurementPortalUrl: String(b.eProcurementPortalUrl).trim() } : {}),
+      ...(b.eProcurementPortalLabel !== undefined ? { eProcurementPortalLabel: String(b.eProcurementPortalLabel).trim() } : {}),
+      ...(b.generalTermsHtml !== undefined ? { generalTermsHtml: String(b.generalTermsHtml) } : {}),
+      ...(Array.isArray(b.customFieldPresets)
+        ? { customFieldPresets: b.customFieldPresets.map((s) => String(s).trim()).filter(Boolean) }
+        : {}),
+    };
+    db.tenders = tn;
+    addAudit(actor, 'UPDATE_TENDERS_CONFIG', 'Tenders Portal', tn.config.heroTitle);
+    saveDatabase();
+    res.json(tn.config);
+  });
+
+  app.post('/api/admin/tenders/items', requireAdmin('tenders'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const tn = ensureTendersState();
+    const b = req.body as Partial<TenderNotice>;
+    if (!b.referenceNumber?.trim() || !b.title?.trim() || !b.submissionDeadline?.trim()) {
+      res.status(400).json({ error: 'Reference number, tender title, and submission deadline are required.' });
+      return;
+    }
+    const direct = canPublishDirectly(actor.role);
+    const nextId = Math.max(0, ...tn.items.map((x) => x.id)) + 1;
+    const cleanCustomFields: TenderCustomField[] = Array.isArray(b.customFields)
+      ? b.customFields
+          .filter((cf) => cf && String(cf.label || '').trim())
+          .map((cf) => ({ label: String(cf.label).trim(), value: String(cf.value || '').trim() }))
+      : [];
+    const item: TenderNotice = {
+      id: nextId,
+      referenceNumber: b.referenceNumber.trim(),
+      title: b.title.trim(),
+      category: String(b.category || 'Lab Equipment & Machinery').trim(),
+      departmentName: String(b.departmentName || 'Central Purchase Cell').trim(),
+      procurementMode: String(b.procurementMode || 'Open Tender (Two-Bid System)').trim(),
+      estimatedValue: String(b.estimatedValue || '').trim(),
+      emdAmount: String(b.emdAmount || '').trim(),
+      tenderFee: String(b.tenderFee || '').trim(),
+      publishDate: String(b.publishDate || new Date().toISOString().slice(0, 10)).trim(),
+      preBidDate: b.preBidDate ? String(b.preBidDate).trim() : '',
+      submissionDeadline: b.submissionDeadline.trim(),
+      bidOpeningDate: b.bidOpeningDate ? String(b.bidOpeningDate).trim() : '',
+      lifecycleStatus: String(b.lifecycleStatus || 'Open').trim(),
+      summary: String(b.summary || '').trim(),
+      eligibilityHtml: String(b.eligibilityHtml || ''),
+      nitPdfUrl: b.nitPdfUrl ? String(b.nitPdfUrl).trim() : '',
+      boqUrl: b.boqUrl ? String(b.boqUrl).trim() : '',
+      corrigendumNote: b.corrigendumNote ? String(b.corrigendumNote).trim() : '',
+      corrigendumUrl: b.corrigendumUrl ? String(b.corrigendumUrl).trim() : '',
+      awardedTo: b.awardedTo ? String(b.awardedTo).trim() : '',
+      awardedValue: b.awardedValue ? String(b.awardedValue).trim() : '',
+      poReference: b.poReference ? String(b.poReference).trim() : '',
+      customFields: cleanCustomFields,
+      isPinned: Boolean(b.isPinned),
+      isPublished: direct ? b.isPublished !== false : false,
+      isShareable: b.isShareable !== undefined ? Boolean(b.isShareable) : true,
+      moderationStatus: direct ? 'published' : 'pending_approval',
+      sortOrder: Number(b.sortOrder ?? tn.items.length + 1),
+    };
+    tn.items.push(item);
+    db.tenders = tn;
+    if (!direct) {
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'tenders',
+        entityId: item.id,
+        actionType: 'create',
+        entityTitle: `${item.referenceNumber}: ${item.title}`,
+        currentSnapshot: null,
+        proposedPayload: { ...item, isPublished: b.isPublished !== false, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_CREATE_TENDER', 'Tenders', item.referenceNumber);
+      saveDatabase();
+      res.status(202).json({
+        ok: true,
+        queuedForApproval: true,
+        revision,
+        item,
+        message: `Tender "${item.referenceNumber}" submitted for Super Admin approval.`,
+      });
+      return;
+    }
+    addAudit(actor, 'CREATE_TENDER', 'Tenders', `${item.referenceNumber}: ${item.title}`);
+    saveDatabase();
+    res.status(201).json(item);
+  });
+
+  app.put('/api/admin/tenders/items/reorder', requireAdmin('tenders'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const tn = ensureTendersState();
+    const { orderedIds } = req.body as { orderedIds?: number[] };
+    if (!Array.isArray(orderedIds)) {
+      res.status(400).json({ error: 'orderedIds array is required.' });
+      return;
+    }
+    tn.items = applyReorderIds(tn.items, orderedIds);
+    db.tenders = tn;
+    addAudit(actor, 'REORDER_TENDERS', 'Tenders', `${orderedIds.length} notices`);
+    saveDatabase();
+    res.json({ ok: true, items: tn.items });
+  });
+
+  app.put('/api/admin/tenders/items/:id', requireAdmin('tenders'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const tn = ensureTendersState();
+    const item = tn.items.find((x) => x.id === Number(req.params.id));
+    if (!item) {
+      res.status(404).json({ error: 'Tender notice not found.' });
+      return;
+    }
+    const { id: _id, ...rest } = req.body as Partial<TenderNotice>;
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(item) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'tenders',
+        entityId: item.id,
+        actionType: 'update',
+        entityTitle: `${String(rest.referenceNumber || item.referenceNumber)}: ${String(rest.title || item.title)}`,
+        currentSnapshot: snap,
+        proposedPayload: { ...snap, ...rest, moderationStatus: 'published' },
+      });
+      addAudit(actor, 'QUEUE_UPDATE_TENDER', 'Tenders', item.referenceNumber);
+      saveDatabase();
+      res.status(202).json({
+        ok: true,
+        queuedForApproval: true,
+        revision,
+        item,
+        message: `Updates to "${item.referenceNumber}" queued for Super Admin approval.`,
+      });
+      return;
+    }
+    Object.assign(item, rest, { moderationStatus: 'published' });
+    db.tenders = tn;
+    addAudit(actor, 'UPDATE_TENDER', 'Tenders', `${item.referenceNumber}: ${item.title}`);
+    saveDatabase();
+    res.json(item);
+  });
+
+  app.delete('/api/admin/tenders/items/:id', requireAdmin('tenders'), (req, res) => {
+    const actor = (req as express.Request & { currentUser: CmsUser }).currentUser;
+    const tn = ensureTendersState();
+    const idx = tn.items.findIndex((x) => x.id === Number(req.params.id));
+    if (idx === -1) {
+      res.status(404).json({ error: 'Tender notice not found.' });
+      return;
+    }
+    const target = tn.items[idx];
+    if (!canPublishDirectly(actor.role)) {
+      const snap = structuredClone(target) as unknown as Record<string, unknown>;
+      const revision = recordModerationQueue(actor, {
+        entityTable: 'tenders',
+        entityId: target.id,
+        actionType: 'delete',
+        entityTitle: `${target.referenceNumber}: ${target.title}`,
+        currentSnapshot: snap,
+        proposedPayload: null,
+      });
+      addAudit(actor, 'QUEUE_DELETE_TENDER', 'Tenders', target.referenceNumber);
+      saveDatabase();
+      res.status(202).json({
+        ok: true,
+        queuedForApproval: true,
+        revision,
+        item: target,
+        message: `Deletion of "${target.referenceNumber}" queued for Super Admin approval.`,
+      });
+      return;
+    }
+    const [removed] = tn.items.splice(idx, 1);
+    db.tenders = tn;
+    addAudit(actor, 'DELETE_TENDER', 'Tenders', removed.referenceNumber);
+    saveDatabase();
+    res.json({ ok: true });
+  });
+
+  // ============================================================================
   // SUPER ADMIN CONTENT APPROVAL & MODERATION WORKFLOW API
   // ============================================================================
   function getModeratedCollectionTarget(entityTable: string): {
@@ -7684,6 +7908,11 @@ async function startServer() {
         const fac = ensureFacilitiesState();
         db.facilities = fac;
         return { list: fac.items, statusField: 'status' };
+      }
+      case 'tenders': {
+        const tn = ensureTendersState();
+        db.tenders = tn;
+        return { list: tn.items, statusField: 'moderationStatus' };
       }
       case 'home_components':
         db.settings.customHomeComponents = db.settings.customHomeComponents ?? [];

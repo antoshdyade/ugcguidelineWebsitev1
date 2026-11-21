@@ -12,9 +12,11 @@ import { ConferencePortal } from './components/ConferencePortal';
 import { GrievancePortal, PlacementsPortal } from './components/EngineeringPortals';
 import { SportsPortal } from './components/SportsPortal';
 import { FacilitiesPortal } from './components/FacilitiesPortal';
+import { TendersPortal } from './components/TendersPortal';
 import { FeedbackPortal, type FeedbackSummaryStats } from './components/FeedbackPortal';
 import { CreditsPage } from './components/CreditsPage';
 import { AdminDashboard } from './components/AdminDashboard';
+import { DEFAULT_TENDER_PORTAL_CONFIG } from './lib/collegeFeaturesLogic';
 import { DEFAULT_SEO_SETTINGS, resolveRouteSeo } from './lib/securityAndSeoLogic';
 import type {
   AlumniData,
@@ -36,6 +38,7 @@ import type {
   SiteSettings,
   SportsData,
   TelephoneEntry,
+  TendersData,
   TickerItem,
 } from './types/cms';
 
@@ -55,6 +58,7 @@ interface PublicBootstrapData {
   placements?: PlacementsData;
   sports?: SportsData;
   facilities?: FacilitiesData;
+  tenders?: TendersData;
   researchPortfolio?: ResearchPortfolioData;
   feedbackSections?: FeedbackSectionConfig[];
   feedbackSummary?: FeedbackSummaryStats;
@@ -400,6 +404,23 @@ export default function App() {
             }
           }
           settings={data.settings}
+          initialCategory={searchParams.get('cat') || undefined}
+          onNavigate={navigate}
+        />
+      );
+    }
+
+    if (pathname === '/tenders') {
+      return (
+        <TendersPortal
+          tenders={
+            data.tenders || {
+              config: DEFAULT_TENDER_PORTAL_CONFIG,
+              items: [],
+            }
+          }
+          settings={data.settings}
+          initialRef={searchParams.get('ref') || undefined}
           initialCategory={searchParams.get('cat') || undefined}
           onNavigate={navigate}
         />

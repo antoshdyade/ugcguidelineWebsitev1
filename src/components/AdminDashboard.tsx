@@ -87,6 +87,7 @@ import { PerPageRbacSelector } from './PerPageRbacSelector';
 import { RichTextEditor } from './RichTextEditor';
 import { SeoAdminPanel } from './SeoAdminPanel';
 import { SportsAdminPanel } from './SportsAdminPanel';
+import { TendersAdminPanel } from './TendersAdminPanel';
 import type {
   AdminModuleKey,
   AlumniData,
@@ -131,6 +132,7 @@ import type {
   SocialMediaLink,
   SportsData,
   TelephoneEntry,
+  TendersData,
   TickerItem,
   UgcCategorySlug,
   UserRole,
@@ -161,6 +163,7 @@ interface AdminStatePayload {
   grievances?: GrievanceTicket[];
   sports?: SportsData;
   facilities?: FacilitiesData;
+  tenders?: TendersData;
   researchPortfolio?: ResearchPortfolioData;
   feedbackSections?: FeedbackSectionConfig[];
   feedbackEntries?: FeedbackEntry[];
@@ -188,6 +191,7 @@ type AdminTab =
   | 'placements'
   | 'sports'
   | 'facilities'
+  | 'tenders'
   | 'grievances'
   | 'alumni'
   | 'gallery'
@@ -220,6 +224,7 @@ function resolveInitialAdminTab(u: CmsUser): AdminTab {
     ['placements', 'placements'],
     ['sports', 'sports'],
     ['facilities', 'facilities'],
+    ['tenders', 'tenders'],
     ['grievances', 'grievances'],
     ['alumni', 'alumni'],
     ['gallery', 'gallery'],
@@ -254,6 +259,7 @@ function LinkTargetPicker({
   const builtinTargets = [
     { label: 'Home Page (/)', url: '/' },
     { label: 'Campus Facilities Showcase (/facilities)', url: '/facilities' },
+    { label: 'Tenders & Purchase Notices (/tenders)', url: '/tenders' },
     { label: 'Sports, Athletics & Gymkhana (/sports)', url: '/sports' },
     { label: 'Research Conferences, Workshops & Events (/conferences)', url: '/conferences' },
     { label: 'Training & Placement (T&P) Hub (/placements)', url: '/placements' },
@@ -986,6 +992,7 @@ export function AdminDashboard({
   const canPlacements = canUserAccessResource(user, 'placements');
   const canSports = canUserAccessResource(user, 'sports');
   const canFacilities = canUserAccessResource(user, 'facilities');
+  const canTenders = canUserAccessResource(user, 'tenders');
   const canGrievances = canUserAccessResource(user, 'grievances');
   const canAlumni = canUserAccessResource(user, 'alumni');
   const canGallery = canUserAccessResource(user, 'gallery');
@@ -1017,6 +1024,7 @@ export function AdminDashboard({
     { id: 'placements', label: 'Training & Placements', icon: <TrendingUp className="w-4 h-4" />, allowed: canPlacements },
     { id: 'sports', label: 'Sports & Gymkhana', icon: <Trophy className="w-4 h-4" />, allowed: canSports },
     { id: 'facilities', label: 'Campus Facilities', icon: <Landmark className="w-4 h-4" />, allowed: canFacilities },
+    { id: 'tenders', label: 'Tenders & Purchase', icon: <FolderOpen className="w-4 h-4" />, allowed: canTenders },
     { id: 'grievances', label: 'Grievance, Feedback & Mail', icon: <ShieldAlert className="w-4 h-4" />, allowed: canGrievances },
     { id: 'alumni', label: 'Alumni Network & Jobs', icon: <GraduationCap className="w-4 h-4" />, allowed: canAlumni },
     { id: 'gallery', label: 'Picture Gallery', icon: <ImageIcon className="w-4 h-4" />, allowed: canGallery },
@@ -8607,6 +8615,17 @@ export function AdminDashboard({
         {activeTab === 'facilities' && canFacilities && state && state.facilities && (
           <FacilitiesAdminPanel
             facilities={state.facilities}
+            settings={state.settings}
+            adminFetch={adminFetch}
+            uploadBinary={uploadBinaryFile}
+            notify={notify}
+          />
+        )}
+
+        {/* 10B4. TENDERS & PURCHASE NOTICES ADMIN */}
+        {activeTab === 'tenders' && canTenders && state && state.tenders && (
+          <TendersAdminPanel
+            tenders={state.tenders}
             settings={state.settings}
             adminFetch={adminFetch}
             uploadBinary={uploadBinaryFile}

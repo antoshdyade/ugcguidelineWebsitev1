@@ -12,6 +12,7 @@ import {
   DEFAULT_PORTAL_MENU_ITEMS,
   DEFAULT_SOCIAL_MEDIA_LINKS,
   DEFAULT_SOCIAL_SHARING_CONFIG,
+  DEFAULT_TENDER_PORTAL_CONFIG,
 } from '../lib/collegeFeaturesLogic';
 import { buildCustomSliderHtml, buildPhotoProfileCardHtml, buildSinglePhotoProfileCardInnerHtml } from '../lib/editorBlocks';
 import {
@@ -2324,6 +2325,7 @@ export function createSeedDatabase(): CmsDatabase {
         { label: 'RTI Disclosure', url: '/page/rti-disclosure' },
         { label: 'Mandatory Disclosures', url: '/page/about-overview' },
         { label: 'Circulars & Notices', url: '/page/circulars-notices' },
+        { label: 'Tenders & Notices', url: '/tenders' },
         { label: 'Placements', url: '/page/placement-cell' },
       ],
       footerColumns: [
@@ -2332,7 +2334,7 @@ export function createSeedDatabase(): CmsDatabase {
           links: [
             { label: 'About HEI & Statutes', url: '/page/about-overview' },
             { label: 'Annual Reports & Audits', url: '/page/annual-accounts-audit' },
-            { label: 'Statutory Officers', url: '/page/statutory-officers' },
+            { label: 'Tenders & Purchase Notices', url: '/tenders' },
             { label: 'IQAC Quality Cell', url: '/page/iqac' },
           ],
         },
@@ -3105,6 +3107,7 @@ export function createSeedDatabase(): CmsDatabase {
     securityConfig: structuredClone(DEFAULT_SECURITY_CONFIG),
     sports: createSeedSportsData(),
     facilities: createSeedFacilitiesData(),
+    tenders: createSeedTendersData(),
     researchPortfolio: createSeedResearchPortfolio(),
     feedbackSections: structuredClone(DEFAULT_FEEDBACK_SECTIONS),
     feedbackEntries: [
@@ -4202,6 +4205,159 @@ export function createSeedResearchPortfolio(): import('../types/cms').ResearchPo
     ],
   };
 }
+
+export function createSeedTendersData(): import('../types/cms').TendersData {
+  return {
+    config: structuredClone(DEFAULT_TENDER_PORTAL_CONFIG),
+    items: [
+      {
+        id: 1,
+        referenceNumber: 'SVCOER/PUR/2026-27/014',
+        title: 'Supply, Installation & Commissioning of 5-Axis CNC Machining Centre & Metrology Bench',
+        category: 'Lab Equipment & Machinery',
+        departmentName: 'Mechanical Engineering & IDEA Lab',
+        procurementMode: 'Open Tender (Two-Bid System)',
+        estimatedValue: '₹24,50,000',
+        emdAmount: '₹49,000',
+        tenderFee: '₹2,000 (Non-Refundable)',
+        publishDate: '2026-11-10',
+        preBidDate: '2026-11-22 11:30 AM · R&D Seminar Hall',
+        submissionDeadline: '2026-12-08 05:00 PM',
+        bidOpeningDate: '2026-12-10 11:00 AM',
+        lifecycleStatus: 'Open',
+        summary:
+          'Sealed two-bid technical and commercial offers are invited from OEMs or authorized dealers for a 5-axis desktop/industrial CNC milling trainer and digital coordinate measuring arm.',
+        eligibilityHtml:
+          '<ul><li>Minimum 3 years OEM/authorized supply track record in AICTE engineering institutions or R&amp;D centres.</li><li>Average annual turnover &ge; ₹75 Lakhs over preceding 3 FYs (Audited balance sheet required).</li><li>On-site commissioning, 3-year comprehensive warranty, and 5-day faculty training included.</li></ul>',
+        nitPdfUrl: '/quick-links',
+        boqUrl: '/quick-links',
+        corrigendumNote: '',
+        corrigendumUrl: '',
+        awardedTo: '',
+        awardedValue: '',
+        poReference: '',
+        customFields: [
+          { label: 'Delivery Period', value: '6 Weeks from Purchase Order' },
+          { label: 'Warranty / DLP', value: '36 Months Comprehensive On-Site' },
+          { label: 'Bid Validity', value: '90 Days from Technical Opening' },
+        ],
+        isPinned: true,
+        isPublished: true,
+        isShareable: true,
+        moderationStatus: 'published',
+        sortOrder: 1,
+      },
+      {
+        id: 2,
+        referenceNumber: 'SVCOER/IT/2026-27/011',
+        title: 'Campus Wi-Fi 6 Access Points, Layer-3 Core Switches & Next-Gen Firewall Upgrade',
+        category: 'IT Hardware, Networking & Software',
+        departmentName: 'Central Computing & Network Cell',
+        procurementMode: 'GeM Portal Bid',
+        estimatedValue: '₹18,20,000',
+        emdAmount: '₹36,000',
+        tenderFee: 'Exempted (GeM)',
+        publishDate: '2026-11-04',
+        preBidDate: '2026-11-18 03:00 PM · IT Data Centre',
+        submissionDeadline: '2026-12-02 04:00 PM',
+        bidOpeningDate: '2026-12-03 12:00 PM',
+        lifecycleStatus: 'Corrigendum Issued',
+        summary:
+          'Procurement of 48 enterprise Wi-Fi 6 indoor access points, 4 stackable 10G SFP+ L3 switches, and HA cluster firewall appliance with 5-year UTM license.',
+        eligibilityHtml:
+          '<ul><li>OEM Authorization Form (MAF) specifically referencing Tender No. SVCOER/IT/2026-27/011 is mandatory.</li><li>Bidder must have executed at least 2 campus LAN/Wi-Fi deployments of ₹10 Lakhs+ in Maharashtra.</li></ul>',
+        nitPdfUrl: '/quick-links',
+        boqUrl: '/quick-links',
+        corrigendumNote: 'Corrigendum-1 (15 Nov 2026): Submission deadline extended to 02 Dec 2026; SFP+ transceiver quantity revised from 24 to 32 units.',
+        corrigendumUrl: '/quick-links',
+        awardedTo: '',
+        awardedValue: '',
+        poReference: '',
+        customFields: [
+          { label: 'Technical Specifications', value: '802.11ax Dual-Band MU-MIMO + 10G Uplink' },
+          { label: 'Warranty / DLP', value: '5 Years OEM Back-to-Back Support' },
+        ],
+        isPinned: true,
+        isPublished: true,
+        isShareable: true,
+        moderationStatus: 'published',
+        sortOrder: 2,
+      },
+      {
+        id: 3,
+        referenceNumber: 'SVCOER/EST/2026-27/008',
+        title: 'Annual Maintenance Contract (AMC) for 520 kWp Rooftop Solar PV & Substation Switchgear',
+        category: 'AMC & Campus Services',
+        departmentName: 'Campus Estate & Electrical Division',
+        procurementMode: 'Sealed Quotation Invite',
+        estimatedValue: '₹6,40,000',
+        emdAmount: '₹12,000',
+        tenderFee: '₹1,000',
+        publishDate: '2026-10-25',
+        preBidDate: '2026-11-02 11:00 AM',
+        submissionDeadline: '2026-11-28 05:00 PM',
+        bidOpeningDate: '2026-11-30 11:30 AM',
+        lifecycleStatus: 'Under Evaluation',
+        summary:
+          'Preventive quarterly servicing, thermal imaging inspection, string inverter calibration, and 11 kV HT/LT transformer filtration across campus solar blocks.',
+        eligibilityHtml:
+          '<ul><li>Valid PWD Electrical Contractor License (HT Category) mandatory.</li><li>Monthly preventive maintenance report and emergency 4-hour fault response SLA.</li></ul>',
+        nitPdfUrl: '/quick-links',
+        boqUrl: '',
+        corrigendumNote: '',
+        corrigendumUrl: '',
+        awardedTo: '',
+        awardedValue: '',
+        poReference: '',
+        customFields: [
+          { label: 'Contract Tenure', value: '12 Months (Extendable by 1 Year)' },
+          { label: 'Payment Terms', value: 'Quarterly post preventive service sign-off' },
+        ],
+        isPinned: false,
+        isPublished: true,
+        isShareable: true,
+        moderationStatus: 'published',
+        sortOrder: 3,
+      },
+      {
+        id: 4,
+        referenceNumber: 'SVCOER/LIB/2026-27/003',
+        title: 'Central Library RFID Self-Check Kiosk, Security Gate & UHF Smart Tagging Supply',
+        category: 'Stationery, Books & Consumables',
+        departmentName: 'Central Knowledge Resource Centre',
+        procurementMode: 'Limited Tender Enquiry',
+        estimatedValue: '₹9,80,000',
+        emdAmount: '₹20,000',
+        tenderFee: '₹1,000',
+        publishDate: '2026-09-12',
+        preBidDate: '',
+        submissionDeadline: '2026-10-05 05:00 PM',
+        bidOpeningDate: '2026-10-07 11:00 AM',
+        lifecycleStatus: 'Awarded',
+        summary:
+          'Turnkey integration of 2 self-issue/return kiosks, dual-aisle UHF theft detection gate, and 25,000 RFID book tags integrated via SIP2 with KOHA ILMS.',
+        eligibilityHtml:
+          '<ul><li>Full SIP2 compatibility with existing KOHA v23.11 server required.</li></ul>',
+        nitPdfUrl: '/quick-links',
+        boqUrl: '',
+        corrigendumNote: '',
+        corrigendumUrl: '',
+        awardedTo: 'M/s LibTech Automation Systems Pvt. Ltd., Pune',
+        awardedValue: '₹9,18,500 (Incl. GST)',
+        poReference: 'PO/SVCOER/2026-27/118 (Dt. 2026-10-19)',
+        customFields: [
+          { label: 'Integration Standard', value: 'ISO 18000-6C UHF / KOHA SIP2' },
+        ],
+        isPinned: false,
+        isPublished: true,
+        isShareable: true,
+        moderationStatus: 'published',
+        sortOrder: 4,
+      },
+    ],
+  };
+}
+
 
 
 
