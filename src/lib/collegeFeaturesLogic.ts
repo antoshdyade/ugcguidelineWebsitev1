@@ -6,12 +6,16 @@ import type {
   Conference,
   ConferenceRegistration,
   ConferenceSubmission,
+  ContributorMember,
+  CreditsPageConfig,
   EmailDispatchLogEntry,
   EmailPushConfig,
   FeedbackEntry,
   FeedbackSectionConfig,
+  FooterConfig,
   GrievancePortalConfig,
   GrievanceTicket,
+  HeaderConfig,
   HeaderPortalMenuItem,
   HitCounterStats,
   PendingContentRevision,
@@ -40,7 +44,187 @@ import {
   createSeedVisitorLogs,
 } from './securityAndSeoLogic';
 
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
+
+export const CONTRIBUTOR_ROLE_PRESETS = [
+  'Creator',
+  'Lead Developer',
+  'Core Contributor',
+  'UI/UX Designer',
+  'Content Maintainer',
+  'Faculty Advisor',
+] as const;
+
+export const DEFAULT_HEADER_CONFIG: HeaderConfig = {
+  showTopUtilityBar: true,
+  utilityTagline: 'Autonomous Engineering Campus',
+  showRegulatoryCodes: true,
+  showAdminButton: true,
+  showInstituteCodeBadge: true,
+  showSearchBar: true,
+  showStatutoryBar: true,
+  statutoryBarLabel: 'Statutory & Quick Access:',
+};
+
+export const DEFAULT_FOOTER_CONFIG: FooterConfig = {
+  showContactBlock: true,
+  copyrightText: '',
+  complianceNote: 'Compliant with UGC Guidelines on Public Self-Disclosure (NEP 2020).',
+  showBottomLinks: true,
+  bottomBarLinks: [
+    { label: 'Campus Facilities', url: '/facilities' },
+    { label: 'Sports & Gymkhana', url: '/sports' },
+    { label: 'Conferences & Events', url: '/conferences' },
+    { label: 'Training & Placements', url: '/placements' },
+    { label: 'Alumni Network', url: '/alumni' },
+    { label: 'RTI Cell', url: '/page/rti-disclosure' },
+    { label: 'Grievance Redressal', url: '/grievance' },
+    { label: 'Developers & Contributors', url: '/credits' },
+    { label: 'Staff CMS Login', url: '/admin' },
+  ],
+  showCreatorCreditBar: true,
+  creatorCreditLabel: 'Designed & Developed by',
+  creatorCreditName: 'Campus Web & Software Engineering Team',
+  creatorCreditUrl: '/credits',
+};
+
+export const DEFAULT_CREDITS_PAGE_CONFIG: CreditsPageConfig = {
+  eyebrow: 'Portal Architecture & Attribution',
+  pageTitle: 'Platform Creators, Developers & Contributors',
+  pageSubtitle:
+    'Meet the system architects, full-stack engineers, institutional coordinators, and content contributors who designed, built, and maintain the official web portal.',
+  projectVersion: '2026 Enterprise Release',
+  releaseYear: '2026',
+  organizationCredit: 'Institutional Web & Digital Systems Cell',
+  licenseNote: 'Built for UGC Public Self-Disclosure, Autonomous Governance & Security Compliance.',
+  acknowledgementsHtml:
+    '<p>This institutional digital portal was engineered to deliver transparent UGC NEP 2020 self-disclosure, departmental microsites, examination updates, research &amp; placement portals, and hardened RBAC administration. Every contributor, developer, faculty coordinator, and department administrator listed here plays an ongoing role in keeping public academic information accurate, accessible, and secure.</p>',
+  isShareable: true,
+  showContributorsSection: true,
+  showTechStackSection: true,
+  contributors: [
+    {
+      id: 1,
+      name: 'Institutional Web & ERP Engineering Team',
+      role: 'Platform Creator & Systems Architect',
+      category: 'Creator',
+      affiliation: 'Centre for Digital Governance & Campus IT',
+      email: 'webmaster@coe.sveri.ac.in',
+      websiteUrl: '',
+      githubUrl: '',
+      linkedinUrl: '',
+      photoUrl: '',
+      bio: 'Conceptualized the modular UGC-compliant architecture, RBAC governance workflow, Super Admin content moderation queue, and full-stack backup/security stack.',
+      contributions: 'System Architecture · Security Shield · Dual-Stack React & PHP/MySQL Engine',
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: 2,
+      name: 'Departmental CMS & IQAC Content Cell',
+      role: 'Editorial Coordinators & Disclosure Leads',
+      category: 'Core Contributor',
+      affiliation: 'Internal Quality Assurance Cell (IQAC) & HOD Desk',
+      email: 'iqac@coe.sveri.ac.in',
+      websiteUrl: '',
+      githubUrl: '',
+      linkedinUrl: '',
+      photoUrl: '',
+      bio: 'Curates statutory documentation, NAAC/NBA/NIRF disclosures, academic syllabi, and verified departmental micro-pages.',
+      contributions: 'Academic Governance · Statutory Disclosures · Accessibility Audits',
+      isActive: true,
+      sortOrder: 2,
+    },
+    {
+      id: 3,
+      name: 'Accessibility, SEO & Visual Experience Guild',
+      role: 'UI/UX & WCAG Compliance Contributors',
+      category: 'UI/UX Designer',
+      affiliation: 'Digital Media & Student Portal Group',
+      email: '',
+      websiteUrl: '',
+      githubUrl: '',
+      linkedinUrl: '',
+      photoUrl: '',
+      bio: 'Designed bilingual support, dyslexia-friendly reading controls, screen-reader landmarks, OpenGraph cards, and responsive mobile-first layouts.',
+      contributions: 'Design System · WCAG AA Contrast · Multi-Language & TTS Controls',
+      isActive: true,
+      sortOrder: 3,
+    },
+  ],
+  techStack: [
+    {
+      name: 'Apache 2.4 + PHP 8.x PDO',
+      category: 'Deployment Runtime',
+      description: 'Webmin/Virtualmin-ready server runtime with prepared SQL statements, single-use SVG CAPTCHA, and clean .htaccess routing.',
+    },
+    {
+      name: 'MySQL 8.0 / MariaDB',
+      category: 'Relational Storage',
+      description: 'ACID-compliant storage for UGC pages, departments, conferences, alumni, logs, and the Super Admin approval revision queue.',
+    },
+    {
+      name: 'React + TypeScript + Vite',
+      category: 'Interactive Preview',
+      description: 'Real-time modular workspace and instant preview parity paired with Tailwind typography and accessible controls.',
+    },
+    {
+      name: 'Security Shield & Audit Trail',
+      category: 'AppSec & Monitoring',
+      description: 'WAF threat inspection, CSRF tokens, IP blocklisting, rate limiting, GeoIP analytics, and Super Admin revision diffs.',
+    },
+  ],
+};
+
+export function normalizeHeaderConfig(raw?: Partial<HeaderConfig> | null): HeaderConfig {
+  return {
+    ...DEFAULT_HEADER_CONFIG,
+    ...(raw || {}),
+    showTopUtilityBar: raw?.showTopUtilityBar !== false,
+    showRegulatoryCodes: raw?.showRegulatoryCodes !== false,
+    showAdminButton: raw?.showAdminButton !== false,
+    showInstituteCodeBadge: raw?.showInstituteCodeBadge !== false,
+    showSearchBar: raw?.showSearchBar !== false,
+    showStatutoryBar: raw?.showStatutoryBar !== false,
+  };
+}
+
+export function normalizeFooterConfig(raw?: Partial<FooterConfig> | null): FooterConfig {
+  const baseLinks = Array.isArray(raw?.bottomBarLinks)
+    ? raw.bottomBarLinks
+        .filter((lk) => lk && (String(lk.label || '').trim() || String(lk.url || '').trim()))
+        .map((lk) => ({ label: String(lk.label || '').trim(), url: String(lk.url || '').trim() }))
+    : structuredClone(DEFAULT_FOOTER_CONFIG.bottomBarLinks);
+  return {
+    ...DEFAULT_FOOTER_CONFIG,
+    ...(raw || {}),
+    showContactBlock: raw?.showContactBlock !== false,
+    showBottomLinks: raw?.showBottomLinks !== false,
+    showCreatorCreditBar: raw?.showCreatorCreditBar !== false,
+    bottomBarLinks: baseLinks,
+  };
+}
+
+export function normalizeCreditsPageConfig(raw?: Partial<CreditsPageConfig> | null): CreditsPageConfig {
+  return {
+    ...DEFAULT_CREDITS_PAGE_CONFIG,
+    ...(raw || {}),
+    isShareable: raw?.isShareable !== false,
+    showContributorsSection: raw?.showContributorsSection !== false,
+    showTechStackSection: raw?.showTechStackSection !== false,
+    contributors: Array.isArray(raw?.contributors)
+      ? raw.contributors.map((c, idx) => ({
+          ...c,
+          id: Number(c.id || idx + 1),
+          isActive: c.isActive !== false,
+          sortOrder: Number(c.sortOrder ?? idx + 1),
+        }))
+      : structuredClone(DEFAULT_CREDITS_PAGE_CONFIG.contributors),
+    techStack: Array.isArray(raw?.techStack)
+      ? raw.techStack
+      : structuredClone(DEFAULT_CREDITS_PAGE_CONFIG.techStack),
+  };
+}
 
 export const SOCIAL_PLATFORM_PRESETS: { value: string; label: string }[] = [
   { value: 'facebook', label: 'Facebook' },
@@ -1009,8 +1193,17 @@ export function migrateDatabaseInPlace(
     },
     customHomeComponents:
       existing.settings?.customHomeComponents ?? seed.settings.customHomeComponents ?? [],
+    headerConfig: normalizeHeaderConfig(existing.settings?.headerConfig || seed.settings.headerConfig),
+    footerConfig: normalizeFooterConfig(existing.settings?.footerConfig || seed.settings.footerConfig),
+    creditsPage: normalizeCreditsPageConfig(existing.settings?.creditsPage || seed.settings.creditsPage),
   };
-  if (!existing.settings?.socialMediaLinks || !existing.settings?.socialSharing) {
+  if (
+    !existing.settings?.socialMediaLinks ||
+    !existing.settings?.socialSharing ||
+    !existing.settings?.headerConfig ||
+    !existing.settings?.footerConfig ||
+    !existing.settings?.creditsPage
+  ) {
     upgraded = true;
   }
 

@@ -53,6 +53,9 @@ import {
   isExternalPaperSubmissionActive,
   isRecordPublished,
   migrateDatabaseInPlace,
+  normalizeCreditsPageConfig,
+  normalizeFooterConfig,
+  normalizeHeaderConfig,
   normalizeSocialSharingConfig,
   queuePendingRevision,
   syncLegacySocialLinks,
@@ -4352,11 +4355,47 @@ async function startServer() {
       }
     }
 
+    const nextHeaderConfig = incoming.headerConfig
+      ? normalizeHeaderConfig(incoming.headerConfig)
+      : normalizeHeaderConfig(db.settings.headerConfig);
+
+    const nextFooterConfig = incoming.footerConfig
+      ? normalizeFooterConfig(incoming.footerConfig)
+      : normalizeFooterConfig(db.settings.footerConfig);
+
+    const nextCreditsPage = incoming.creditsPage
+      ? normalizeCreditsPageConfig(incoming.creditsPage)
+      : normalizeCreditsPageConfig(db.settings.creditsPage);
+
+    const nextTopBarLinks = Array.isArray(incoming.topBarLinks)
+      ? incoming.topBarLinks
+          .filter((lk: any) => lk && (String(lk.label || '').trim() || String(lk.url || '').trim()))
+          .map((lk: any) => ({ label: String(lk.label || '').trim(), url: String(lk.url || '').trim() }))
+      : db.settings.topBarLinks;
+
+    const nextFooterColumns = Array.isArray(incoming.footerColumns)
+      ? incoming.footerColumns
+          .filter((col: any) => col && String(col.title || '').trim())
+          .map((col: any) => ({
+            title: String(col.title || '').trim(),
+            links: Array.isArray(col.links)
+              ? col.links
+                  .filter((lk: any) => lk && (String(lk.label || '').trim() || String(lk.url || '').trim()))
+                  .map((lk: any) => ({ label: String(lk.label || '').trim(), url: String(lk.url || '').trim() }))
+              : [],
+          }))
+      : db.settings.footerColumns;
+
     db.settings = {
       ...db.settings,
       ...incoming,
       shortCode: nextShortCode,
       institutionName: nextInstitutionName,
+      topBarLinks: nextTopBarLinks,
+      footerColumns: nextFooterColumns,
+      headerConfig: nextHeaderConfig,
+      footerConfig: nextFooterConfig,
+      creditsPage: nextCreditsPage,
       socialMediaLinks: nextSocialMediaLinks,
       socialLinks: Array.isArray(nextSocialMediaLinks)
         ? syncLegacySocialLinks(nextSocialMediaLinks)

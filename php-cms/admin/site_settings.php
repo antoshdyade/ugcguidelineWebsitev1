@@ -9,7 +9,14 @@ ensureCmsSchemaUpgraded($pdo);
 $msg = '';
 $err = '';
 $s = getSiteSettings($pdo);
-$tab = (($_GET['tab'] ?? 'general') === 'social' || isset($_GET['edit_social'])) ? 'social' : 'general';
+$allowedTabs = ['general', 'header_footer', 'credits', 'social'];
+$rawTab = (string)($_GET['tab'] ?? 'general');
+$tab = in_array($rawTab, $allowedTabs, true) ? $rawTab : 'general';
+if (isset($_GET['edit_social'])) {
+    $tab = 'social';
+} elseif (isset($_GET['edit_contrib'])) {
+    $tab = 'credits';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verifyCsrfToken($_POST['csrf_token'] ?? null);
@@ -83,6 +90,196 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
         logAudit($pdo, $user, 'UPDATE_SOCIAL_SHARING', 'Social Sharing', 'Updated global sharing settings');
         $msg = 'Social sharing & OpenGraph governance settings saved.';
+    } elseif ($action === 'save_header_config') {
+        $tab = 'header_footer';
+        saveHeaderConfig($pdo, [
+            'showTopUtilityBar'      => isset($_POST['show_top_utility_bar']),
+            'utilityTagline'         => trim((string)($_POST['utility_tagline'] ?? 'Autonomous Engineering Campus')),
+            'showRegulatoryCodes'    => isset($_POST['show_regulatory_codes']),
+            'showAdminButton'        => isset($_POST['show_admin_button']),
+            'showInstituteCodeBadge' => isset($_POST['show_institute_code_badge']),
+            'showSearchBar'          => isset($_POST['show_search_bar']),
+            'showStatutoryBar'       => isset($_POST['show_statutory_bar']),
+            'statutoryBarLabel'      => trim((string)($_POST['statutory_bar_label'] ?? 'Statutory & Quick Access:')),
+        ]);
+        $topLabels = $_POST['tbl_label'] ?? [];
+        $topUrls   = $_POST['tbl_url'] ?? [];
+        $newTopLinks = [];
+        foreach ($topLabels as $idx => $lbl) {
+            $l = trim((string)$lbl);
+            $u = trim((string)($topUrls[$idx] ?? ''));
+            if ($l !== '' || $u !== '') {
+                $newTopLinks[] = ['label' => $l ?: $u, 'url' => $u ?: '#'];
+            }
+        }
+        saveTopBarLinks($pdo, $newTopLinks);
+        logAudit($pdo, $user, 'UPDATE_HEADER_CONFIG', 'Header Studio', count($newTopLinks) . ' statutory quick links');
+        $msg = 'Header visibility settings & statutory quick-access bar saved.';
+    } elseif ($action === 'save_footer_config') {
+        $tab = 'header_footer';
+        $bLabels = $_POST['bbl_label'] ?? [];
+        $bUrls   = $_POST['bbl_url'] ?? [];
+        $bottomLinks = [];
+        foreach ($bLabels as $idx => $lbl) {
+            $l = trim((string)$lbl);
+            $u = trim((string)($bUrls[$idx] ?? ''));
+            if ($l !== '' || $u !== '') {
+                $bottomLinks[] = ['label' => $l ?: $u, 'url' => $u ?: '#'];
+            }
+        }
+        saveFooterConfig($pdo, [
+            'showContactBlock'     => isset($_POST['show_contact_block']),
+            'copyrightText'        => trim((string)($_POST['copyright_text'] ?? '')),
+            'complianceNote'       => trim((string)($_POST['compliance_note'] ?? '')),
+            'showBottomLinks'      => isset($_POST['show_bottom_links']),
+            'bottomBarLinks'       => $bottomLinks,
+            'showCreatorCreditBar' => isset($_POST['show_creator_credit_bar']),
+            'creatorCreditLabel'   => trim((string)($_POST['creator_credit_label'] ?? 'Designed & Developed by')),
+            'creatorCreditName'    => trim((string)($_POST['creator_credit_name'] ?? 'Campus Web & Software Engineering Team')),
+            'creatorCreditUrl'     => trim((string)($_POST['creator_credit_url'] ?? 'credits.php')),
+        ]);
+        if (isset($_POST['footer_columns_json'])) {
+            $decodedCols = json_decode((string)$_POST['footer_columns_json'], true);
+            if (is_array($decodedCols)) {
+                saveFooterColumns($pdo, $decodedCols);
+            }
+        }
+        logAudit($pdo, $user, 'UPDATE_FOOTER_CONFIG', 'Footer Studio', 'Updated footer columns, copyright & creator bar');
+        $msg = 'Footer columns, legal/compliance text, bottom links & creator attribution bar saved.';
+    } elseif ($action === 'save_credits_meta') {
+        $tab = 'credits';
+        $currCredits = getCreditsPageConfig($pdo);
+        $tsNames = $_POST['ts_name'] ?? [];
+        $tsCats  = $_POST['ts_category'] ?? [];
+        $tsDescs = $_POST['ts_description'] ?? [];
+        $nextStack = [];
+        foreach ($tsNames as $idx => $tn) {
+            $name = trim((string)$tn);
+            if ($name === '') continue;
+            $nextStack[] = [
+                'name'        => $name,
+                'category'    => trim((string)($tsCats[$idx] ?? '')),
+                'description' => trim((string)($tsDescs[$idx] ?? '')),
+            ];
+        }
+        saveCreditsPageConfig($pdo, [
+            ...$currCredits,
+            'eyebrow'                 => trim((string)($_POST['eyebrow'] ?? 'Portal Architecture & Attribution')),
+            'pageTitle'               => trim((string)($_POST['page_title'] ?? 'Platform Creators, Developers & Contributors')),
+            'pageSubtitle'            => trim((string)($_POST['page_subtitle'] ?? '')),
+            'projectVersion'          => trim((string)($_POST['project_version'] ?? '')),
+            'releaseYear'             => trim((string)($_POST['release_year'] ?? '')),
+            'organizationCredit'      => trim((string)($_POST['organization_credit'] ?? '')),
+            'licenseNote'             => trim((string)($_POST['license_note'] ?? '')),
+            'acknowledgementsHtml'    => (string)($_POST['acknowledgements_html'] ?? ''),
+            'isShareable'             => isset($_POST['is_shareable']),
+            'showContributorsSection' => isset($_POST['show_contributors_section']),
+            'showTechStackSection'    => isset($_POST['show_tech_stack_section']),
+            'techStack'               => $nextStack,
+        ]);
+        logAudit($pdo, $user, 'UPDATE_CREDITS_META', 'Creators & Credits Page', trim((string)($_POST['page_title'] ?? 'Credits Page')));
+        $msg = 'Developers & Contributors page metadata, visibility & tech stack saved.';
+    } elseif ($action === 'save_contributor') {
+        $tab = 'credits';
+        $currCredits = getCreditsPageConfig($pdo);
+        $contribs = $currCredits['contributors'] ?? [];
+        $cid = (int)($_POST['contrib_id'] ?? 0);
+        $cName = trim((string)($_POST['c_name'] ?? ''));
+        $cRole = trim((string)($_POST['c_role'] ?? ''));
+        $cCatSelect = trim((string)($_POST['c_category'] ?? 'Core Contributor'));
+        $cCatCustom = trim((string)($_POST['c_category_custom'] ?? ''));
+        $cCategory = ($cCatSelect === '__custom__' && $cCatCustom !== '') ? $cCatCustom : ($cCatSelect !== '__custom__' ? $cCatSelect : 'Core Contributor');
+        $cPhoto = trim((string)($_POST['c_photo_url'] ?? ''));
+        if (!empty($_FILES['c_photo_file']['name'])) {
+            $up = handleCmsUpload($pdo, $_FILES['c_photo_file'], __DIR__ . '/../uploads', 'photo');
+            if ($up['ok']) $cPhoto = $up['file_url'];
+            else $err = $up['error'];
+        }
+        if ($err === '') {
+            if ($cName === '' || $cRole === '') {
+                $err = 'Contributor Name and Role / Title are required.';
+            } else {
+                $entry = [
+                    'id'            => $cid > 0 ? $cid : (max(array_merge([0], array_column($contribs, 'id'))) + 1),
+                    'name'          => $cName,
+                    'role'          => $cRole,
+                    'category'      => $cCategory,
+                    'affiliation'   => trim((string)($_POST['c_affiliation'] ?? '')),
+                    'email'         => trim((string)($_POST['c_email'] ?? '')),
+                    'websiteUrl'    => trim((string)($_POST['c_website_url'] ?? '')),
+                    'githubUrl'     => trim((string)($_POST['c_github_url'] ?? '')),
+                    'linkedinUrl'   => trim((string)($_POST['c_linkedin_url'] ?? '')),
+                    'photoUrl'      => $cPhoto,
+                    'bio'           => trim((string)($_POST['c_bio'] ?? '')),
+                    'contributions' => trim((string)($_POST['c_contributions'] ?? '')),
+                    'isActive'      => isset($_POST['c_is_active']),
+                    'sortOrder'     => (int)($_POST['c_sort_order'] ?? (count($contribs) + 1)),
+                ];
+                $replaced = false;
+                foreach ($contribs as $idx => $existingC) {
+                    if ((int)($existingC['id'] ?? 0) === $entry['id']) {
+                        $contribs[$idx] = $entry;
+                        $replaced = true;
+                        break;
+                    }
+                }
+                if (!$replaced) {
+                    $contribs[] = $entry;
+                }
+                $currCredits['contributors'] = $contribs;
+                saveCreditsPageConfig($pdo, $currCredits);
+                logAudit($pdo, $user, $replaced ? 'UPDATE_CONTRIBUTOR' : 'ADD_CONTRIBUTOR', 'Creators & Credits Page', $cName);
+                $msg = $replaced ? 'Contributor profile updated.' : 'New contributor added to Developers & Creators page.';
+            }
+        }
+    } elseif ($action === 'move_contributor' && !empty($_POST['cid'])) {
+        $tab = 'credits';
+        $currCredits = getCreditsPageConfig($pdo);
+        $contribs = $currCredits['contributors'] ?? [];
+        $cid = (int)$_POST['cid'];
+        $dir = ($_POST['dir'] ?? 'up') === 'down' ? 1 : -1;
+        foreach ($contribs as $idx => $c) {
+            if ((int)($c['id'] ?? 0) === $cid) {
+                $targetIdx = $idx + $dir;
+                if ($targetIdx >= 0 && $targetIdx < count($contribs)) {
+                    $tmp = $contribs[$targetIdx];
+                    $contribs[$targetIdx] = $contribs[$idx];
+                    $contribs[$idx] = $tmp;
+                    foreach ($contribs as $ord => &$row) {
+                        $row['sortOrder'] = $ord + 1;
+                    }
+                    unset($row);
+                    $currCredits['contributors'] = $contribs;
+                    saveCreditsPageConfig($pdo, $currCredits);
+                    $msg = 'Contributor display order updated.';
+                }
+                break;
+            }
+        }
+    } elseif ($action === 'toggle_contributor' && !empty($_POST['cid'])) {
+        $tab = 'credits';
+        $currCredits = getCreditsPageConfig($pdo);
+        $cid = (int)$_POST['cid'];
+        foreach ($currCredits['contributors'] as &$c) {
+            if ((int)($c['id'] ?? 0) === $cid) {
+                $c['isActive'] = empty($c['isActive']);
+                break;
+            }
+        }
+        unset($c);
+        saveCreditsPageConfig($pdo, $currCredits);
+        $msg = 'Contributor visibility toggled.';
+    } elseif ($action === 'delete_contributor' && !empty($_POST['cid'])) {
+        $tab = 'credits';
+        $currCredits = getCreditsPageConfig($pdo);
+        $cid = (int)$_POST['cid'];
+        $currCredits['contributors'] = array_values(array_filter(
+            $currCredits['contributors'] ?? [],
+            static fn(array $c): bool => (int)($c['id'] ?? 0) !== $cid
+        ));
+        saveCreditsPageConfig($pdo, $currCredits);
+        logAudit($pdo, $user, 'DELETE_CONTRIBUTOR', 'Creators & Credits Page', 'Contributor ID #' . $cid);
+        $msg = 'Contributor removed from Credits page.';
     } else {
         $tab = 'general';
         $logoUrl = $s['logo_url'] ?? '';
@@ -241,6 +438,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $hs = $s['home_sections'] ?? [];
 $stats = $s['highlights_stats'] ?? [];
 $approvedBodies = $s['approved_bodies'] ?? [];
+$headerCfg = getHeaderConfig($pdo);
+$topBarLinks = getTopBarLinks($pdo);
+$footerCfg = getFooterConfig($pdo);
+$footerCols = getFooterColumns($pdo);
+$creditsCfg = getCreditsPageConfig($pdo);
+$editingContrib = null;
+if (!empty($_GET['edit_contrib'])) {
+    foreach (($creditsCfg['contributors'] ?? []) as $cRow) {
+        if ((int)($cRow['id'] ?? 0) === (int)$_GET['edit_contrib']) {
+            $editingContrib = $cRow;
+            break;
+        }
+    }
+}
 $socialLinks = getSocialMediaLinks($pdo, false);
 $socialShareCfg = getSocialSharingConfig($pdo);
 $editingSocial = null;
@@ -252,13 +463,15 @@ if (!empty($_GET['edit_social'])) {
         }
     }
 }
-$adminPageTitle = 'Site Settings, Social Media, Branding & Theme Studio';
+$adminPageTitle = 'Site Settings, Header/Footer Studio, Creators Page & Social Media';
 require_once __DIR__ . '/../includes/admin_layout_top.php';
 ?>
 
 <div class="admin-subtabs" style="margin-bottom:1.1rem;">
-  <a href="?tab=general" class="admin-subtab <?= $tab === 'general' ? 'is-active' : '' ?>">1. Institution Branding, Theme &amp; Homepage</a>
-  <a href="?tab=social" class="admin-subtab <?= $tab === 'social' ? 'is-active' : '' ?>">2. Social Media Icons, Sharing &amp; Broadcast (<?= count($socialLinks) ?>)</a>
+  <a href="?tab=general" class="admin-subtab <?= $tab === 'general' ? 'is-active' : '' ?>">1. Branding, Theme &amp; Homepage</a>
+  <a href="?tab=header_footer" class="admin-subtab <?= $tab === 'header_footer' ? 'is-active' : '' ?>">2. Header &amp; Footer Manager</a>
+  <a href="?tab=credits" class="admin-subtab <?= $tab === 'credits' ? 'is-active' : '' ?>">3. Creators &amp; Developers Page (<?= count($creditsCfg['contributors'] ?? []) ?>)</a>
+  <a href="?tab=social" class="admin-subtab <?= $tab === 'social' ? 'is-active' : '' ?>">4. Social Icons &amp; Sharing (<?= count($socialLinks) ?>)</a>
 </div>
 
 <?php if ($tab === 'general'): ?>
@@ -470,6 +683,451 @@ function addApprovedBodyRow() {
   list.appendChild(div);
 }
 </script>
+<?php elseif ($tab === 'header_footer'): ?>
+  <div class="grid-2" style="gap:1.25rem;align-items:start;">
+    <!-- Header Settings & Statutory Quick-Access Bar -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
+        <h2 style="margin:0;">Header &amp; Top Utility Ribbon</h2>
+        <a href="manage_menus.php" class="btn-secondary btn-sm">Primary Nav Menus &rarr;</a>
+      </div>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="save_header_config">
+
+        <div class="grid-2" style="margin-bottom:0.85rem;font-size:0.86rem;gap:0.45rem;">
+          <label><input type="checkbox" name="show_top_utility_bar" <?= !empty($headerCfg['showTopUtilityBar']) ? 'checked' : '' ?>> Show Top Accessibility &amp; Utility Bar</label>
+          <label><input type="checkbox" name="show_regulatory_codes" <?= !empty($headerCfg['showRegulatoryCodes']) ? 'checked' : '' ?>> Show DTE &amp; AICTE Codes</label>
+          <label><input type="checkbox" name="show_admin_button" <?= !empty($headerCfg['showAdminButton']) ? 'checked' : '' ?>> Show Top-Right CMS Admin Link</label>
+          <label><input type="checkbox" name="show_institute_code_badge" <?= !empty($headerCfg['showInstituteCodeBadge']) ? 'checked' : '' ?>> Show Institute Code Badge</label>
+          <label><input type="checkbox" name="show_search_bar" <?= !empty($headerCfg['showSearchBar']) ? 'checked' : '' ?>> Show Global Search Input</label>
+          <label><input type="checkbox" name="show_statutory_bar" <?= !empty($headerCfg['showStatutoryBar']) ? 'checked' : '' ?>> Show Statutory &amp; Quick Access Strip</label>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:0.85rem;">
+          <label style="font-size:0.84rem;font-weight:600;">Utility Ribbon Tagline
+            <input type="text" name="utility_tagline" value="<?= e((string)($headerCfg['utilityTagline'] ?? '')) ?>" placeholder="Autonomous Engineering Campus" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.84rem;font-weight:600;">Statutory Bar Heading Label
+            <input type="text" name="statutory_bar_label" value="<?= e((string)($headerCfg['statutoryBarLabel'] ?? '')) ?>" placeholder="Statutory &amp; Quick Access:" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0.85rem 0 0.5rem;">
+          <h3 style="margin:0;font-size:0.96rem;">Statutory &amp; Top Quick-Access Links</h3>
+          <button type="button" class="btn-secondary btn-sm" onclick="addHeaderTopLinkRow()">+ Add Link</button>
+        </div>
+        <div id="header-top-links-list" style="display:grid;gap:0.45rem;margin-bottom:1rem;">
+          <?php foreach ($topBarLinks as $tl): ?>
+            <div class="hf-link-row" style="display:grid;grid-template-columns:1fr 1.2fr auto auto auto;gap:0.35rem;align-items:center;">
+              <input type="text" name="tbl_label[]" value="<?= e((string)$tl['label']) ?>" placeholder="Link Label" style="padding:0.4rem;">
+              <input type="text" name="tbl_url[]" value="<?= e((string)$tl['url']) ?>" placeholder="e.g. credits.php or page.php?slug=..." style="padding:0.4rem;">
+              <button type="button" class="btn-secondary btn-sm" title="Move Up" onclick="moveDomRow(this.parentNode,-1)">&uarr;</button>
+              <button type="button" class="btn-secondary btn-sm" title="Move Down" onclick="moveDomRow(this.parentNode,1)">&darr;</button>
+              <button type="button" class="btn-danger btn-sm" title="Remove" onclick="this.parentNode.remove()">&times;</button>
+            </div>
+          <?php endforeach; ?>
+        </div>
+
+        <button type="submit" class="btn-primary">Save Header Configuration &amp; Links</button>
+      </form>
+    </div>
+
+    <!-- Footer Settings, Bottom Strip, Creator Attribution & Columns -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.65rem;">
+        <h2 style="margin:0;">Footer Layout, Columns &amp; Creator Credit</h2>
+        <a href="../credits.php" target="_blank" class="btn-secondary btn-sm">Preview /credits &rarr;</a>
+      </div>
+      <form method="post" onsubmit="return syncFooterColumnsJsonBeforeSubmit()">
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="save_footer_config">
+        <input type="hidden" name="footer_columns_json" id="footer-columns-json-input" value="<?= e(json_encode($footerCols, JSON_UNESCAPED_UNICODE) ?: '[]') ?>">
+
+        <div class="grid-3" style="margin-bottom:0.8rem;font-size:0.85rem;">
+          <label><input type="checkbox" name="show_contact_block" <?= !empty($footerCfg['showContactBlock']) ? 'checked' : '' ?>> Show Institution Contact Column</label>
+          <label><input type="checkbox" name="show_bottom_links" <?= !empty($footerCfg['showBottomLinks']) ? 'checked' : '' ?>> Show Bottom Utility Links</label>
+          <label><input type="checkbox" name="show_creator_credit_bar" <?= !empty($footerCfg['showCreatorCreditBar']) ? 'checked' : '' ?>> Show Creator Attribution Strip</label>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:0.75rem;">
+          <label style="font-size:0.84rem;font-weight:600;">Custom Copyright Line (Optional)
+            <input type="text" name="copyright_text" value="<?= e((string)($footerCfg['copyrightText'] ?? '')) ?>" placeholder="Leave blank for &copy; Year + Institution Name" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.84rem;font-weight:600;">Statutory Compliance Note
+            <input type="text" name="compliance_note" value="<?= e((string)($footerCfg['complianceNote'] ?? '')) ?>" placeholder="UGC NEP 2020 Public Self-Disclosure Compliant." style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+
+        <div style="background:#f8fafc;border:1px solid var(--border-color);border-radius:10px;padding:0.8rem;margin-bottom:0.9rem;">
+          <strong style="display:block;font-size:0.85rem;margin-bottom:0.5rem;">Creator / Developer Attribution Strip</strong>
+          <div class="grid-3" style="gap:0.45rem;">
+            <label style="font-size:0.78rem;font-weight:600;">Prefix Label
+              <input type="text" name="creator_credit_label" value="<?= e((string)($footerCfg['creatorCreditLabel'] ?? '')) ?>" placeholder="Designed &amp; Developed by" style="width:100%;padding:0.4rem;margin-top:2px;">
+            </label>
+            <label style="font-size:0.78rem;font-weight:600;">Team / Creator Name
+              <input type="text" name="creator_credit_name" value="<?= e((string)($footerCfg['creatorCreditName'] ?? '')) ?>" placeholder="Campus Web Team" style="width:100%;padding:0.4rem;margin-top:2px;">
+            </label>
+            <label style="font-size:0.78rem;font-weight:600;">Target URL
+              <input type="text" name="creator_credit_url" value="<?= e((string)($footerCfg['creatorCreditUrl'] ?? 'credits.php')) ?>" placeholder="credits.php" style="width:100%;padding:0.4rem;margin-top:2px;">
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0.85rem 0 0.45rem;">
+          <h3 style="margin:0;font-size:0.95rem;">Footer Link Columns</h3>
+          <button type="button" class="btn-secondary btn-sm" onclick="addFooterColumnCard()">+ Add Column</button>
+        </div>
+        <div id="footer-columns-editor" style="display:grid;gap:0.75rem;margin-bottom:1rem;"></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0.85rem 0 0.45rem;">
+          <h3 style="margin:0;font-size:0.95rem;">Bottom Legal &amp; Quick Links Row</h3>
+          <button type="button" class="btn-secondary btn-sm" onclick="addFooterBottomLinkRow()">+ Add Bottom Link</button>
+        </div>
+        <div id="footer-bottom-links-list" style="display:grid;gap:0.45rem;margin-bottom:1rem;">
+          <?php foreach (($footerCfg['bottomBarLinks'] ?? []) as $bl): ?>
+            <div class="hf-link-row" style="display:grid;grid-template-columns:1fr 1.2fr auto auto auto;gap:0.35rem;align-items:center;">
+              <input type="text" name="bbl_label[]" value="<?= e((string)$bl['label']) ?>" placeholder="Link Label" style="padding:0.4rem;">
+              <input type="text" name="bbl_url[]" value="<?= e((string)$bl['url']) ?>" placeholder="e.g. credits.php or page.php?slug=..." style="padding:0.4rem;">
+              <button type="button" class="btn-secondary btn-sm" title="Move Up" onclick="moveDomRow(this.parentNode,-1)">&uarr;</button>
+              <button type="button" class="btn-secondary btn-sm" title="Move Down" onclick="moveDomRow(this.parentNode,1)">&darr;</button>
+              <button type="button" class="btn-danger btn-sm" title="Remove" onclick="this.parentNode.remove()">&times;</button>
+            </div>
+          <?php endforeach; ?>
+        </div>
+
+        <button type="submit" class="btn-primary">Save Complete Footer Settings</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  function moveDomRow(el, delta) {
+    if (!el || !el.parentNode) return;
+    var parent = el.parentNode;
+    if (delta < 0 && el.previousElementSibling) {
+      parent.insertBefore(el, el.previousElementSibling);
+    } else if (delta > 0 && el.nextElementSibling) {
+      parent.insertBefore(el.nextElementSibling, el);
+    }
+  }
+  function makeLinkRowHtml(labelName, urlName) {
+    return '<input type="text" name="' + labelName + '" placeholder="Link Label" style="padding:0.4rem;">'
+      + '<input type="text" name="' + urlName + '" placeholder="Target URL (e.g. credits.php)" style="padding:0.4rem;">'
+      + '<button type="button" class="btn-secondary btn-sm" title="Move Up" onclick="moveDomRow(this.parentNode,-1)">&uarr;</button>'
+      + '<button type="button" class="btn-secondary btn-sm" title="Move Down" onclick="moveDomRow(this.parentNode,1)">&darr;</button>'
+      + '<button type="button" class="btn-danger btn-sm" title="Remove" onclick="this.parentNode.remove()">&times;</button>';
+  }
+  function addHeaderTopLinkRow() {
+    var box = document.getElementById('header-top-links-list');
+    if (!box) return;
+    var row = document.createElement('div');
+    row.className = 'hf-link-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1.2fr auto auto auto;gap:0.35rem;align-items:center;';
+    row.innerHTML = makeLinkRowHtml('tbl_label[]', 'tbl_url[]');
+    box.appendChild(row);
+  }
+  function addFooterBottomLinkRow() {
+    var box = document.getElementById('footer-bottom-links-list');
+    if (!box) return;
+    var row = document.createElement('div');
+    row.className = 'hf-link-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1.2fr auto auto auto;gap:0.35rem;align-items:center;';
+    row.innerHTML = makeLinkRowHtml('bbl_label[]', 'bbl_url[]');
+    box.appendChild(row);
+  }
+  var initialFooterCols = <?= json_encode($footerCols, JSON_UNESCAPED_UNICODE) ?: '[]' ?>;
+  function createFooterColLinkRow(labelVal, urlVal) {
+    var r = document.createElement('div');
+    r.className = 'fc-link-row';
+    r.style.cssText = 'display:grid;grid-template-columns:1fr 1.2fr auto auto auto;gap:0.3rem;align-items:center;';
+    var inL = document.createElement('input');
+    inL.type = 'text'; inL.className = 'fc-lk-label'; inL.placeholder = 'Link Label'; inL.value = labelVal || ''; inL.style.padding = '0.35rem';
+    var inU = document.createElement('input');
+    inU.type = 'text'; inU.className = 'fc-lk-url'; inU.placeholder = 'URL'; inU.value = urlVal || ''; inU.style.padding = '0.35rem';
+    var bUp = document.createElement('button');
+    bUp.type = 'button'; bUp.className = 'btn-secondary btn-sm'; bUp.textContent = '\u2191'; bUp.onclick = function () { moveDomRow(r, -1); };
+    var bDn = document.createElement('button');
+    bDn.type = 'button'; bDn.className = 'btn-secondary btn-sm'; bDn.textContent = '\u2193'; bDn.onclick = function () { moveDomRow(r, 1); };
+    var bRm = document.createElement('button');
+    bRm.type = 'button'; bRm.className = 'btn-danger btn-sm'; bRm.textContent = '\u00d7'; bRm.onclick = function () { r.remove(); };
+    r.appendChild(inL); r.appendChild(inU); r.appendChild(bUp); r.appendChild(bDn); r.appendChild(bRm);
+    return r;
+  }
+  function addFooterColumnCard(colData) {
+    var ed = document.getElementById('footer-columns-editor');
+    if (!ed) return;
+    var data = colData || { title: 'New Section', links: [{ label: 'Home', url: 'index.php' }] };
+    var card = document.createElement('div');
+    card.className = 'fc-col-card';
+    card.style.cssText = 'border:1px solid var(--border-color);border-radius:8px;padding:0.75rem;background:#fff;';
+    var head = document.createElement('div');
+    head.style.cssText = 'display:flex;gap:0.4rem;align-items:center;margin-bottom:0.55rem;';
+    var tIn = document.createElement('input');
+    tIn.type = 'text'; tIn.className = 'fc-col-title'; tIn.placeholder = 'Column Heading'; tIn.value = data.title || '';
+    tIn.style.cssText = 'flex:1;padding:0.4rem;font-weight:700;';
+    var bAddLk = document.createElement('button');
+    bAddLk.type = 'button'; bAddLk.className = 'btn-secondary btn-sm'; bAddLk.textContent = '+ Link';
+    var bUp = document.createElement('button');
+    bUp.type = 'button'; bUp.className = 'btn-secondary btn-sm'; bUp.textContent = '\u2191'; bUp.onclick = function () { moveDomRow(card, -1); };
+    var bDn = document.createElement('button');
+    bDn.type = 'button'; bDn.className = 'btn-secondary btn-sm'; bDn.textContent = '\u2193'; bDn.onclick = function () { moveDomRow(card, 1); };
+    var bDel = document.createElement('button');
+    bDel.type = 'button'; bDel.className = 'btn-danger btn-sm'; bDel.textContent = 'Delete Col'; bDel.onclick = function () { card.remove(); };
+    head.appendChild(tIn); head.appendChild(bAddLk); head.appendChild(bUp); head.appendChild(bDn); head.appendChild(bDel);
+    var linksWrap = document.createElement('div');
+    linksWrap.className = 'fc-links-wrap';
+    linksWrap.style.cssText = 'display:grid;gap:0.35rem;';
+    bAddLk.onclick = function () { linksWrap.appendChild(createFooterColLinkRow('', '')); };
+    (data.links || []).forEach(function (lk) {
+      linksWrap.appendChild(createFooterColLinkRow(lk.label || '', lk.url || ''));
+    });
+    card.appendChild(head);
+    card.appendChild(linksWrap);
+    ed.appendChild(card);
+  }
+  function syncFooterColumnsJsonBeforeSubmit() {
+    var ed = document.getElementById('footer-columns-editor');
+    var hidden = document.getElementById('footer-columns-json-input');
+    if (!ed || !hidden) return true;
+    var cols = [];
+    ed.querySelectorAll('.fc-col-card').forEach(function (card) {
+      var title = (card.querySelector('.fc-col-title') || {}).value || '';
+      var links = [];
+      card.querySelectorAll('.fc-link-row').forEach(function (r) {
+        var lbl = (r.querySelector('.fc-lk-label') || {}).value || '';
+        var url = (r.querySelector('.fc-lk-url') || {}).value || '';
+        if (lbl.trim() || url.trim()) {
+          links.push({ label: lbl.trim() || url.trim(), url: url.trim() || '#' });
+        }
+      });
+      if (title.trim() || links.length > 0) {
+        cols.push({ title: title.trim() || 'Links', links: links });
+      }
+    });
+    hidden.value = JSON.stringify(cols);
+    return true;
+  }
+  (function initFooterEditor() {
+    (initialFooterCols || []).forEach(function (c) { addFooterColumnCard(c); });
+  })();
+  </script>
+
+<?php elseif ($tab === 'credits'): ?>
+  <div class="grid-2" style="gap:1.25rem;align-items:start;">
+    <!-- Left Column: Page Metadata, Visibility, Acknowledgements & Tech Stack -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+        <h2 style="margin:0;">Developers &amp; Creators Page Settings</h2>
+        <a href="../credits.php" target="_blank" class="btn-secondary btn-sm">Open Public /credits Page &rarr;</a>
+      </div>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+        <input type="hidden" name="action" value="save_credits_meta">
+
+        <div class="grid-2" style="margin-bottom:0.65rem;">
+          <label style="font-size:0.84rem;font-weight:600;">Eyebrow Tag
+            <input type="text" name="eyebrow" value="<?= e((string)($creditsCfg['eyebrow'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.84rem;font-weight:600;">Page Title
+            <input type="text" name="page_title" value="<?= e((string)($creditsCfg['pageTitle'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+        <label style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:0.65rem;">Subtitle / Intro Description
+          <textarea name="page_subtitle" rows="2" style="width:100%;padding:0.45rem;margin-top:3px;"><?= e((string)($creditsCfg['pageSubtitle'] ?? '')) ?></textarea>
+        </label>
+        <div class="grid-3" style="margin-bottom:0.65rem;">
+          <label style="font-size:0.82rem;font-weight:600;">Release Version
+            <input type="text" name="project_version" value="<?= e((string)($creditsCfg['projectVersion'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.82rem;font-weight:600;">Release Year
+            <input type="text" name="release_year" value="<?= e((string)($creditsCfg['releaseYear'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+          <label style="font-size:0.82rem;font-weight:600;">Organization / Cell Credit
+            <input type="text" name="organization_credit" value="<?= e((string)($creditsCfg['organizationCredit'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+          </label>
+        </div>
+        <label style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:0.65rem;">Compliance / License Note
+          <input type="text" name="license_note" value="<?= e((string)($creditsCfg['licenseNote'] ?? '')) ?>" style="width:100%;padding:0.45rem;margin-top:3px;">
+        </label>
+
+        <div class="grid-3" style="margin-bottom:0.75rem;font-size:0.85rem;">
+          <label><input type="checkbox" name="show_contributors_section" <?= !empty($creditsCfg['showContributorsSection']) ? 'checked' : '' ?>> Show Contributors Directory</label>
+          <label><input type="checkbox" name="show_tech_stack_section" <?= !empty($creditsCfg['showTechStackSection']) ? 'checked' : '' ?>> Show Technology Stack</label>
+          <label><input type="checkbox" name="is_shareable" <?= !empty($creditsCfg['isShareable']) ? 'checked' : '' ?>> Enable Social Sharing Bar</label>
+        </div>
+
+        <label style="display:block;font-size:0.84rem;font-weight:600;margin-bottom:0.85rem;">Acknowledgements &amp; Governance Note (HTML supported)
+          <textarea name="acknowledgements_html" rows="4" style="width:100%;padding:0.5rem;margin-top:3px;font-family:monospace;font-size:0.82rem;"><?= e((string)($creditsCfg['acknowledgementsHtml'] ?? '')) ?></textarea>
+        </label>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:0.85rem 0 0.5rem;">
+          <h3 style="margin:0;font-size:0.96rem;">Platform Architecture &amp; Tech Stack Cards</h3>
+          <button type="button" class="btn-secondary btn-sm" onclick="addTechStackRow()">+ Add Stack Item</button>
+        </div>
+        <div id="credits-techstack-list" style="display:grid;gap:0.5rem;margin-bottom:1rem;">
+          <?php foreach (($creditsCfg['techStack'] ?? []) as $ts): ?>
+            <div style="display:grid;grid-template-columns:1fr 0.85fr 1.4fr auto;gap:0.35rem;align-items:center;">
+              <input type="text" name="ts_name[]" value="<?= e((string)($ts['name'] ?? '')) ?>" placeholder="Stack Name" style="padding:0.4rem;">
+              <input type="text" name="ts_category[]" value="<?= e((string)($ts['category'] ?? '')) ?>" placeholder="Layer / Category" style="padding:0.4rem;">
+              <input type="text" name="ts_description[]" value="<?= e((string)($ts['description'] ?? '')) ?>" placeholder="Short Description" style="padding:0.4rem;">
+              <button type="button" class="btn-danger btn-sm" onclick="this.parentNode.remove()">&times;</button>
+            </div>
+          <?php endforeach; ?>
+        </div>
+
+        <button type="submit" class="btn-primary">Save Credits Page Settings &amp; Stack</button>
+      </form>
+    </div>
+
+    <!-- Right Column: Add / Edit Contributor & Roster Management -->
+    <div>
+      <div class="card" style="margin-bottom:1.1rem;">
+        <h2 style="margin-top:0;"><?= $editingContrib ? 'Edit Contributor: ' . e((string)$editingContrib['name']) : 'Add Creator, Developer or Contributor' ?></h2>
+        <form method="post" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+          <input type="hidden" name="action" value="save_contributor">
+          <input type="hidden" name="contrib_id" value="<?= (int)($editingContrib['id'] ?? 0) ?>">
+
+          <div class="grid-2" style="margin-bottom:0.55rem;">
+            <label style="font-size:0.82rem;font-weight:600;">Full Name *
+              <input type="text" name="c_name" required value="<?= e((string)($editingContrib['name'] ?? '')) ?>" placeholder="e.g. Dr. Rajesh Kulkarni" style="width:100%;padding:0.42rem;margin-top:3px;">
+            </label>
+            <label style="font-size:0.82rem;font-weight:600;">Role / Designation *
+              <input type="text" name="c_role" required value="<?= e((string)($editingContrib['role'] ?? '')) ?>" placeholder="e.g. Lead Full-Stack Architect" style="width:100%;padding:0.42rem;margin-top:3px;">
+            </label>
+          </div>
+
+          <div class="grid-2" style="margin-bottom:0.55rem;">
+            <?php
+              $curCat = (string)($editingContrib['category'] ?? 'Core Contributor');
+              $presets = contributorRolePresets();
+              $isCustomCat = !in_array($curCat, $presets, true);
+            ?>
+            <label style="font-size:0.82rem;font-weight:600;">Contributor Category
+              <select name="c_category" id="c-cat-select" onchange="document.getElementById('c-cat-custom-wrap').style.display=this.value==='__custom__'?'block':'none'" style="width:100%;padding:0.42rem;margin-top:3px;">
+                <?php foreach ($presets as $pr): ?>
+                  <option value="<?= e($pr) ?>" <?= (!$isCustomCat && $curCat === $pr) ? 'selected' : '' ?>><?= e($pr) ?></option>
+                <?php endforeach; ?>
+                <option value="__custom__" <?= $isCustomCat ? 'selected' : '' ?>>Custom Category...</option>
+              </select>
+            </label>
+            <div id="c-cat-custom-wrap" style="display:<?= $isCustomCat ? 'block' : 'none' ?>;">
+              <label style="font-size:0.82rem;font-weight:600;">Custom Category Name
+                <input type="text" name="c_category_custom" value="<?= e($isCustomCat ? $curCat : '') ?>" placeholder="e.g. Security Auditor" style="width:100%;padding:0.42rem;margin-top:3px;">
+              </label>
+            </div>
+            <label style="font-size:0.82rem;font-weight:600;">Department / Affiliation
+              <input type="text" name="c_affiliation" value="<?= e((string)($editingContrib['affiliation'] ?? '')) ?>" placeholder="Campus IT &amp; CSE Dept." style="width:100%;padding:0.42rem;margin-top:3px;">
+            </label>
+          </div>
+
+          <div class="grid-2" style="margin-bottom:0.55rem;">
+            <label style="font-size:0.82rem;font-weight:600;">Email Address
+              <input type="email" name="c_email" value="<?= e((string)($editingContrib['email'] ?? '')) ?>" style="width:100%;padding:0.42rem;margin-top:3px;">
+            </label>
+            <label style="font-size:0.82rem;font-weight:600;">Contributions / Modules Owned
+              <input type="text" name="c_contributions" value="<?= e((string)($editingContrib['contributions'] ?? '')) ?>" placeholder="Security Shield · PHP/MySQL Engine" style="width:100%;padding:0.42rem;margin-top:3px;">
+            </label>
+          </div>
+
+          <div class="grid-3" style="margin-bottom:0.55rem;">
+            <label style="font-size:0.8rem;font-weight:600;">GitHub URL
+              <input type="url" name="c_github_url" value="<?= e((string)($editingContrib['githubUrl'] ?? '')) ?>" placeholder="https://github.com/..." style="width:100%;padding:0.4rem;margin-top:2px;">
+            </label>
+            <label style="font-size:0.8rem;font-weight:600;">LinkedIn URL
+              <input type="url" name="c_linkedin_url" value="<?= e((string)($editingContrib['linkedinUrl'] ?? '')) ?>" placeholder="https://linkedin.com/in/..." style="width:100%;padding:0.4rem;margin-top:2px;">
+            </label>
+            <label style="font-size:0.8rem;font-weight:600;">Website / Portfolio URL
+              <input type="url" name="c_website_url" value="<?= e((string)($editingContrib['websiteUrl'] ?? '')) ?>" placeholder="https://..." style="width:100%;padding:0.4rem;margin-top:2px;">
+            </label>
+          </div>
+
+          <div class="grid-2" style="margin-bottom:0.55rem;">
+            <label style="font-size:0.8rem;font-weight:600;">Photo URL (Optional)
+              <input type="text" name="c_photo_url" value="<?= e((string)($editingContrib['photoUrl'] ?? '')) ?>" placeholder="uploads/... or https://..." style="width:100%;padding:0.4rem;margin-top:2px;">
+            </label>
+            <label style="font-size:0.8rem;font-weight:600;">Or Upload Portrait Photo
+              <input type="file" name="c_photo_file" accept="image/jpeg,image/png,image/webp" data-aspect="1:1" style="margin-top:2px;">
+            </label>
+          </div>
+
+          <label style="display:block;font-size:0.82rem;font-weight:600;margin-bottom:0.55rem;">Short Bio / Attribution Summary
+            <textarea name="c_bio" rows="2" style="width:100%;padding:0.42rem;margin-top:3px;"><?= e((string)($editingContrib['bio'] ?? '')) ?></textarea>
+          </label>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+            <label style="font-size:0.84rem;font-weight:600;"><input type="checkbox" name="c_is_active" <?= (!$editingContrib || !empty($editingContrib['isActive'])) ? 'checked' : '' ?>> Visible on Public /credits Page</label>
+            <div style="display:flex;gap:0.5rem;">
+              <?php if ($editingContrib): ?>
+                <a href="?tab=credits" class="btn-secondary btn-sm">Cancel Edit</a>
+              <?php endif; ?>
+              <button type="submit" class="btn-primary"><?= $editingContrib ? 'Update Contributor' : 'Add Contributor' ?></button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Contributors Roster (<?= count($creditsCfg['contributors'] ?? []) ?>)</h3>
+        <div style="display:grid;gap:0.65rem;">
+          <?php foreach (($creditsCfg['contributors'] ?? []) as $cRow): ?>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.65rem 0.75rem;border:1px solid var(--border-color);border-radius:8px;background:#fff;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--secondary-color);font-weight:700;">
+                  <?= e((string)($cRow['category'] ?? 'Contributor')) ?> <?= empty($cRow['isActive']) ? '· Hidden' : '' ?>
+                </div>
+                <strong><?= e((string)$cRow['name']) ?></strong>
+                <div style="font-size:0.78rem;color:var(--text-muted);"><?= e((string)$cRow['role']) ?></div>
+              </div>
+              <div style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+                <a href="?tab=credits&amp;edit_contrib=<?= (int)$cRow['id'] ?>" class="btn-secondary btn-sm">Edit</a>
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="move_contributor">
+                  <input type="hidden" name="cid" value="<?= (int)$cRow['id'] ?>">
+                  <input type="hidden" name="dir" value="up">
+                  <button type="submit" class="btn-secondary btn-sm" title="Move Up">&uarr;</button>
+                </form>
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="move_contributor">
+                  <input type="hidden" name="cid" value="<?= (int)$cRow['id'] ?>">
+                  <input type="hidden" name="dir" value="down">
+                  <button type="submit" class="btn-secondary btn-sm" title="Move Down">&darr;</button>
+                </form>
+                <form method="post" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="toggle_contributor">
+                  <input type="hidden" name="cid" value="<?= (int)$cRow['id'] ?>">
+                  <button type="submit" class="btn-secondary btn-sm"><?= empty($cRow['isActive']) ? 'Show' : 'Hide' ?></button>
+                </form>
+                <form method="post" style="display:inline;" onsubmit="return confirm('Remove this contributor from Credits page?');">
+                  <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                  <input type="hidden" name="action" value="delete_contributor">
+                  <input type="hidden" name="cid" value="<?= (int)$cRow['id'] ?>">
+                  <button type="submit" class="btn-danger btn-sm">Delete</button>
+                </form>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+  function addTechStackRow() {
+    var box = document.getElementById('credits-techstack-list');
+    if (!box) return;
+    var row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 0.85fr 1.4fr auto;gap:0.35rem;align-items:center;';
+    row.innerHTML = '<input type="text" name="ts_name[]" placeholder="Stack Name" style="padding:0.4rem;">'
+      + '<input type="text" name="ts_category[]" placeholder="Layer / Category" style="padding:0.4rem;">'
+      + '<input type="text" name="ts_description[]" placeholder="Short Description" style="padding:0.4rem;">'
+      + '<button type="button" class="btn-danger btn-sm" onclick="this.parentNode.remove()">&times;</button>';
+    box.appendChild(row);
+  }
+  </script>
 <?php else: ?>
   <?php
     $pubPagesList = $pdo->query('SELECT slug, title FROM pages WHERE is_published = 1 ORDER BY sort_order ASC, id ASC LIMIT 60')->fetchAll() ?: [];

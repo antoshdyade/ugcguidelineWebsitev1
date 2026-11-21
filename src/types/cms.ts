@@ -359,6 +359,68 @@ export interface HomeSectionsConfig {
   categoriesHeading?: string;
 }
 
+export interface HeaderConfig {
+  showTopUtilityBar: boolean;
+  utilityTagline: string;
+  showRegulatoryCodes: boolean;
+  showAdminButton: boolean;
+  showInstituteCodeBadge: boolean;
+  showSearchBar: boolean;
+  showStatutoryBar: boolean;
+  statutoryBarLabel: string;
+}
+
+export interface FooterConfig {
+  showContactBlock: boolean;
+  copyrightText: string;
+  complianceNote: string;
+  showBottomLinks: boolean;
+  bottomBarLinks: { label: string; url: string }[];
+  showCreatorCreditBar: boolean;
+  creatorCreditLabel: string;
+  creatorCreditName: string;
+  creatorCreditUrl: string;
+}
+
+export interface ContributorMember {
+  id: number;
+  name: string;
+  role: string;
+  category: string;
+  affiliation: string;
+  email?: string;
+  websiteUrl?: string;
+  githubUrl?: string;
+  linkedinUrl?: string;
+  photoUrl?: string;
+  bio: string;
+  contributions: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface CreditsPageTechItem {
+  name: string;
+  category: string;
+  description: string;
+}
+
+export interface CreditsPageConfig {
+  eyebrow: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  projectVersion: string;
+  releaseYear: string;
+  organizationCredit: string;
+  licenseNote: string;
+  acknowledgementsHtml: string;
+  isShareable: boolean;
+  showContributorsSection: boolean;
+  showTechStackSection: boolean;
+  contributors: ContributorMember[];
+  techStack: CreditsPageTechItem[];
+}
+
 export interface SiteSettings {
   schemaVersion?: number;
   trustName?: string;
@@ -395,6 +457,9 @@ export interface SiteSettings {
     title: string;
     links: { label: string; url: string }[];
   }[];
+  headerConfig?: HeaderConfig;
+  footerConfig?: FooterConfig;
+  creditsPage?: CreditsPageConfig;
   socialLinks: {
     facebook: string;
     linkedin: string;

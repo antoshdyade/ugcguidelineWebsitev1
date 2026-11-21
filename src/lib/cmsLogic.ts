@@ -411,7 +411,7 @@ export function searchCmsContent(
   db: Pick<
     CmsDatabase,
     'pages' | 'departments' | 'documents' | 'events' | 'conferences' | 'sports' | 'facilities' | 'researchPortfolio'
-  >,
+  > & { settings?: CmsDatabase['settings'] },
 ): SearchResultItem[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
@@ -647,6 +647,30 @@ export function searchCmsContent(
         meta: `${pat.referenceNumber} · ${pat.status}`,
       });
     }
+  }
+
+  const cp = db.settings?.creditsPage;
+  const creditsKeywords = ['developer', 'developers', 'creator', 'creators', 'contributor', 'contributors', 'credits', 'team', 'author'];
+  const matchesCredits =
+    creditsKeywords.some((kw) => kw.includes(q) || q.includes(kw)) ||
+    (cp?.pageTitle || '').toLowerCase().includes(q) ||
+    (cp?.contributors || []).some(
+      (c) =>
+        c.isActive &&
+        (c.name.toLowerCase().includes(q) ||
+          c.role.toLowerCase().includes(q) ||
+          c.category.toLowerCase().includes(q) ||
+          c.contributions.toLowerCase().includes(q)),
+    );
+  if (matchesCredits) {
+    results.push({
+      id: 'page-credits',
+      type: 'page',
+      title: cp?.pageTitle || 'Platform Creators, Developers & Contributors',
+      subtitle: cp?.organizationCredit || 'Portal Architecture & Attribution',
+      url: '/credits',
+      meta: `Attribution · ${cp?.projectVersion || 'Credits'}`,
+    });
   }
 
   return results.slice(0, 24);

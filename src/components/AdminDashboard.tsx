@@ -48,6 +48,10 @@ import {
 import {
   buildRevisionDiffRows,
   buildSocialShareUrls,
+  CONTRIBUTOR_ROLE_PRESETS,
+  DEFAULT_CREDITS_PAGE_CONFIG,
+  DEFAULT_FOOTER_CONFIG,
+  DEFAULT_HEADER_CONFIG,
   DEFAULT_PORTAL_MENU_ITEMS,
   DEFAULT_SOCIAL_MEDIA_LINKS,
   DEFAULT_SOCIAL_SHARING_CONFIG,
@@ -55,6 +59,9 @@ import {
   DESIGN_PRESETS,
   DOCUMENT_CATEGORY_PRESETS,
   EVENT_CATEGORY_PRESETS,
+  normalizeCreditsPageConfig,
+  normalizeFooterConfig,
+  normalizeHeaderConfig,
   normalizeSocialSharingConfig,
   partitionHeaderMenus,
   SOCIAL_PLATFORM_PRESETS,
@@ -92,6 +99,7 @@ import type {
   Conference,
   ConferenceRegistration,
   ConferenceSubmission,
+  ContributorMember,
   CustomHomeComponent,
   Department,
   DepartmentSubPage,
@@ -375,7 +383,7 @@ export function AdminDashboard({
   const [pageShowShareBar, setPageShowShareBar] = useState(true);
   const [pageMetaDescription, setPageMetaDescription] = useState('');
   const [homepageMode, setHomepageMode] = useState<'sliders' | 'sections' | 'components'>('sliders');
-  const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'metrics' | 'design' | 'social'>('identity');
+  const [settingsSection, setSettingsSection] = useState<'identity' | 'sections' | 'header_footer' | 'credits' | 'metrics' | 'design' | 'social'>('identity');
 
   // Social Media Icon Addition & Direct Broadcast Composer state
   const [newSocialPlatform, setNewSocialPlatform] = useState<string>('instagram');
@@ -6203,6 +6211,8 @@ export function AdminDashboard({
                     [
                       ['identity', 'Identity & Branding'],
                       ['sections', 'Homepage Sections'],
+                      ['header_footer', 'Header & Footer'],
+                      ['credits', 'Creators & Dev Page'],
                       ['design', 'Design & Theme'],
                       ['metrics', 'Recognitions & Recruiters'],
                       ['social', 'Social Media & Sharing'],
@@ -7123,6 +7133,927 @@ export function AdminDashboard({
                         >
                           {broadcastCopied ? 'Copied Post Text!' : 'Copy Post for Instagram / YouTube'}
                         </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {settingsSection === 'header_footer' && (() => {
+                const headerCfg = normalizeHeaderConfig(settingsDraft.headerConfig);
+                const footerCfg = normalizeFooterConfig(settingsDraft.footerConfig);
+                const topLinks = settingsDraft.topBarLinks || [];
+                const footerCols = settingsDraft.footerColumns || [];
+
+                const setHeaderCfg = (patch: Partial<typeof headerCfg>) =>
+                  setSettingsDraft({ ...settingsDraft, headerConfig: { ...headerCfg, ...patch } });
+                const setFooterCfg = (patch: Partial<typeof footerCfg>) =>
+                  setSettingsDraft({ ...settingsDraft, footerConfig: { ...footerCfg, ...patch } });
+
+                return (
+                  <div className="space-y-5 text-xs">
+                    {/* Header Utility & Statutory Ribbon Controls */}
+                    <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                            Header Layout, Utility Bar &amp; Statutory Quick-Access Strip
+                          </h3>
+                          <p className="text-stone-500 dark:text-slate-400">
+                            Toggle visibility of header zones and manage top utility / statutory strip links across all public pages.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHeaderCfg(DEFAULT_HEADER_CONFIG)}
+                          className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-600 text-[11px] font-semibold hover:bg-white dark:hover:bg-slate-800"
+                        >
+                          Reset Header Defaults
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                        {(
+                          [
+                            ['showTopUtilityBar', 'Show Top Accessibility Utility Ribbon'],
+                            ['showRegulatoryCodes', 'Show DTE & AICTE Codes in Top Ribbon'],
+                            ['showAdminButton', 'Show CMS Admin Shortcut Button'],
+                            ['showInstituteCodeBadge', 'Show Institute Code Crest Emblem'],
+                            ['showSearchBar', 'Show Global Live Search Input'],
+                            ['showStatutoryBar', 'Show Secondary Statutory Strip'],
+                          ] as const
+                        ).map(([key, label]) => (
+                          <label
+                            key={key}
+                            className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={headerCfg[key]}
+                              onChange={(e) => setHeaderCfg({ [key]: e.target.checked })}
+                              className="w-4 h-4 accent-amber-700"
+                            />
+                            <span className="font-medium text-stone-800 dark:text-slate-200">{label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-semibold mb-1">Top Ribbon Tagline</label>
+                          <input
+                            type="text"
+                            value={headerCfg.utilityTagline}
+                            onChange={(e) => setHeaderCfg({ utilityTagline: e.target.value })}
+                            placeholder="Autonomous Engineering Campus"
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Statutory Strip Prefix Label</label>
+                          <input
+                            type="text"
+                            value={headerCfg.statutoryBarLabel}
+                            onChange={(e) => setHeaderCfg({ statutoryBarLabel: e.target.value })}
+                            placeholder="Statutory & Quick Access:"
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Top Bar Links CRUD */}
+                      <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-stone-800 dark:text-slate-100">
+                            Statutory Quick-Access Bar Links ({topLinks.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                topBarLinks: [...topLinks, { label: 'New Link', url: '/page/about-overview' }],
+                              })
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 dark:bg-slate-700 text-white font-semibold"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Add Top Link
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {topLinks.map((lk, idx) => (
+                            <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white dark:bg-slate-900 p-2 rounded-lg border border-stone-200 dark:border-slate-700">
+                              <input
+                                type="text"
+                                value={lk.label}
+                                onChange={(e) => {
+                                  const next = [...topLinks];
+                                  next[idx] = { ...lk, label: e.target.value };
+                                  setSettingsDraft({ ...settingsDraft, topBarLinks: next });
+                                }}
+                                placeholder="Link Label"
+                                className="sm:col-span-5 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="text"
+                                value={lk.url}
+                                onChange={(e) => {
+                                  const next = [...topLinks];
+                                  next[idx] = { ...lk, url: e.target.value };
+                                  setSettingsDraft({ ...settingsDraft, topBarLinks: next });
+                                }}
+                                placeholder="/page/slug or https://..."
+                                className="sm:col-span-5 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 font-mono text-[11px]"
+                              />
+                              <div className="sm:col-span-2 flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => {
+                                    const next = [...topLinks];
+                                    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                    setSettingsDraft({ ...settingsDraft, topBarLinks: next });
+                                  }}
+                                  className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                  title="Move Up"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === topLinks.length - 1}
+                                  onClick={() => {
+                                    const next = [...topLinks];
+                                    [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                                    setSettingsDraft({ ...settingsDraft, topBarLinks: next });
+                                  }}
+                                  className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                  title="Move Down"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSettingsDraft({
+                                      ...settingsDraft,
+                                      topBarLinks: topLinks.filter((_, i) => i !== idx),
+                                    });
+                                  }}
+                                  className="p-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                  title="Remove Link"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Attribution, Copyright, Columns & Bottom Bar */}
+                    <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                            Footer Columns, Legal Strip &amp; Creator / Contributor Credit Bar
+                          </h3>
+                          <p className="text-stone-500 dark:text-slate-400">
+                            Configure institutional footer columns, bottom utility links, copyright notice, and creator attribution link.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFooterCfg(DEFAULT_FOOTER_CONFIG)}
+                          className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-600 text-[11px] font-semibold hover:bg-white dark:hover:bg-slate-800"
+                        >
+                          Reset Footer Defaults
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={footerCfg.showContactBlock}
+                            onChange={(e) => setFooterCfg({ showContactBlock: e.target.checked })}
+                            className="w-4 h-4 accent-amber-700"
+                          />
+                          <span className="font-medium">Show Left Contact Column</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={footerCfg.showBottomLinks}
+                            onChange={(e) => setFooterCfg({ showBottomLinks: e.target.checked })}
+                            className="w-4 h-4 accent-amber-700"
+                          />
+                          <span className="font-medium">Show Bottom Bar Links</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={footerCfg.showCreatorCreditBar}
+                            onChange={(e) => setFooterCfg({ showCreatorCreditBar: e.target.checked })}
+                            className="w-4 h-4 accent-amber-700"
+                          />
+                          <span className="font-medium">Show Creator / Developer Credit Strip</span>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-semibold mb-1">Custom Copyright Line (leave blank for auto-year + Institution Name)</label>
+                          <input
+                            type="text"
+                            value={footerCfg.copyrightText}
+                            onChange={(e) => setFooterCfg({ copyrightText: e.target.value })}
+                            placeholder={`© ${new Date().getFullYear()} ${settingsDraft.institutionName}.`}
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Compliance / Disclosure Note</label>
+                          <input
+                            type="text"
+                            value={footerCfg.complianceNote}
+                            onChange={(e) => setFooterCfg({ complianceNote: e.target.value })}
+                            placeholder="Compliant with UGC Guidelines on Public Self-Disclosure (NEP 2020)."
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-slate-900/60">
+                        <div>
+                          <label className="block font-semibold mb-1">Creator Prefix Label</label>
+                          <input
+                            type="text"
+                            value={footerCfg.creatorCreditLabel}
+                            onChange={(e) => setFooterCfg({ creatorCreditLabel: e.target.value })}
+                            placeholder="Designed & Developed by"
+                            className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Creator / Organization Name</label>
+                          <input
+                            type="text"
+                            value={footerCfg.creatorCreditName}
+                            onChange={(e) => setFooterCfg({ creatorCreditName: e.target.value })}
+                            placeholder="Campus Web & Software Engineering Team"
+                            className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Creator Link URL (e.g. /credits)</label>
+                          <input
+                            type="text"
+                            value={footerCfg.creatorCreditUrl}
+                            onChange={(e) => setFooterCfg({ creatorCreditUrl: e.target.value })}
+                            placeholder="/credits"
+                            className="w-full px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-[11px]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Footer Columns CRUD */}
+                      <div className="space-y-3 pt-2 border-t border-stone-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-stone-800 dark:text-slate-100">
+                            Footer Navigation Columns ({footerCols.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                footerColumns: [
+                                  ...footerCols,
+                                  { title: 'New Section', links: [{ label: 'Developers & Contributors', url: '/credits' }] },
+                                ],
+                              })
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 dark:bg-slate-700 text-white font-semibold"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Add Footer Column
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {footerCols.map((col, colIdx) => (
+                            <div key={colIdx} className="p-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-2.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={col.title}
+                                  onChange={(e) => {
+                                    const next = [...footerCols];
+                                    next[colIdx] = { ...col, title: e.target.value };
+                                    setSettingsDraft({ ...settingsDraft, footerColumns: next });
+                                  }}
+                                  placeholder="Column Heading"
+                                  className="flex-1 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 font-semibold"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={colIdx === 0}
+                                  onClick={() => {
+                                    const next = [...footerCols];
+                                    [next[colIdx - 1], next[colIdx]] = [next[colIdx], next[colIdx - 1]];
+                                    setSettingsDraft({ ...settingsDraft, footerColumns: next });
+                                  }}
+                                  className="p-1.5 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                  title="Move Column Up"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={colIdx === footerCols.length - 1}
+                                  onClick={() => {
+                                    const next = [...footerCols];
+                                    [next[colIdx + 1], next[colIdx]] = [next[colIdx], next[colIdx + 1]];
+                                    setSettingsDraft({ ...settingsDraft, footerColumns: next });
+                                  }}
+                                  className="p-1.5 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                  title="Move Column Down"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = [...footerCols];
+                                    next[colIdx] = { ...col, links: [...col.links, { label: 'New Link', url: '/' }] };
+                                    setSettingsDraft({ ...settingsDraft, footerColumns: next });
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded border border-stone-300 dark:border-slate-700 font-semibold"
+                                >
+                                  <Plus className="w-3 h-3" /> Link
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSettingsDraft({
+                                      ...settingsDraft,
+                                      footerColumns: footerCols.filter((_, i) => i !== colIdx),
+                                    });
+                                  }}
+                                  className="p-1.5 rounded border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                  title="Delete Column"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="space-y-1.5 pl-2 border-l-2 border-stone-200 dark:border-slate-700">
+                                {col.links.map((lk, lkIdx) => (
+                                  <div key={lkIdx} className="grid grid-cols-1 sm:grid-cols-11 gap-2 items-center">
+                                    <input
+                                      type="text"
+                                      value={lk.label}
+                                      onChange={(e) => {
+                                        const next = [...footerCols];
+                                        const nextLinks = [...col.links];
+                                        nextLinks[lkIdx] = { ...lk, label: e.target.value };
+                                        next[colIdx] = { ...col, links: nextLinks };
+                                        setSettingsDraft({ ...settingsDraft, footerColumns: next });
+                                      }}
+                                      placeholder="Link Label"
+                                      className="sm:col-span-5 px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={lk.url}
+                                      onChange={(e) => {
+                                        const next = [...footerCols];
+                                        const nextLinks = [...col.links];
+                                        nextLinks[lkIdx] = { ...lk, url: e.target.value };
+                                        next[colIdx] = { ...col, links: nextLinks };
+                                        setSettingsDraft({ ...settingsDraft, footerColumns: next });
+                                      }}
+                                      placeholder="/page/slug"
+                                      className="sm:col-span-5 px-2.5 py-1 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 font-mono text-[11px]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const next = [...footerCols];
+                                        next[colIdx] = { ...col, links: col.links.filter((_, i) => i !== lkIdx) };
+                                        setSettingsDraft({ ...settingsDraft, footerColumns: next });
+                                      }}
+                                      className="sm:col-span-1 p-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 justify-self-end"
+                                      title="Remove Link"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Bottom Bar Links CRUD */}
+                      <div className="space-y-2 pt-2 border-t border-stone-200 dark:border-slate-700">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-stone-800 dark:text-slate-100">
+                            Footer Bottom Strip Links ({footerCfg.bottomBarLinks.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFooterCfg({
+                                bottomBarLinks: [...footerCfg.bottomBarLinks, { label: 'New Bottom Link', url: '/credits' }],
+                              })
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 dark:bg-slate-700 text-white font-semibold"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Add Bottom Link
+                          </button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {footerCfg.bottomBarLinks.map((lk, idx) => (
+                            <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white dark:bg-slate-900 p-2 rounded-lg border border-stone-200 dark:border-slate-700">
+                              <input
+                                type="text"
+                                value={lk.label}
+                                onChange={(e) => {
+                                  const next = [...footerCfg.bottomBarLinks];
+                                  next[idx] = { ...lk, label: e.target.value };
+                                  setFooterCfg({ bottomBarLinks: next });
+                                }}
+                                placeholder="Label"
+                                className="sm:col-span-5 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="text"
+                                value={lk.url}
+                                onChange={(e) => {
+                                  const next = [...footerCfg.bottomBarLinks];
+                                  next[idx] = { ...lk, url: e.target.value };
+                                  setFooterCfg({ bottomBarLinks: next });
+                                }}
+                                placeholder="/credits"
+                                className="sm:col-span-5 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800 font-mono text-[11px]"
+                              />
+                              <div className="sm:col-span-2 flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => {
+                                    const next = [...footerCfg.bottomBarLinks];
+                                    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                    setFooterCfg({ bottomBarLinks: next });
+                                  }}
+                                  className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === footerCfg.bottomBarLinks.length - 1}
+                                  onClick={() => {
+                                    const next = [...footerCfg.bottomBarLinks];
+                                    [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                                    setFooterCfg({ bottomBarLinks: next });
+                                  }}
+                                  className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setFooterCfg({
+                                      bottomBarLinks: footerCfg.bottomBarLinks.filter((_, i) => i !== idx),
+                                    })
+                                  }
+                                  className="p-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {settingsSection === 'credits' && (() => {
+                const cp = normalizeCreditsPageConfig(settingsDraft.creditsPage);
+                const setCp = (patch: Partial<typeof cp>) =>
+                  setSettingsDraft({ ...settingsDraft, creditsPage: { ...cp, ...patch } });
+
+                const updateContributor = (idx: number, patch: Partial<ContributorMember>) => {
+                  const next = [...cp.contributors];
+                  next[idx] = { ...next[idx], ...patch };
+                  setCp({ contributors: next });
+                };
+
+                return (
+                  <div className="space-y-5 text-xs">
+                    <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-bold text-stone-900 dark:text-white">
+                            Developer / Creator &amp; Contributors Page (/credits)
+                          </h3>
+                          <p className="text-stone-500 dark:text-slate-400">
+                            Customize page metadata, creators, core contributors, UI/UX designers, tech stack, and acknowledgements.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href="/credits"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 rounded border border-amber-500/60 text-amber-800 dark:text-amber-300 font-semibold hover:bg-amber-50 dark:hover:bg-slate-800"
+                          >
+                            Preview /credits &rarr;
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setCp(DEFAULT_CREDITS_PAGE_CONFIG)}
+                            className="px-2.5 py-1 rounded border border-stone-300 dark:border-slate-600 text-[11px] font-semibold hover:bg-white dark:hover:bg-slate-800"
+                          >
+                            Reset Defaults
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-semibold mb-1">Eyebrow Label</label>
+                          <input
+                            type="text"
+                            value={cp.eyebrow}
+                            onChange={(e) => setCp({ eyebrow: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Page Title</label>
+                          <input
+                            type="text"
+                            value={cp.pageTitle}
+                            onChange={(e) => setCp({ pageTitle: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block font-semibold mb-1">Page Subtitle</label>
+                          <textarea
+                            rows={2}
+                            value={cp.pageSubtitle}
+                            onChange={(e) => setCp({ pageSubtitle: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-semibold mb-1">Maintainer / Organization Credit</label>
+                          <input
+                            type="text"
+                            value={cp.organizationCredit}
+                            onChange={(e) => setCp({ organizationCredit: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block font-semibold mb-1">Project Version</label>
+                            <input
+                              type="text"
+                              value={cp.projectVersion}
+                              onChange={(e) => setCp({ projectVersion: e.target.value })}
+                              className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-semibold mb-1">Release Year</label>
+                            <input
+                              type="text"
+                              value={cp.releaseYear}
+                              onChange={(e) => setCp({ releaseYear: e.target.value })}
+                              className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                            />
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block font-semibold mb-1">Compliance &amp; License Note</label>
+                          <input
+                            type="text"
+                            value={cp.licenseNote}
+                            onChange={(e) => setCp({ licenseNote: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={cp.isShareable}
+                            onChange={(e) => setCp({ isShareable: e.target.checked })}
+                            className="w-4 h-4 accent-amber-700"
+                          />
+                          <span className="font-medium">Allow Social Media Share Icons</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={cp.showContributorsSection}
+                            onChange={(e) => setCp({ showContributorsSection: e.target.checked })}
+                            className="w-4 h-4 accent-amber-700"
+                          />
+                          <span className="font-medium">Show Contributors Directory</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={cp.showTechStackSection}
+                            onChange={(e) => setCp({ showTechStackSection: e.target.checked })}
+                            className="w-4 h-4 accent-amber-700"
+                          />
+                          <span className="font-medium">Show Architecture Tech Stack</span>
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold mb-1">Acknowledgements &amp; Governance HTML</label>
+                        <textarea
+                          rows={3}
+                          value={cp.acknowledgementsHtml}
+                          onChange={(e) => setCp({ acknowledgementsHtml: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-[11px]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Contributors Directory Manager */}
+                    <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-bold text-stone-900 dark:text-white">
+                            Creators, Developers &amp; Contributors ({cp.contributors.length})
+                          </h4>
+                          <p className="text-stone-500 dark:text-slate-400">
+                            Add people or teams, upload optional portraits, set role presets, and reorder display cards.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextId = Math.max(0, ...cp.contributors.map((c) => Number(c.id || 0))) + 1;
+                            setCp({
+                              contributors: [
+                                ...cp.contributors,
+                                {
+                                  id: nextId,
+                                  name: 'New Developer / Contributor',
+                                  role: 'Software Engineer',
+                                  category: 'Core Contributor',
+                                  affiliation: settingsDraft.institutionName || 'Engineering Cell',
+                                  email: '',
+                                  websiteUrl: '',
+                                  githubUrl: '',
+                                  linkedinUrl: '',
+                                  photoUrl: '',
+                                  bio: '',
+                                  contributions: 'Platform Features & Content Maintenance',
+                                  isActive: true,
+                                  sortOrder: cp.contributors.length + 1,
+                                },
+                              ],
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-700 text-white font-semibold"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Creator / Contributor
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {cp.contributors.map((member, idx) => (
+                          <div key={member.id || idx} className="p-3.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 dark:border-slate-800 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-stone-900 dark:text-white">#{idx + 1} · {member.name || 'Contributor'}</span>
+                                <label className="inline-flex items-center gap-1 text-[11px] font-medium text-stone-600 dark:text-slate-300 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={member.isActive !== false}
+                                    onChange={(e) => updateContributor(idx, { isActive: e.target.checked })}
+                                    className="accent-emerald-600"
+                                  />
+                                  <span>Visible on Public Page</span>
+                                </label>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => {
+                                    const next = [...cp.contributors];
+                                    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                    setCp({ contributors: next.map((c, i) => ({ ...c, sortOrder: i + 1 })) });
+                                  }}
+                                  className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === cp.contributors.length - 1}
+                                  onClick={() => {
+                                    const next = [...cp.contributors];
+                                    [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                                    setCp({ contributors: next.map((c, i) => ({ ...c, sortOrder: i + 1 })) });
+                                  }}
+                                  className="p-1 rounded border border-stone-200 dark:border-slate-700 disabled:opacity-40"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCp({ contributors: cp.contributors.filter((_, i) => i !== idx) })
+                                  }
+                                  className="p-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              <input
+                                type="text"
+                                value={member.name}
+                                onChange={(e) => updateContributor(idx, { name: e.target.value })}
+                                placeholder="Full Name or Team Name *"
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <select
+                                value={member.category}
+                                onChange={(e) => updateContributor(idx, { category: e.target.value })}
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              >
+                                {CONTRIBUTOR_ROLE_PRESETS.map((preset) => (
+                                  <option key={preset} value={preset}>{preset}</option>
+                                ))}
+                                {!CONTRIBUTOR_ROLE_PRESETS.includes(member.category as typeof CONTRIBUTOR_ROLE_PRESETS[number]) && (
+                                  <option value={member.category}>{member.category}</option>
+                                )}
+                              </select>
+                              <input
+                                type="text"
+                                value={member.role}
+                                onChange={(e) => updateContributor(idx, { role: e.target.value })}
+                                placeholder="Designation / Specific Title"
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="text"
+                                value={member.affiliation}
+                                onChange={(e) => updateContributor(idx, { affiliation: e.target.value })}
+                                placeholder="Department / Organization"
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="text"
+                                value={member.contributions}
+                                onChange={(e) => updateContributor(idx, { contributions: e.target.value })}
+                                placeholder="Key Contribution Areas"
+                                className="sm:col-span-2 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <textarea
+                                rows={2}
+                                value={member.bio}
+                                onChange={(e) => updateContributor(idx, { bio: e.target.value })}
+                                placeholder="Short bio & impact summary..."
+                                className="sm:col-span-3 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="email"
+                                value={member.email || ''}
+                                onChange={(e) => updateContributor(idx, { email: e.target.value })}
+                                placeholder="Email (optional)"
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="url"
+                                value={member.githubUrl || ''}
+                                onChange={(e) => updateContributor(idx, { githubUrl: e.target.value })}
+                                placeholder="GitHub URL (optional)"
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="url"
+                                value={member.linkedinUrl || ''}
+                                onChange={(e) => updateContributor(idx, { linkedinUrl: e.target.value })}
+                                placeholder="LinkedIn URL (optional)"
+                                className="px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <input
+                                type="url"
+                                value={member.websiteUrl || ''}
+                                onChange={(e) => updateContributor(idx, { websiteUrl: e.target.value })}
+                                placeholder="Personal Website URL (optional)"
+                                className="sm:col-span-3 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                              />
+                              <div className="sm:col-span-3">
+                                <ImageUploader
+                                  label="Contributor Photo (Optional — defaults to initials monogram)"
+                                  value={member.photoUrl || ''}
+                                  onChange={(url) => updateContributor(idx, { photoUrl: url })}
+                                  uploadBinary={uploadBinaryFile}
+                                  aspectRatio="1:1"
+                                  maxPhotoMb={maxPhotoMb}
+                                  autoCropEnabled={autoCropEnabled}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Technical Stack Cards Manager */}
+                    <div className="p-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-stone-900 dark:text-white">
+                          Architecture &amp; Stack Cards ({cp.techStack.length})
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCp({
+                              techStack: [
+                                ...cp.techStack,
+                                { name: 'Module Name', category: 'Platform Layer', description: 'Describe role in stack...' },
+                              ],
+                            })
+                          }
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 dark:bg-slate-700 text-white font-semibold"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Stack Card
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {cp.techStack.map((item, idx) => (
+                          <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-stone-200 dark:border-slate-700">
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={(e) => {
+                                const next = [...cp.techStack];
+                                next[idx] = { ...item, name: e.target.value };
+                                setCp({ techStack: next });
+                              }}
+                              placeholder="Technology / Module"
+                              className="sm:col-span-4 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                            />
+                            <input
+                              type="text"
+                              value={item.category}
+                              onChange={(e) => {
+                                const next = [...cp.techStack];
+                                next[idx] = { ...item, category: e.target.value };
+                                setCp({ techStack: next });
+                              }}
+                              placeholder="Category"
+                              className="sm:col-span-3 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                            />
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => {
+                                const next = [...cp.techStack];
+                                next[idx] = { ...item, description: e.target.value };
+                                setCp({ techStack: next });
+                              }}
+                              placeholder="Description"
+                              className="sm:col-span-4 px-2.5 py-1.5 rounded border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-800"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCp({ techStack: cp.techStack.filter((_, i) => i !== idx) })
+                              }
+                              className="sm:col-span-1 p-1.5 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 justify-self-end"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>

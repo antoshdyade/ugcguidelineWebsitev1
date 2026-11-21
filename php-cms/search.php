@@ -71,6 +71,40 @@ if (mb_strlen($q) >= 2) {
         foreach ($riStmt->fetchAll() as $r) {
             $results[] = ['type' => 'Research · ' . $r['item_type'], 'title' => $r['title'], 'url' => 'page.php?slug=research-development-cell'];
         }
+
+        if (function_exists('getCreditsPageConfig')) {
+            $cpCfg = getCreditsPageConfig($pdo);
+            $ql = strtolower($q);
+            $creditsHit = str_contains($ql, 'credit')
+                || str_contains($ql, 'developer')
+                || str_contains($ql, 'creator')
+                || str_contains($ql, 'contributor')
+                || str_contains(strtolower((string)($cpCfg['pageTitle'] ?? '')), $ql)
+                || str_contains(strtolower((string)($cpCfg['pageSubtitle'] ?? '')), $ql);
+            $matchedContributor = '';
+            foreach (($cpCfg['contributors'] ?? []) as $contrib) {
+                if (empty($contrib['isActive'])) continue;
+                $cHay = strtolower(
+                    (string)($contrib['name'] ?? '') . ' '
+                    . (string)($contrib['role'] ?? '') . ' '
+                    . (string)($contrib['category'] ?? '') . ' '
+                    . (string)($contrib['affiliation'] ?? '') . ' '
+                    . (string)($contrib['contributions'] ?? '')
+                );
+                if (str_contains($cHay, $ql)) {
+                    $creditsHit = true;
+                    $matchedContributor = (string)$contrib['name'];
+                    break;
+                }
+            }
+            if ($creditsHit) {
+                $results[] = [
+                    'type'  => $matchedContributor !== '' ? ('Contributor · ' . $matchedContributor) : 'Portal Attribution',
+                    'title' => (string)($cpCfg['pageTitle'] ?: 'Platform Creators, Developers & Contributors'),
+                    'url'   => 'credits.php',
+                ];
+            }
+        }
     } catch (Throwable $ignoredSearch) {
     }
 }

@@ -2,9 +2,12 @@ import crypto from 'node:crypto';
 import type { CmsDatabase } from '../types/cms';
 import {
   CURRENT_SCHEMA_VERSION,
+  DEFAULT_CREDITS_PAGE_CONFIG,
   DEFAULT_EMAIL_PUSH_CONFIG,
   DEFAULT_FEEDBACK_SECTIONS,
+  DEFAULT_FOOTER_CONFIG,
   DEFAULT_GRIEVANCE_PORTAL_CONFIG,
+  DEFAULT_HEADER_CONFIG,
   DEFAULT_INTAKE_PROGRAMS,
   DEFAULT_PORTAL_MENU_ITEMS,
   DEFAULT_SOCIAL_MEDIA_LINKS,
@@ -2360,6 +2363,9 @@ export function createSeedDatabase(): CmsDatabase {
       },
       socialMediaLinks: structuredClone(DEFAULT_SOCIAL_MEDIA_LINKS),
       socialSharing: structuredClone(DEFAULT_SOCIAL_SHARING_CONFIG),
+      headerConfig: structuredClone(DEFAULT_HEADER_CONFIG),
+      footerConfig: structuredClone(DEFAULT_FOOTER_CONFIG),
+      creditsPage: structuredClone(DEFAULT_CREDITS_PAGE_CONFIG),
       mapEmbedQuery: 'Pandharpur,Maharashtra,India',
       maxPhotoUploadMb: 2,
       maxDocumentUploadMb: 10,

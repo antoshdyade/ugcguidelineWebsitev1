@@ -6,6 +6,8 @@ recordPhpWebsiteVisit($pdo);
 $settings = getSiteSettings($pdo);
 $seoSettings = getSeoSettings($pdo);
 $hitStats = getHitCounterStats($pdo);
+$headerCfg = getHeaderConfig($pdo);
+$topBarLinks = getTopBarLinks($pdo);
 $allHeaderCats = $pdo->query('SELECT * FROM categories ORDER BY sort_order ASC, id ASC')->fetchAll();
 $portalMenuItems = getPortalMenuItems($pdo);
 $partitionedNav = partitionHeaderMenus($allHeaderCats, $portalMenuItems);
@@ -119,13 +121,21 @@ $resolvedSeo = resolvePhpRouteSeo(
 <a href="#main-content" class="btn-primary sr-only-focus">Skip to main content</a>
 
 <header class="site-header<?= ($settings['header_style'] ?? 'classic') === 'compact' ? ' is-compact' : '' ?>">
+  <?php if (!empty($headerCfg['showTopUtilityBar'])): ?>
   <!-- Top Accessibility, Audio Listener, Theme & CMS Admin Ribbon -->
   <div class="a11y-ribbon">
     <div class="container a11y-ribbon-inner">
       <div class="a11y-meta">
-        <span>DTE: <?= e($settings['dte_code']) ?> · AICTE: <?= e($settings['aicte_code']) ?></span>
-        <span>|</span>
-        <span><?= e($settings['short_code'] ?: 'SVERI') ?> · Autonomous Engineering Campus</span>
+        <?php $hasRegCodes = !empty($headerCfg['showRegulatoryCodes']); $hasTagline = trim((string)($headerCfg['utilityTagline'] ?? '')) !== ''; ?>
+        <?php if ($hasRegCodes): ?>
+          <span>DTE: <?= e($settings['dte_code']) ?> · AICTE: <?= e($settings['aicte_code']) ?></span>
+        <?php endif; ?>
+        <?php if ($hasRegCodes && $hasTagline): ?>
+          <span>|</span>
+        <?php endif; ?>
+        <?php if ($hasTagline): ?>
+          <span><?= e($settings['short_code'] ?: 'SVERI') ?> · <?= e((string)$headerCfg['utilityTagline']) ?></span>
+        <?php endif; ?>
       </div>
 
       <div class="a11y-controls">
@@ -158,10 +168,13 @@ $resolvedSeo = resolvePhpRouteSeo(
         </select>
 
         <?= renderPhpSocialIcons($pdo, 'header') ?>
-        <a href="<?= e(baseUrl('admin/login.php')) ?>" class="a11y-admin-pill">CMS Admin</a>
+        <?php if (!empty($headerCfg['showAdminButton'])): ?>
+          <a href="<?= e(baseUrl('admin/login.php')) ?>" class="a11y-admin-pill">CMS Admin</a>
+        <?php endif; ?>
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- Institutional Brand Header & Search -->
   <div class="container header-brand-row">
@@ -178,16 +191,22 @@ $resolvedSeo = resolvePhpRouteSeo(
       </div>
     </a>
 
+    <?php if (!empty($headerCfg['showInstituteCodeBadge']) || !empty($headerCfg['showSearchBar'])): ?>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <?php if (!empty($headerCfg['showInstituteCodeBadge'])): ?>
       <div class="institute-pill">
         <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.08em;opacity:0.85;">Institute Code</div>
         <div style="font-weight:700;font-size:0.95rem;"><?= e($dteDisplay) ?></div>
       </div>
+      <?php endif; ?>
+      <?php if (!empty($headerCfg['showSearchBar'])): ?>
       <form action="<?= e(baseUrl('search.php')) ?>" method="get" class="global-search-form">
         <input id="global-search-input" class="global-search-input" type="search" name="q" placeholder="Search disclosures, faculty, documents..." aria-label="Global search">
         <div id="global-search-dropdown" class="global-search-dropdown"></div>
       </form>
+      <?php endif; ?>
     </div>
+    <?php endif; ?>
   </div>
 
   <!-- Primary Navigation Menu -->
@@ -263,26 +282,22 @@ $resolvedSeo = resolvePhpRouteSeo(
     </div>
   </nav>
 
+  <?php if (!empty($headerCfg['showStatutoryBar']) && !empty($topBarLinks)): ?>
   <!-- Statutory & Quick Access Strip -->
   <div class="statutory-bar">
     <div class="container statutory-bar-inner">
-      <span class="statutory-label">Statutory &amp; Quick Access:</span>
-      <a class="statutory-link" href="<?= e(baseUrl('quick-links.php')) ?>">Quick Links</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('conferences.php')) ?>">Conferences &amp; Workshops</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('page.php?cat=examination')) ?>">Examination Cell</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('alumni.php')) ?>">Alumni Network</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('placements.php')) ?>">Placements</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('grievance.php')) ?>">Grievance Helpdesk</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=prospectus-fee-structure')) ?>">FRA Fee Structure</a>
-      <span class="statutory-sep">|</span>
-      <a class="statutory-link" href="<?= e(baseUrl('page.php?slug=rti-disclosure')) ?>">RTI Disclosure</a>
+      <?php if (trim((string)($headerCfg['statutoryBarLabel'] ?? '')) !== ''): ?>
+        <span class="statutory-label"><?= e((string)$headerCfg['statutoryBarLabel']) ?></span>
+      <?php endif; ?>
+      <?php foreach ($topBarLinks as $tlIdx => $tl):
+        $tlHref = resolveConfigurableLinkUrl((string)($tl['url'] ?? ''));
+        $isExtTl = preg_match('#^https?://#i', $tlHref) === 1;
+      ?>
+        <?php if ($tlIdx > 0): ?><span class="statutory-sep">|</span><?php endif; ?>
+        <a class="statutory-link" href="<?= e($tlHref) ?>"<?= $isExtTl ? ' target="_blank" rel="noopener noreferrer"' : '' ?>><?= e((string)($tl['label'] ?? '')) ?></a>
+      <?php endforeach; ?>
     </div>
   </div>
+  <?php endif; ?>
 </header>
 <main id="main-content" class="container" style="padding-top:0.5rem;">

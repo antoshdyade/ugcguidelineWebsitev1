@@ -65,18 +65,30 @@ define('BASE_URL', '');
 
 ---
 
-## 5. Check PHP 8.x Modules & Limits
-- Ensure PHP 8.1/8.2/8.3 is active (**Virtualmin → Server Configuration → PHP Options**) with extensions `pdo_mysql`, `fileinfo`, `mbstring`.
-- Recommended `php.ini` limits: `upload_max_filesize = 16M`, `post_max_size = 20M`.
+## 5. Check Ubuntu PHP 8.x Packages, Apache Modules & Limits
+Run via Webmin **Tools → Terminal** or SSH on Ubuntu Linux:
+```bash
+sudo apt update
+sudo apt install -y php-mysql php-mbstring php-zip php-curl php-xml php-gd
+sudo a2enmod rewrite headers mime
+sudo systemctl restart apache2
+```
+- **VirtualHost `AllowOverride All`**: In Apache `/etc/apache2/sites-available/<your-domain>.conf`, confirm `<Directory /home/<domain-user>/public_html>` has `AllowOverride All` so `.htaccess` clean URLs (`/credits`, `/research/incubation-center`, `/conference/<slug>`, `/department/<slug>`) work without 404s.
+- **PHP Options**: Ensure PHP 8.1/8.2/8.3 is active (**Virtualmin → Server Configuration → PHP Options**) with `pdo_mysql`, `fileinfo`, `mbstring`, `zip`, `curl`, `openssl`, `json`.
+- **Recommended `php.ini` limits**: `upload_max_filesize = 16M`, `post_max_size = 20M`, `max_execution_time = 60`.
 
 ---
 
-## 6. Pre-Flight Test & Cleanup
-1. Visit `https://your-domain.com/setup.php` and click **Verify & Reset Default RBAC Passwords (5 Accounts)**.
+## 6. Pre-Flight Test, Feature Check & Cleanup
+1. Visit `https://your-domain.com/setup.php`, click **Auto-Upgrade Database Schema (Safe)**, then click **Verify & Reset Default RBAC Passwords (5 Accounts)**.
 2. Sign in at `https://your-domain.com/admin/login.php`:
    - Super Admin: `admin@svcoer.edu.in` / `Admin@123`
    - Controller of Examinations (CoE): `coe@coe.sveri.ac.in` / `Exam@123`
    - PRO Editor: `pro@svcoer.edu.in` / `Editor@123`
    - CSE Dept Admin: `hod.cse@svcoer.edu.in` / `Dept@123`
    - IQAC Officer: `iqac@svcoer.edu.in` / `Iqac@123`
-3. **Delete `setup.php`** once verified.
+3. Verify customizable modules inside Admin:
+   - **Site Settings → Header & Footer Manager** (top utility strip, statutory bar links, footer columns, copyright, creator credit strip)
+   - **Site Settings → Creators & Developers Page** (customize `https://your-domain.com/credits.php` or `/credits`)
+   - **Content Approval Queue** (`admin/manage_approvals.php`) for non-Super-Admin submissions
+4. **Delete `setup.php`** once verified.

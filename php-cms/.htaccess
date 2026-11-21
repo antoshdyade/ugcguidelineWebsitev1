@@ -62,5 +62,6 @@ DirectoryIndex index.php index.html
   RewriteRule ^conference/([^/]+)/?$ conference.php?slug=$1 [L,QSA]
 
   # Clean top-level standalone portal routes
-  RewriteRule ^(conferences|placements|grievance|alumni|gallery|contact|quick-links|sports|facilities|feedback|search)/?$ $1.php [L,QSA]
+  RewriteRule ^(credits|developer|developers)/?$ credits.php [L,QSA,NC]
+  RewriteRule ^(conferences|placements|grievance|alumni|gallery|contact|quick-links|sports|facilities|feedback|search|credits)/?$ $1.php [L,QSA]
 </IfModule>

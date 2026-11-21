@@ -1,6 +1,13 @@
 </main>
+<?php
+$footerCfg = getFooterConfig($pdo);
+$footerCols = getFooterColumns($pdo);
+$totalFooterBlocks = (!empty($footerCfg['showContactBlock']) ? 1 : 0) + count($footerCols);
+?>
 <footer class="site-footer">
-  <div class="container grid-4">
+  <?php if ($totalFooterBlocks > 0): ?>
+  <div class="container" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1.5rem;">
+    <?php if (!empty($footerCfg['showContactBlock'])): ?>
     <div>
       <h3 style="color:#fff;margin-top:0;"><?= e($settings['institution_name']) ?></h3>
       <p style="font-size:0.85rem;"><?= e($settings['address']) ?></p>
@@ -8,36 +15,33 @@
       <p style="font-size:0.85rem;">Anti-Ragging Helpline: <?= e($settings['anti_ragging_helpline']) ?></p>
       <?= renderPhpSocialIcons($pdo, 'footer') ?>
     </div>
+    <?php endif; ?>
+    <?php foreach ($footerCols as $fCol): ?>
     <div>
-      <h4 style="color:#fff;">Mandatory Self-Disclosure</h4>
-      <p><a href="<?= e(baseUrl('page.php?slug=about-overview')) ?>" style="color:#cbd5e1;">About HEI &amp; Statutes</a></p>
-      <p><a href="<?= e(baseUrl('page.php?slug=prospectus-fee-structure')) ?>" style="color:#cbd5e1;">FRA Fee Structure</a></p>
-      <p><a href="<?= e(baseUrl('page.php?slug=rti-disclosure')) ?>" style="color:#cbd5e1;">RTI Disclosure</a></p>
-      <p><a href="<?= e(baseUrl('page.php?slug=statutory-officers')) ?>" style="color:#cbd5e1;">Statutory Officers</a></p>
+      <h4 style="color:#fff;"><?= e((string)($fCol['title'] ?? 'Links')) ?></h4>
+      <?php foreach (($fCol['links'] ?? []) as $fLk):
+        $fHref = resolveConfigurableLinkUrl((string)($fLk['url'] ?? ''));
+        $isExtF = preg_match('#^https?://#i', $fHref) === 1;
+        $isStaffLink = str_contains($fHref, 'admin/');
+      ?>
+        <p><a href="<?= e($fHref) ?>" style="color:<?= $isStaffLink ? '#fde68a' : '#cbd5e1' ?>;"<?= $isExtF ? ' target="_blank" rel="noopener noreferrer"' : '' ?>><?= e((string)($fLk['label'] ?? '')) ?></a></p>
+      <?php endforeach; ?>
     </div>
-    <div>
-      <h4 style="color:#fff;">Academics &amp; Departments</h4>
-      <p><a href="<?= e(baseUrl('page.php?cat=examination')) ?>" style="color:#cbd5e1;">Examination Cell &amp; CoE</a></p>
-      <p><a href="<?= e(baseUrl('department.php?dept=computer-science')) ?>" style="color:#cbd5e1;">Computer Science &amp; Engg.</a></p>
-      <p><a href="<?= e(baseUrl('department.php?dept=mechanical')) ?>" style="color:#cbd5e1;">Mechanical Engineering</a></p>
-      <p><a href="<?= e(baseUrl('department.php?dept=civil')) ?>" style="color:#cbd5e1;">Civil &amp; E&amp;TC Engg.</a></p>
-    </div>
-    <div>
-      <h4 style="color:#fff;">Repositories &amp; Contact</h4>
-      <p><a href="<?= e(baseUrl('facilities.php')) ?>" style="color:#cbd5e1;">Campus Facilities</a></p>
-      <p><a href="<?= e(baseUrl('sports.php')) ?>" style="color:#cbd5e1;">Sports &amp; Gymkhana</a></p>
-      <p><a href="<?= e(baseUrl('quick-links.php')) ?>" style="color:#cbd5e1;">Downloadable Repository</a></p>
-      <p><a href="<?= e(baseUrl('conferences.php')) ?>" style="color:#cbd5e1;">Conferences &amp; Events</a></p>
-      <p><a href="<?= e(baseUrl('placements.php')) ?>" style="color:#cbd5e1;">Training &amp; Placements</a></p>
-      <p><a href="<?= e(baseUrl('feedback.php')) ?>" style="color:#cbd5e1;">Complaint &amp; Feedback Cell</a></p>
-      <p><a href="<?= e(baseUrl('alumni.php')) ?>" style="color:#cbd5e1;">Alumni Network &amp; Jobs</a></p>
-      <p><a href="<?= e(baseUrl('gallery.php')) ?>" style="color:#cbd5e1;">Picture Gallery</a></p>
-      <p><a href="<?= e(baseUrl('contact.php')) ?>" style="color:#cbd5e1;">Telephone Directory</a></p>
-      <p><a href="<?= e(baseUrl('admin/login.php')) ?>" style="color:#fde68a;">Staff CMS Login</a></p>
-    </div>
+    <?php endforeach; ?>
   </div>
+  <?php endif; ?>
+
   <div class="container" style="border-top:1px solid #1e293b;margin-top:1.5rem;padding-top:1rem;font-size:0.8rem;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.75rem;">
-    <span>&copy; <?= date('Y') ?> <?= e($settings['institution_name']) ?>. UGC NEP 2020 Public Self-Disclosure Compliant.</span>
+    <span>
+      <?php if (trim((string)($footerCfg['copyrightText'] ?? '')) !== ''): ?>
+        <?= e((string)$footerCfg['copyrightText']) ?>
+      <?php else: ?>
+        &copy; <?= date('Y') ?> <?= e($settings['institution_name']) ?>.
+      <?php endif; ?>
+      <?php if (trim((string)($footerCfg['complianceNote'] ?? '')) !== ''): ?>
+        <?= e((string)$footerCfg['complianceNote']) ?>
+      <?php endif; ?>
+    </span>
     <span style="display:flex;flex-wrap:wrap;align-items:center;gap:0.9rem;">
       <?php
         $__hitFooter = isset($hitStats) && is_array($hitStats) ? $hitStats : (function_exists('getHitCounterStats') ? getHitCounterStats($pdo) : null);
@@ -52,15 +56,37 @@
           <span style="font-size:0.74rem;color:#cbd5e1;">Unique: <strong><?= number_format((int)$__hitFooter['uniqueVisitors']) ?></strong></span>
         </span>
       <?php endif; ?>
+      <?php if (!empty($footerCfg['showBottomLinks']) && !empty($footerCfg['bottomBarLinks'])): ?>
       <span>
-        <a href="<?= e(baseUrl('sitemap.php')) ?>" style="color:#94a3b8;">Sitemap</a> ·
-        <a href="<?= e(baseUrl('robots.php')) ?>" style="color:#94a3b8;">Robots.txt</a> ·
-        <a href="<?= e(baseUrl('page.php?slug=rti-disclosure')) ?>" style="color:#cbd5e1;">RTI Cell</a> ·
-        <a href="<?= e(baseUrl('feedback.php')) ?>" style="color:#cbd5e1;">Feedback Cell</a> ·
-        <a href="<?= e(baseUrl('grievance.php')) ?>" style="color:#cbd5e1;">Grievance Redressal</a>
+        <?php foreach ($footerCfg['bottomBarLinks'] as $bIdx => $bLk):
+          $bHref = resolveConfigurableLinkUrl((string)($bLk['url'] ?? ''));
+          $isExtB = preg_match('#^https?://#i', $bHref) === 1;
+        ?>
+          <?php if ($bIdx > 0): ?> · <?php endif; ?>
+          <a href="<?= e($bHref) ?>" style="color:#cbd5e1;"<?= $isExtB ? ' target="_blank" rel="noopener noreferrer"' : '' ?>><?= e((string)($bLk['label'] ?? '')) ?></a>
+        <?php endforeach; ?>
       </span>
+      <?php endif; ?>
     </span>
   </div>
+
+  <?php if (!empty($footerCfg['showCreatorCreditBar'])): ?>
+  <div class="container" style="border-top:1px solid rgba(51,65,85,0.65);margin-top:0.85rem;padding-top:0.75rem;font-size:0.76rem;color:#94a3b8;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.5rem;">
+    <span>
+      <?= e((string)($footerCfg['creatorCreditLabel'] ?: 'Designed & Developed by')) ?>:
+      <?php
+        $cUrl = trim((string)($footerCfg['creatorCreditUrl'] ?? ''));
+        $cName = trim((string)($footerCfg['creatorCreditName'] ?? 'Campus Web & Software Engineering Team'));
+      ?>
+      <?php if ($cUrl !== ''): ?>
+        <a href="<?= e(resolveConfigurableLinkUrl($cUrl)) ?>" style="color:#f8fafc;font-weight:600;text-decoration:none;border-bottom:1px dotted rgba(253,230,138,0.6);"><?= e($cName) ?></a>
+      <?php else: ?>
+        <strong style="color:#f8fafc;"><?= e($cName) ?></strong>
+      <?php endif; ?>
+    </span>
+    <a href="<?= e(baseUrl('credits.php')) ?>" style="color:#fde68a;font-weight:600;text-decoration:none;">View Developers &amp; Contributors &rarr;</a>
+  </div>
+  <?php endif; ?>
 </footer>
 <script src="<?= e(assetUrl('assets/js/accessibility.js')) ?>"></script>
 <script>

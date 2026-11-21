@@ -931,7 +931,13 @@ function resolvePhpRouteSeo(array $seo, array $siteSettings, string $pageTitle, 
         if ($ovPath === '') {
             continue;
         }
-        if ($ovPath === $relPath || $ovPath === $script || ($ovPath === '/' && $script === 'index.php')) {
+        if (
+            $ovPath === $relPath
+            || $ovPath === $script
+            || ($ovPath . '.php') === $script
+            || ($ovPath === '/' && $script === 'index.php')
+            || (($ovPath === 'developer' || $ovPath === 'developers') && $script === 'credits.php')
+        ) {
             $matched = $ov;
             break;
         }
@@ -1061,6 +1067,7 @@ function buildPhpSitemapXml(PDO $pdo, string $baseUrl): string
         ['loc' => $base . '/grievance.php', 'priority' => '0.7', 'changefreq' => 'monthly'],
         ['loc' => $base . '/feedback.php', 'priority' => '0.8', 'changefreq' => 'weekly'],
         ['loc' => $base . '/contact.php', 'priority' => '0.7', 'changefreq' => 'monthly'],
+        ['loc' => $base . '/credits.php', 'priority' => '0.6', 'changefreq' => 'monthly'],
     ];
 
     try {

@@ -10,6 +10,11 @@ require_once __DIR__ . '/config/db.php';
 $phpOk = version_compare(PHP_VERSION, '7.4.0', '>=');
 $pdoOk = extension_loaded('pdo_mysql');
 $finfoOk = extension_loaded('fileinfo');
+$mbstringOk = extension_loaded('mbstring');
+$zipOk = extension_loaded('zip');
+$curlOk = extension_loaded('curl');
+$opensslOk = extension_loaded('openssl');
+$jsonOk = extension_loaded('json');
 $uploadsDir = __DIR__ . '/uploads';
 $uploadsWritable = is_dir($uploadsDir) ? is_writable($uploadsDir) : @mkdir($uploadsDir, 0755, true);
 $backupsDir = __DIR__ . '/backups';
@@ -188,14 +193,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         <tr><td>PHP Version (&ge; 7.4; 8.x recommended)</td><td><?= $phpOk ? 'PASS' : 'FAIL' ?></td><td>Running PHP <?= e(PHP_VERSION) ?></td></tr>
         <tr><td>MySQL PDO (pdo_mysql)</td><td><?= $pdoOk ? 'PASS' : 'FAIL' ?></td><td><?= $pdoOk ? 'Loaded' : 'Install php8.x-mysql and restart Apache/PHP-FPM' ?></td></tr>
         <tr><td>Fileinfo MIME Check</td><td><?= $finfoOk ? 'PASS' : 'FAIL' ?></td><td><?= $finfoOk ? 'Loaded' : 'Enable php-fileinfo extension' ?></td></tr>
+        <tr><td>PHP Extensions (mbstring, zip, curl, openssl, json)</td><td><?= ($mbstringOk && $zipOk && $curlOk && $opensslOk && $jsonOk) ? 'PASS' : 'WARN' ?></td><td>mbstring: <?= $mbstringOk ? 'OK' : 'polyfill active' ?> · zip: <?= $zipOk ? 'OK' : 'mini-zip fallback' ?> · curl: <?= $curlOk ? 'OK' : 'missing' ?> · openssl: <?= $opensslOk ? 'OK' : 'missing' ?> · json: <?= $jsonOk ? 'OK' : 'missing' ?></td></tr>
         <tr><td>CSS Stylesheet (<code>assets/css/style.css</code>)</td><td><?= $cssOk ? 'PASS' : 'FAIL' ?></td><td><?= $cssOk ? 'Exists &amp; world-readable (0644)' : 'Missing or chmod blocked! Run: chmod 644 assets/css/style.css' ?></td></tr>
         <tr><td>Visual Block Editor (<code>assets/js/editor.js</code>)</td><td><?= $editorOk ? 'PASS' : 'FAIL' ?></td><td><?= $editorOk ? 'Exists &amp; world-readable (0644)' : 'Missing or chmod blocked! Run: chmod 644 assets/js/editor.js' ?></td></tr>
-        <tr><td>Apache Root <code>.htaccess</code></td><td><?= $htaccessOk ? 'PASS' : 'WARN' ?></td><td><?= $htaccessOk ? 'Present (MIME types &amp; DirectoryIndex configured)' : 'Upload .htaccess to public_html/' ?></td></tr>
+        <tr><td>Apache Root <code>.htaccess</code></td><td><?= $htaccessOk ? 'PASS' : 'WARN' ?></td><td><?= $htaccessOk ? 'Present (MIME types, DirectoryIndex &amp; clean routes)' : 'Upload .htaccess to public_html/' ?></td></tr>
+        <tr><td>Public Attribution Route (<code>credits.php</code>)</td><td><?= file_exists(__DIR__ . '/credits.php') ? 'PASS' : 'FAIL' ?></td><td><?= file_exists(__DIR__ . '/credits.php') ? 'Present (maps /credits, /developer, /developers)' : 'Upload credits.php to public_html/' ?></td></tr>
         <tr><td>Uploads Directory</td><td><?= $uploadsWritable ? 'PASS' : 'FAIL' ?></td><td><code>uploads/</code> <?= $uploadsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
         <tr><td>Backups Directory</td><td><?= $backupsWritable ? 'PASS' : 'WARN' ?></td><td><code>backups/</code> <?= $backupsWritable ? 'writable' : 'needs chmod 755 &amp; owner match' ?></td></tr>
         <tr><td>PHP Sessions &amp; CAPTCHA</td><td><?= ($sessionOk || $dbConnected) ? 'PASS' : 'FAIL' ?></td><td>Save path: <code><?= e($sessionPath) ?></code> <?= $dbConnected ? '· MySQL DB Session + HMAC CAPTCHA fallback active' : '' ?></td></tr>
         <tr><td>MySQL Connection</td><td><?= $dbConnected ? 'PASS' : 'FAIL' ?></td><td><?= $dbConnected ? ('Connected to ' . e(DB_NAME) . " ($tablesCount tables, $usersCount users)") : e($dbError) ?></td></tr>
-        <tr><td>Enhanced Schema (Sports, Facilities, Conferences, Moderation &amp; v10)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v10 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
+        <tr><td>Enhanced Schema (Sports, Facilities, Conferences, Moderation &amp; v11)</td><td><?= $hasHomeComponents ? 'PASS' : 'NEEDS UPGRADE' ?></td><td><?= $hasHomeComponents ? 'All v11 tables present' : 'Click Auto-Upgrade Database Schema below' ?></td></tr>
       </tbody>
     </table>
 
@@ -215,11 +222,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $dbConnected) {
         </form>
         <a href="<?= e(baseUrl('admin/login.php')) ?>" class="btn-secondary">Open Admin Login &rarr;</a>
         <a href="<?= e(baseUrl('index.php')) ?>" class="btn-secondary">Open Public Site &rarr;</a>
+        <a href="<?= e(baseUrl('credits.php')) ?>" class="btn-secondary">Open Developers Page &rarr;</a>
       </div>
     <?php endif; ?>
 
-    <div style="margin-top:1.25rem;padding:0.75rem;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:0.85rem;color:#92400e;">
-      <strong>Ubuntu Webmin CSS / Editor Troubleshooting:</strong> If your CSS looks broken or the rich visual editor shows a plain box after uploading via Webmin File Manager, run in SSH:<br>
+    <div style="margin-top:1.25rem;padding:0.85rem;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:0.84rem;color:#92400e;line-height:1.55;">
+      <strong>Ubuntu Webmin Package &amp; Apache Module Checklist:</strong><br>
+      Install recommended PHP extensions (works with Ubuntu 22.04/24.04):<br>
+      <code>sudo apt update &amp;&amp; sudo apt install -y php-mysql php-mbstring php-zip php-curl php-xml php-gd</code><br>
+      Enable required Apache modules &amp; reload:<br>
+      <code>sudo a2enmod rewrite headers mime &amp;&amp; sudo systemctl restart apache2</code><br>
+      Fix Webmin File Manager upload permissions:<br>
       <code>find /home/&lt;user&gt;/public_html -type d -exec chmod 755 {} \; &amp;&amp; find /home/&lt;user&gt;/public_html -type f -exec chmod 644 {} \;</code><br>
       <strong>Security Notice:</strong> Once your checks pass and admin login works cleanly, delete <code>setup.php</code> from the server!
     </div>

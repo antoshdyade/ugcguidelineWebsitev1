@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { THEME_PALETTES } from '../lib/cmsLogic';
-import { isRecordPublished, partitionHeaderMenus } from '../lib/collegeFeaturesLogic';
+import { isRecordPublished, normalizeHeaderConfig, partitionHeaderMenus } from '../lib/collegeFeaturesLogic';
 import { useThemeAccessibility, type SupportedLang } from '../context/ThemeAccessibilityContext';
 import { SocialIconLinks } from './SocialMediaWidgets';
 import type { CmsCategory, CmsPage, Department, SearchResultItem, SiteSettings } from '../types/cms';
@@ -120,6 +120,7 @@ export function PublicHeader({
   const hasMoreDropdown = overflowMenuCategories.length > 0 || morePortalLinks.length > 0;
 
   const dteDisplay = (settings.dteCode || 'EN-6220').replace(/^EN-/i, '');
+  const headerCfg = normalizeHeaderConfig(settings.headerConfig);
 
   return (
     <header className="relative z-40 border-b border-stone-200 dark:border-slate-800 bg-white dark:bg-slate-950">
@@ -131,20 +132,27 @@ export function PublicHeader({
       </a>
 
       {/* Accessibility, Theme Switcher & Language Utility Ribbon */}
-      <div
-        className="text-white text-xs py-1.5 px-4 border-b border-white/15"
-        style={{ backgroundColor: 'var(--primary-color)' }}
-      >
-        <div className="max-w-[1380px] mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3 overflow-x-auto">
-            <span className="font-medium text-white/90 whitespace-nowrap">
-              DTE: {settings.dteCode} · AICTE: {settings.aicteCode}
-            </span>
-            <span className="hidden md:inline text-white/40">|</span>
-            <span className="hidden md:inline text-white/85 whitespace-nowrap">
-              {settings.shortCode || 'SVERI'} · Autonomous Engineering Campus
-            </span>
-          </div>
+      {headerCfg.showTopUtilityBar && (
+        <div
+          className="text-white text-xs py-1.5 px-4 border-b border-white/15"
+          style={{ backgroundColor: 'var(--primary-color)' }}
+        >
+          <div className="max-w-[1380px] mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3 overflow-x-auto">
+              {headerCfg.showRegulatoryCodes && (
+                <span className="font-medium text-white/90 whitespace-nowrap">
+                  DTE: {settings.dteCode} · AICTE: {settings.aicteCode}
+                </span>
+              )}
+              {headerCfg.showRegulatoryCodes && headerCfg.utilityTagline && (
+                <span className="hidden md:inline text-white/40">|</span>
+              )}
+              {headerCfg.utilityTagline && (
+                <span className="hidden md:inline text-white/85 whitespace-nowrap">
+                  {settings.shortCode || 'SVERI'} · {headerCfg.utilityTagline}
+                </span>
+              )}
+            </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">
             {/* Font Sizing */}
@@ -335,17 +343,20 @@ export function PublicHeader({
             <SocialIconLinks settings={settings} variant="header" />
 
             {/* Admin Portal Button */}
-            <button
-              type="button"
-              onClick={() => onNavigate('/admin')}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white text-slate-900 font-semibold hover:bg-amber-100 whitespace-nowrap shrink-0 transition-colors"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>CMS Admin</span>
-            </button>
+            {headerCfg.showAdminButton && (
+              <button
+                type="button"
+                onClick={() => onNavigate('/admin')}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white text-slate-900 font-semibold hover:bg-amber-100 whitespace-nowrap shrink-0 transition-colors"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>CMS Admin</span>
+              </button>
+            )}
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Institutional Crest / Uploaded Logo, Trust Banner, Institute Code Pill & Global Search */}
       <div
@@ -389,38 +400,41 @@ export function PublicHeader({
         {/* Right Side: Institute Code Emblem (ftccoe-style) + Global Live Search + Mobile Menu */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full lg:w-auto shrink-0">
           {/* Institute Code Box */}
-          <div
-            className="hidden xl:flex items-center gap-2.5 px-3.5 py-2 rounded-full border-2 text-white shrink-0 shadow-xs"
-            style={{
-              backgroundColor: 'var(--primary-color)',
-              borderColor: 'var(--secondary-color)',
-            }}
-          >
-            <GraduationCap className="w-5 h-5 text-amber-300 shrink-0" />
-            <div className="leading-tight">
-              <p className="text-[10px] uppercase tracking-widest text-white/80 font-semibold">
-                Institute Code
-              </p>
-              <p className="text-sm font-bold font-mono-tabular tracking-wide">
-                {dteDisplay}
-              </p>
+          {headerCfg.showInstituteCodeBadge && (
+            <div
+              className="hidden xl:flex items-center gap-2.5 px-3.5 py-2 rounded-full border-2 text-white shrink-0 shadow-xs"
+              style={{
+                backgroundColor: 'var(--primary-color)',
+                borderColor: 'var(--secondary-color)',
+              }}
+            >
+              <GraduationCap className="w-5 h-5 text-amber-300 shrink-0" />
+              <div className="leading-tight">
+                <p className="text-[10px] uppercase tracking-widest text-white/80 font-semibold">
+                  Institute Code
+                </p>
+                <p className="text-sm font-bold font-mono-tabular tracking-wide">
+                  {dteDisplay}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center gap-2.5 flex-1 lg:w-80 xl:w-72">
-            <div ref={searchBoxRef} className="relative flex-1">
-              <div className="relative flex items-center">
-                <Search className="w-4 h-4 text-stone-400 absolute left-3 pointer-events-none" />
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => searchQuery.trim().length >= 2 && setSearchOpen(true)}
-                  placeholder={t('searchPlaceholder')}
-                  aria-label="Global search across pages, faculty, notices, and documents"
-                  className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-stone-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-600"
-                />
-              </div>
+            {headerCfg.showSearchBar && (
+              <div ref={searchBoxRef} className="relative flex-1">
+                <div className="relative flex items-center">
+                  <Search className="w-4 h-4 text-stone-400 absolute left-3 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => searchQuery.trim().length >= 2 && setSearchOpen(true)}
+                    placeholder={t('searchPlaceholder')}
+                    aria-label="Global search across pages, faculty, notices, and documents"
+                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-stone-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-600"
+                  />
+                </div>
 
               {searchOpen && searchQuery.trim().length >= 2 && (
                 <div className="absolute left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 rounded-lg shadow-xl max-h-96 overflow-y-auto z-50">
@@ -458,6 +472,7 @@ export function PublicHeader({
                 </div>
               )}
             </div>
+            )}
 
             <button
               type="button"
@@ -920,12 +935,14 @@ export function PublicHeader({
       </nav>
 
       {/* Secondary Quick-Access Utility Strip (CMS-Managed Top Bar Links, ftccoe-style sub-nav) */}
-      {settings.topBarLinks.length > 0 && (
+      {headerCfg.showStatutoryBar && settings.topBarLinks.length > 0 && (
         <div className="bg-slate-900 dark:bg-slate-950 text-white border-t border-white/10">
           <div className="max-w-[1380px] mx-auto px-4 py-1.5 flex items-center gap-4 overflow-x-auto text-xs">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-400 whitespace-nowrap shrink-0">
-              Statutory &amp; Quick Access:
-            </span>
+            {headerCfg.statutoryBarLabel && (
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-400 whitespace-nowrap shrink-0">
+                {headerCfg.statutoryBarLabel}
+              </span>
+            )}
             {settings.topBarLinks.map((link, idx) => (
               <React.Fragment key={`${link.url}-${idx}`}>
                 {idx > 0 && <span className="text-white/25 select-none">|</span>}

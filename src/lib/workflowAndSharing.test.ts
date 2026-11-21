@@ -8,8 +8,12 @@ import {
   isEntityShareable,
   isRecordPublished,
   migrateDatabaseInPlace,
+  normalizeCreditsPageConfig,
+  normalizeFooterConfig,
+  normalizeHeaderConfig,
   queuePendingRevision,
 } from './collegeFeaturesLogic';
+import { searchCmsContent } from './cmsLogic';
 import { buildSitemapXml, DEFAULT_SEO_SETTINGS, resolveRouteSeo } from './securityAndSeoLogic';
 
 test('canPublishDirectly allows only super_admin to bypass content moderation queue', () => {
@@ -180,3 +184,74 @@ test('resolveRouteSeo uses customizable shortCode/institutionName instead of har
     assert.equal(xml.includes(`/conference/${moderatedDb.conferences[0].slug}`), false);
   }
 });
+
+test('Header, Footer, and Credits normalizers preserve explicit customization and intentionally cleared arrays', () => {
+  const hdr = normalizeHeaderConfig({
+    showTopUtilityBar: false,
+    utilityTagline: 'Research & Innovation Hub',
+    showSearchBar: false,
+  });
+  assert.equal(hdr.showTopUtilityBar, false);
+  assert.equal(hdr.utilityTagline, 'Research & Innovation Hub');
+  assert.equal(hdr.showSearchBar, false);
+  assert.equal(hdr.showStatutoryBar, true);
+
+  const ftr = normalizeFooterConfig({
+    copyrightText: '© 2026 Custom Trust',
+    bottomBarLinks: [],
+    showCreatorCreditBar: true,
+    creatorCreditName: 'Campus Tech Guild',
+  });
+  assert.equal(ftr.copyrightText, '© 2026 Custom Trust');
+  assert.equal(ftr.bottomBarLinks.length, 0);
+  assert.equal(ftr.creatorCreditName, 'Campus Tech Guild');
+
+  const cp = normalizeCreditsPageConfig({
+    pageTitle: 'Engineering Team & Contributors',
+    contributors: [],
+    techStack: [{ name: 'Apache + PHP 8.2', category: 'Runtime', description: 'Production stack' }],
+  });
+  assert.equal(cp.pageTitle, 'Engineering Team & Contributors');
+  assert.equal(cp.contributors.length, 0);
+  assert.equal(cp.techStack.length, 1);
+  assert.equal(cp.techStack[0].name, 'Apache + PHP 8.2');
+});
+
+test('migrateDatabaseInPlace upgrades pre-v11 databases with Header, Footer & Credits configs and /credits SEO + search work', () => {
+  const seed = createSeedDatabase();
+  const legacyDb = {
+    ...structuredClone(seed),
+    schemaVersion: 10,
+    settings: {
+      ...structuredClone(seed.settings),
+      headerConfig: undefined,
+      footerConfig: undefined,
+      creditsPage: undefined,
+    },
+  };
+  const { db, upgraded } = migrateDatabaseInPlace(legacyDb, seed);
+  assert.equal(upgraded, true);
+  assert.equal(db.schemaVersion, 11);
+  assert.ok(db.settings.headerConfig);
+  assert.ok(db.settings.footerConfig);
+  assert.ok((db.settings.creditsPage?.contributors.length || 0) >= 1);
+
+  const devSeo = resolveRouteSeo(
+    '/developer',
+    'https://portal.example.edu.in',
+    db.settings,
+    DEFAULT_SEO_SETTINGS,
+    db.categories,
+    db.pages,
+    db.departments,
+    db.conferences || [],
+  );
+  assert.ok(devSeo.title.includes('Creators'));
+
+  const xml = buildSitemapXml('https://portal.example.edu.in', db);
+  assert.equal(xml.includes('https://portal.example.edu.in/credits'), true);
+
+  const searchHits = searchCmsContent('developer', db);
+  assert.equal(searchHits.some((h) => h.url === '/credits'), true);
+});
+

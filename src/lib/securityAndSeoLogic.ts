@@ -894,6 +894,13 @@ export function resolveRouteSeo(
       title = `${conf.shortName}: ${conf.title} | ${suffix}`;
       description = `${conf.scope} (${conf.startDate} to ${conf.endDate}) — ${conf.theme}`;
     }
+  } else if (cleanPath === '/credits' || cleanPath === '/developer' || cleanPath === '/developers') {
+    const cp = settings.creditsPage;
+    title = `${cp?.pageTitle || 'Platform Creators, Developers & Contributors'} | ${suffix}`;
+    description =
+      cp?.pageSubtitle ||
+      `Platform architecture, developers, faculty coordinators, and contributors behind ${customName || brandShort}.`;
+    keywords = `${brandShort} Developers, Portal Creators, Contributors, Web Engineering Team, Open Source Attribution`;
   }
 
   const resolvedOgImage = /^https?:\/\//i.test(ogImageUrl)
@@ -1015,6 +1022,7 @@ export function buildSitemapXml(baseUrl: string, db: CmsDatabase): string {
     { loc: `${origin}/grievance`, priority: '0.7', changefreq: 'monthly' },
     { loc: `${origin}/feedback`, priority: '0.75', changefreq: 'weekly' },
     { loc: `${origin}/contact`, priority: '0.7', changefreq: 'monthly' },
+    { loc: `${origin}/credits`, priority: '0.6', changefreq: 'monthly' },
   ];
 
   for (const cat of db.categories || []) {

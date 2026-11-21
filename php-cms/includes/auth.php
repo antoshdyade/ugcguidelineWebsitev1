@@ -1342,6 +1342,552 @@ function renderPhpSocialShareBar(PDO $pdo, string $title, string $summary = '', 
         . '</div>' . $script;
 }
 
+function contributorRolePresets(): array
+{
+    return [
+        'Creator',
+        'Lead Developer',
+        'Core Contributor',
+        'UI/UX Designer',
+        'Content Maintainer',
+        'Faculty Advisor',
+    ];
+}
+
+function resolveConfigurableLinkUrl(string $rawUrl): string
+{
+    $u = trim($rawUrl);
+    if ($u === '') {
+        return baseUrl('index.php');
+    }
+    if (preg_match('#^javascript:#i', $u)) {
+        return '#';
+    }
+    if (preg_match('#^(https?://|mailto:|tel:|\#)#i', $u)) {
+        return $u;
+    }
+    $clean = ltrim($u, '/');
+    if ($clean === '' || $clean === 'home') {
+        return baseUrl('index.php');
+    }
+    $directMap = [
+        'admin'       => 'admin/login.php',
+        'credits'     => 'credits.php',
+        'developer'   => 'credits.php',
+        'developers'  => 'credits.php',
+        'facilities'  => 'facilities.php',
+        'sports'      => 'sports.php',
+        'placements'  => 'placements.php',
+        'conferences' => 'conferences.php',
+        'grievance'   => 'grievance.php',
+        'alumni'      => 'alumni.php',
+        'gallery'     => 'gallery.php',
+        'contact'     => 'contact.php',
+        'quick-links' => 'quick-links.php',
+        'feedback'    => 'feedback.php',
+        'search'      => 'search.php',
+        'sitemap.xml' => 'sitemap.php',
+        'robots.txt'  => 'robots.php',
+    ];
+    $lowerClean = strtolower($clean);
+    if (isset($directMap[$lowerClean])) {
+        return baseUrl($directMap[$lowerClean]);
+    }
+    if (preg_match('#^page/([^/?\#]+)$#i', $clean, $m)) {
+        return baseUrl('page.php?slug=' . urlencode($m[1]));
+    }
+    if (preg_match('#^category/([^/?\#]+)$#i', $clean, $m)) {
+        return baseUrl('page.php?cat=' . urlencode($m[1]));
+    }
+    if (preg_match('#^department/([^/?\#]+)(?:/([^/?\#]+))?$#i', $clean, $m)) {
+        $q = 'department.php?dept=' . urlencode($m[1]);
+        if (!empty($m[2])) {
+            $q .= '&sub=' . urlencode($m[2]);
+        }
+        return baseUrl($q);
+    }
+    if (preg_match('#^conference/([^/?\#]+)$#i', $clean, $m)) {
+        return baseUrl('conference.php?slug=' . urlencode($m[1]));
+    }
+    if (preg_match('#^research/([^/?\#]+)$#i', $clean, $m)) {
+        return baseUrl('page.php?slug=' . urlencode($m[1]));
+    }
+    return baseUrl($clean);
+}
+
+function defaultHeaderConfig(): array
+{
+    return [
+        'showTopUtilityBar'      => true,
+        'utilityTagline'         => 'Autonomous Engineering Campus',
+        'showRegulatoryCodes'    => true,
+        'showAdminButton'        => true,
+        'showInstituteCodeBadge' => true,
+        'showSearchBar'          => true,
+        'showStatutoryBar'       => true,
+        'statutoryBarLabel'      => 'Statutory & Quick Access:',
+    ];
+}
+
+function getHeaderConfig(PDO $pdo): array
+{
+    $def = defaultHeaderConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'header_config' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                $merged = array_merge($def, $dec);
+                foreach (['showTopUtilityBar', 'showRegulatoryCodes', 'showAdminButton', 'showInstituteCodeBadge', 'showSearchBar', 'showStatutoryBar'] as $bk) {
+                    $merged[$bk] = !empty($merged[$bk]);
+                }
+                return $merged;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function saveHeaderConfig(PDO $pdo, array $cfg): array
+{
+    $def = defaultHeaderConfig();
+    $clean = [
+        'showTopUtilityBar'      => !empty($cfg['showTopUtilityBar']),
+        'utilityTagline'         => trim((string)($cfg['utilityTagline'] ?? $def['utilityTagline'])),
+        'showRegulatoryCodes'    => !empty($cfg['showRegulatoryCodes']),
+        'showAdminButton'        => !empty($cfg['showAdminButton']),
+        'showInstituteCodeBadge' => !empty($cfg['showInstituteCodeBadge']),
+        'showSearchBar'          => !empty($cfg['showSearchBar']),
+        'showStatutoryBar'       => !empty($cfg['showStatutoryBar']),
+        'statutoryBarLabel'      => trim((string)($cfg['statutoryBarLabel'] ?? $def['statutoryBarLabel'])),
+    ];
+    try {
+        $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('header_config', ?)")
+            ->execute([json_encode($clean, JSON_UNESCAPED_UNICODE)]);
+    } catch (Throwable $ignored) {
+    }
+    return $clean;
+}
+
+function defaultTopBarLinks(): array
+{
+    return [
+        ['label' => 'Quick Links',             'url' => 'quick-links.php'],
+        ['label' => 'Conferences & Workshops', 'url' => 'conferences.php'],
+        ['label' => 'Examination Cell',        'url' => 'page.php?cat=examination'],
+        ['label' => 'Alumni Network',          'url' => 'alumni.php'],
+        ['label' => 'Placements',              'url' => 'placements.php'],
+        ['label' => 'Grievance Helpdesk',      'url' => 'grievance.php'],
+        ['label' => 'FRA Fee Structure',       'url' => 'page.php?slug=prospectus-fee-structure'],
+        ['label' => 'RTI Disclosure',          'url' => 'page.php?slug=rti-disclosure'],
+    ];
+}
+
+function getTopBarLinks(PDO $pdo): array
+{
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'top_bar_links' LIMIT 1")->fetchColumn();
+        if ($raw !== false && $raw !== null) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                $out = [];
+                foreach ($dec as $row) {
+                    if (!is_array($row)) continue;
+                    $lbl = trim((string)($row['label'] ?? ''));
+                    $url = trim((string)($row['url'] ?? ''));
+                    if ($lbl !== '' || $url !== '') {
+                        $out[] = ['label' => $lbl ?: $url, 'url' => $url ?: '#'];
+                    }
+                }
+                return $out;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return defaultTopBarLinks();
+}
+
+function saveTopBarLinks(PDO $pdo, array $links): array
+{
+    $out = [];
+    foreach ($links as $row) {
+        if (!is_array($row)) continue;
+        $lbl = trim((string)($row['label'] ?? ''));
+        $url = trim((string)($row['url'] ?? ''));
+        if ($lbl !== '' || $url !== '') {
+            $out[] = ['label' => $lbl ?: $url, 'url' => $url ?: '#'];
+        }
+    }
+    try {
+        $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('top_bar_links', ?)")
+            ->execute([json_encode(array_values($out), JSON_UNESCAPED_UNICODE)]);
+    } catch (Throwable $ignored) {
+    }
+    return $out;
+}
+
+function defaultFooterColumns(): array
+{
+    return [
+        [
+            'title' => 'Mandatory Self-Disclosure',
+            'links' => [
+                ['label' => 'About HEI & Statutes', 'url' => 'page.php?slug=about-overview'],
+                ['label' => 'FRA Fee Structure',    'url' => 'page.php?slug=prospectus-fee-structure'],
+                ['label' => 'RTI Disclosure',       'url' => 'page.php?slug=rti-disclosure'],
+                ['label' => 'Statutory Officers',   'url' => 'page.php?slug=statutory-officers'],
+            ],
+        ],
+        [
+            'title' => 'Academics & Departments',
+            'links' => [
+                ['label' => 'Examination Cell & CoE',    'url' => 'page.php?cat=examination'],
+                ['label' => 'Computer Science & Engg.',  'url' => 'department.php?dept=computer-science'],
+                ['label' => 'Mechanical Engineering',    'url' => 'department.php?dept=mechanical'],
+                ['label' => 'Civil & E&TC Engg.',        'url' => 'department.php?dept=civil'],
+            ],
+        ],
+        [
+            'title' => 'Repositories & Contact',
+            'links' => [
+                ['label' => 'Campus Facilities',         'url' => 'facilities.php'],
+                ['label' => 'Sports & Gymkhana',         'url' => 'sports.php'],
+                ['label' => 'Downloadable Repository',   'url' => 'quick-links.php'],
+                ['label' => 'Conferences & Events',      'url' => 'conferences.php'],
+                ['label' => 'Training & Placements',     'url' => 'placements.php'],
+                ['label' => 'Complaint & Feedback Cell', 'url' => 'feedback.php'],
+                ['label' => 'Alumni Network & Jobs',     'url' => 'alumni.php'],
+                ['label' => 'Picture Gallery',           'url' => 'gallery.php'],
+                ['label' => 'Telephone Directory',       'url' => 'contact.php'],
+                ['label' => 'Staff CMS Login',           'url' => 'admin/login.php'],
+            ],
+        ],
+    ];
+}
+
+function getFooterColumns(PDO $pdo): array
+{
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'footer_columns' LIMIT 1")->fetchColumn();
+        if ($raw !== false && $raw !== null) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                $cols = [];
+                foreach ($dec as $col) {
+                    if (!is_array($col)) continue;
+                    $title = trim((string)($col['title'] ?? ''));
+                    $links = [];
+                    foreach (($col['links'] ?? []) as $lk) {
+                        if (!is_array($lk)) continue;
+                        $lbl = trim((string)($lk['label'] ?? ''));
+                        $url = trim((string)($lk['url'] ?? ''));
+                        if ($lbl !== '' || $url !== '') {
+                            $links[] = ['label' => $lbl ?: $url, 'url' => $url ?: '#'];
+                        }
+                    }
+                    if ($title !== '' || !empty($links)) {
+                        $cols[] = ['title' => $title ?: 'Links', 'links' => $links];
+                    }
+                }
+                return $cols;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return defaultFooterColumns();
+}
+
+function saveFooterColumns(PDO $pdo, array $cols): array
+{
+    $clean = [];
+    foreach ($cols as $col) {
+        if (!is_array($col)) continue;
+        $title = trim((string)($col['title'] ?? ''));
+        $links = [];
+        foreach (($col['links'] ?? []) as $lk) {
+            if (!is_array($lk)) continue;
+            $lbl = trim((string)($lk['label'] ?? ''));
+            $url = trim((string)($lk['url'] ?? ''));
+            if ($lbl !== '' || $url !== '') {
+                $links[] = ['label' => $lbl ?: $url, 'url' => $url ?: '#'];
+            }
+        }
+        if ($title !== '' || !empty($links)) {
+            $clean[] = ['title' => $title ?: 'Links', 'links' => $links];
+        }
+    }
+    try {
+        $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('footer_columns', ?)")
+            ->execute([json_encode(array_values($clean), JSON_UNESCAPED_UNICODE)]);
+    } catch (Throwable $ignored) {
+    }
+    return $clean;
+}
+
+function defaultFooterConfig(): array
+{
+    return [
+        'showContactBlock'     => true,
+        'copyrightText'        => '',
+        'complianceNote'       => 'UGC NEP 2020 Public Self-Disclosure Compliant.',
+        'showBottomLinks'      => true,
+        'bottomBarLinks'       => [
+            ['label' => 'Sitemap',                  'url' => 'sitemap.php'],
+            ['label' => 'Robots.txt',               'url' => 'robots.php'],
+            ['label' => 'RTI Cell',                 'url' => 'page.php?slug=rti-disclosure'],
+            ['label' => 'Feedback Cell',            'url' => 'feedback.php'],
+            ['label' => 'Grievance Redressal',      'url' => 'grievance.php'],
+            ['label' => 'Developers & Contributors','url' => 'credits.php'],
+        ],
+        'showCreatorCreditBar' => true,
+        'creatorCreditLabel'   => 'Designed & Developed by',
+        'creatorCreditName'    => 'Campus Web & Software Engineering Team',
+        'creatorCreditUrl'     => 'credits.php',
+    ];
+}
+
+function getFooterConfig(PDO $pdo): array
+{
+    $def = defaultFooterConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'footer_config' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                $merged = array_merge($def, $dec);
+                foreach (['showContactBlock', 'showBottomLinks', 'showCreatorCreditBar'] as $bk) {
+                    $merged[$bk] = !empty($merged[$bk]);
+                }
+                if (array_key_exists('bottomBarLinks', $dec) && is_array($dec['bottomBarLinks'])) {
+                    $cleanLinks = [];
+                    foreach ($dec['bottomBarLinks'] as $lk) {
+                        if (!is_array($lk)) continue;
+                        $lbl = trim((string)($lk['label'] ?? ''));
+                        $url = trim((string)($lk['url'] ?? ''));
+                        if ($lbl !== '' || $url !== '') {
+                            $cleanLinks[] = ['label' => $lbl ?: $url, 'url' => $url ?: '#'];
+                        }
+                    }
+                    $merged['bottomBarLinks'] = $cleanLinks;
+                }
+                return $merged;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function saveFooterConfig(PDO $pdo, array $cfg): array
+{
+    $def = defaultFooterConfig();
+    $cleanLinks = [];
+    if (array_key_exists('bottomBarLinks', $cfg) && is_array($cfg['bottomBarLinks'])) {
+        foreach ($cfg['bottomBarLinks'] as $lk) {
+            if (!is_array($lk)) continue;
+            $lbl = trim((string)($lk['label'] ?? ''));
+            $url = trim((string)($lk['url'] ?? ''));
+            if ($lbl !== '' || $url !== '') {
+                $cleanLinks[] = ['label' => $lbl ?: $url, 'url' => $url ?: '#'];
+            }
+        }
+    } else {
+        $cleanLinks = $def['bottomBarLinks'];
+    }
+    $clean = [
+        'showContactBlock'     => !empty($cfg['showContactBlock']),
+        'copyrightText'        => trim((string)($cfg['copyrightText'] ?? '')),
+        'complianceNote'       => trim((string)($cfg['complianceNote'] ?? $def['complianceNote'])),
+        'showBottomLinks'      => !empty($cfg['showBottomLinks']),
+        'bottomBarLinks'       => array_values($cleanLinks),
+        'showCreatorCreditBar' => !empty($cfg['showCreatorCreditBar']),
+        'creatorCreditLabel'   => trim((string)($cfg['creatorCreditLabel'] ?? $def['creatorCreditLabel'])),
+        'creatorCreditName'    => trim((string)($cfg['creatorCreditName'] ?? $def['creatorCreditName'])),
+        'creatorCreditUrl'     => trim((string)($cfg['creatorCreditUrl'] ?? $def['creatorCreditUrl'])),
+    ];
+    try {
+        $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('footer_config', ?)")
+            ->execute([json_encode($clean, JSON_UNESCAPED_UNICODE)]);
+    } catch (Throwable $ignored) {
+    }
+    return $clean;
+}
+
+function defaultCreditsPageConfig(): array
+{
+    return [
+        'eyebrow'                 => 'Portal Architecture & Attribution',
+        'pageTitle'               => 'Platform Creators, Developers & Contributors',
+        'pageSubtitle'            => 'Meet the system architects, full-stack engineers, institutional coordinators, and content contributors who designed, built, and maintain the official web portal.',
+        'projectVersion'          => '2026 Enterprise Release',
+        'releaseYear'             => '2026',
+        'organizationCredit'      => 'Institutional Web & Digital Systems Cell',
+        'licenseNote'             => 'Built for UGC Public Self-Disclosure, Autonomous Governance & Security Compliance.',
+        'acknowledgementsHtml'    => '<p>This institutional digital portal was engineered to deliver transparent UGC NEP 2020 self-disclosure, departmental microsites, examination updates, research &amp; placement portals, and hardened RBAC administration. Every contributor, developer, faculty coordinator, and department administrator listed here plays an ongoing role in keeping public academic information accurate, accessible, and secure.</p>',
+        'isShareable'             => true,
+        'showContributorsSection' => true,
+        'showTechStackSection'    => true,
+        'contributors' => [
+            [
+                'id'            => 1,
+                'name'          => 'Institutional Web & ERP Engineering Team',
+                'role'          => 'Platform Creator & Systems Architect',
+                'category'      => 'Creator',
+                'affiliation'   => 'Centre for Digital Governance & Campus IT',
+                'email'         => 'webmaster@coe.sveri.ac.in',
+                'websiteUrl'    => '',
+                'githubUrl'     => '',
+                'linkedinUrl'   => '',
+                'photoUrl'      => '',
+                'bio'           => 'Conceptualized the modular UGC-compliant architecture, RBAC governance workflow, Super Admin content moderation queue, and full-stack backup/security stack.',
+                'contributions' => 'System Architecture · Security Shield · Dual-Stack React & PHP/MySQL Engine',
+                'isActive'      => true,
+                'sortOrder'     => 1,
+            ],
+            [
+                'id'            => 2,
+                'name'          => 'Departmental CMS & IQAC Content Cell',
+                'role'          => 'Editorial Coordinators & Disclosure Leads',
+                'category'      => 'Core Contributor',
+                'affiliation'   => 'Internal Quality Assurance Cell (IQAC) & HOD Desk',
+                'email'         => 'iqac@coe.sveri.ac.in',
+                'websiteUrl'    => '',
+                'githubUrl'     => '',
+                'linkedinUrl'   => '',
+                'photoUrl'      => '',
+                'bio'           => 'Curates statutory documentation, NAAC/NBA/NIRF disclosures, academic syllabi, and verified departmental micro-pages.',
+                'contributions' => 'Academic Governance · Statutory Disclosures · Accessibility Audits',
+                'isActive'      => true,
+                'sortOrder'     => 2,
+            ],
+            [
+                'id'            => 3,
+                'name'          => 'Accessibility, SEO & Visual Experience Guild',
+                'role'          => 'UI/UX & WCAG Compliance Contributors',
+                'category'      => 'UI/UX Designer',
+                'affiliation'   => 'Digital Media & Student Portal Group',
+                'email'         => '',
+                'websiteUrl'    => '',
+                'githubUrl'     => '',
+                'linkedinUrl'   => '',
+                'photoUrl'      => '',
+                'bio'           => 'Designed bilingual support, dyslexia-friendly reading controls, screen-reader landmarks, OpenGraph cards, and responsive mobile-first layouts.',
+                'contributions' => 'Design System · WCAG AA Contrast · Multi-Language & TTS Controls',
+                'isActive'      => true,
+                'sortOrder'     => 3,
+            ],
+        ],
+        'techStack' => [
+            [
+                'name'        => 'Apache 2.4 + PHP 8.x PDO',
+                'category'    => 'Deployment Runtime',
+                'description' => 'Webmin/Virtualmin-ready server runtime with prepared SQL statements, single-use SVG CAPTCHA, and clean .htaccess routing.',
+            ],
+            [
+                'name'        => 'MySQL 8.0 / MariaDB',
+                'category'    => 'Relational Storage',
+                'description' => 'ACID-compliant storage for UGC pages, departments, conferences, alumni, logs, and the Super Admin approval revision queue.',
+            ],
+            [
+                'name'        => 'React + TypeScript + Vite',
+                'category'    => 'Interactive Preview',
+                'description' => 'Real-time modular workspace and instant preview parity paired with Tailwind typography and accessible controls.',
+            ],
+            [
+                'name'        => 'Security Shield & Audit Trail',
+                'category'    => 'AppSec & Monitoring',
+                'description' => 'WAF threat inspection, CSRF tokens, IP blocklisting, rate limiting, GeoIP analytics, and Super Admin revision diffs.',
+            ],
+        ],
+    ];
+}
+
+function getCreditsPageConfig(PDO $pdo): array
+{
+    $def = defaultCreditsPageConfig();
+    try {
+        $raw = $pdo->query("SELECT val_json FROM cms_kv_store WHERE key_name = 'credits_page_config' LIMIT 1")->fetchColumn();
+        if ($raw) {
+            $dec = json_decode((string)$raw, true);
+            if (is_array($dec)) {
+                $merged = array_merge($def, $dec);
+                $merged['isShareable'] = !isset($dec['isShareable']) || !empty($dec['isShareable']);
+                $merged['showContributorsSection'] = !isset($dec['showContributorsSection']) || !empty($dec['showContributorsSection']);
+                $merged['showTechStackSection'] = !isset($dec['showTechStackSection']) || !empty($dec['showTechStackSection']);
+                if (array_key_exists('contributors', $dec) && is_array($dec['contributors'])) {
+                    $contribs = [];
+                    foreach ($dec['contributors'] as $idx => $c) {
+                        if (!is_array($c)) continue;
+                        $contribs[] = [
+                            'id'            => (int)($c['id'] ?? ($idx + 1)),
+                            'name'          => trim((string)($c['name'] ?? '')),
+                            'role'          => trim((string)($c['role'] ?? '')),
+                            'category'      => trim((string)($c['category'] ?? 'Core Contributor')),
+                            'affiliation'   => trim((string)($c['affiliation'] ?? '')),
+                            'email'         => trim((string)($c['email'] ?? '')),
+                            'websiteUrl'    => trim((string)($c['websiteUrl'] ?? '')),
+                            'githubUrl'     => trim((string)($c['githubUrl'] ?? '')),
+                            'linkedinUrl'   => trim((string)($c['linkedinUrl'] ?? '')),
+                            'photoUrl'      => trim((string)($c['photoUrl'] ?? '')),
+                            'bio'           => trim((string)($c['bio'] ?? '')),
+                            'contributions' => trim((string)($c['contributions'] ?? '')),
+                            'isActive'      => !isset($c['isActive']) || !empty($c['isActive']),
+                            'sortOrder'     => (int)($c['sortOrder'] ?? ($idx + 1)),
+                        ];
+                    }
+                    usort($contribs, static fn(array $a, array $b): int => ($a['sortOrder'] <=> $b['sortOrder']) ?: ($a['id'] <=> $b['id']));
+                    $merged['contributors'] = $contribs;
+                }
+                if (array_key_exists('techStack', $dec) && is_array($dec['techStack'])) {
+                    $stack = [];
+                    foreach ($dec['techStack'] as $st) {
+                        if (!is_array($st)) continue;
+                        $n = trim((string)($st['name'] ?? ''));
+                        if ($n === '') continue;
+                        $stack[] = [
+                            'name'        => $n,
+                            'category'    => trim((string)($st['category'] ?? '')),
+                            'description' => trim((string)($st['description'] ?? '')),
+                        ];
+                    }
+                    $merged['techStack'] = $stack;
+                }
+                return $merged;
+            }
+        }
+    } catch (Throwable $ignored) {
+    }
+    return $def;
+}
+
+function saveCreditsPageConfig(PDO $pdo, array $cfg): array
+{
+    $def = defaultCreditsPageConfig();
+    $clean = [
+        'eyebrow'                 => trim((string)($cfg['eyebrow'] ?? $def['eyebrow'])),
+        'pageTitle'               => trim((string)($cfg['pageTitle'] ?? $def['pageTitle'])) ?: $def['pageTitle'],
+        'pageSubtitle'            => trim((string)($cfg['pageSubtitle'] ?? $def['pageSubtitle'])),
+        'projectVersion'          => trim((string)($cfg['projectVersion'] ?? '')),
+        'releaseYear'             => trim((string)($cfg['releaseYear'] ?? '')),
+        'organizationCredit'      => trim((string)($cfg['organizationCredit'] ?? '')),
+        'licenseNote'             => trim((string)($cfg['licenseNote'] ?? '')),
+        'acknowledgementsHtml'    => (string)($cfg['acknowledgementsHtml'] ?? ''),
+        'isShareable'             => !empty($cfg['isShareable']),
+        'showContributorsSection' => !empty($cfg['showContributorsSection']),
+        'showTechStackSection'    => !empty($cfg['showTechStackSection']),
+        'contributors'            => array_values(is_array($cfg['contributors'] ?? null) ? $cfg['contributors'] : []),
+        'techStack'               => array_values(is_array($cfg['techStack'] ?? null) ? $cfg['techStack'] : []),
+    ];
+    usort($clean['contributors'], static fn(array $a, array $b): int => ((int)($a['sortOrder'] ?? 999) <=> (int)($b['sortOrder'] ?? 999)) ?: ((int)($a['id'] ?? 0) <=> (int)($b['id'] ?? 0)));
+    try {
+        $pdo->prepare("REPLACE INTO cms_kv_store (key_name, val_json) VALUES ('credits_page_config', ?)")
+            ->execute([json_encode($clean, JSON_UNESCAPED_UNICODE)]);
+    } catch (Throwable $ignored) {
+    }
+    return $clean;
+}
+
 function researchPatentTypePresets(): array
 {
     return [
@@ -2716,6 +3262,7 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
             "ALTER TABLE sports_notices ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
             "ALTER TABLE facilities ADD COLUMN is_shareable TINYINT(1) NOT NULL DEFAULT 1",
             "ALTER TABLE facilities ADD COLUMN status ENUM('published','pending_approval','rejected','draft') NOT NULL DEFAULT 'published'",
+            "ALTER TABLE site_settings ADD COLUMN short_code VARCHAR(32) NOT NULL DEFAULT 'SVERI' AFTER institution_name",
         ] as $v10Alter) {
             try {
                 $pdo->exec($v10Alter);
@@ -2730,6 +3277,25 @@ function ensureCmsSchemaUpgraded(PDO $pdo): void
                 $pdo->prepare("INSERT INTO cms_kv_store (key_name, val_json) VALUES ('shareable_synced_v1', '1') ON DUPLICATE KEY UPDATE val_json = '1'")->execute();
             }
         } catch (Throwable $ignoredShareSync) {
+        }
+
+        try {
+            $kvSeedPairs = [
+                'header_config'       => json_encode(defaultHeaderConfig(), JSON_UNESCAPED_UNICODE),
+                'top_bar_links'       => json_encode(defaultTopBarLinks(), JSON_UNESCAPED_UNICODE),
+                'footer_columns'      => json_encode(defaultFooterColumns(), JSON_UNESCAPED_UNICODE),
+                'footer_config'       => json_encode(defaultFooterConfig(), JSON_UNESCAPED_UNICODE),
+                'credits_page_config' => json_encode(defaultCreditsPageConfig(), JSON_UNESCAPED_UNICODE),
+            ];
+            $kvCheck = $pdo->prepare('SELECT key_name FROM cms_kv_store WHERE key_name = ? LIMIT 1');
+            $kvIns   = $pdo->prepare('INSERT IGNORE INTO cms_kv_store (key_name, val_json) VALUES (?, ?)');
+            foreach ($kvSeedPairs as $kName => $kVal) {
+                $kvCheck->execute([$kName]);
+                if (!$kvCheck->fetchColumn() && $kVal !== false) {
+                    $kvIns->execute([$kName, $kVal]);
+                }
+            }
+        } catch (Throwable $ignoredKvSeed) {
         }
 
         // Analytics, SEO, Hit Counter & Security WAF tables + firewall execution

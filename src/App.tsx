@@ -13,6 +13,7 @@ import { GrievancePortal, PlacementsPortal } from './components/EngineeringPorta
 import { SportsPortal } from './components/SportsPortal';
 import { FacilitiesPortal } from './components/FacilitiesPortal';
 import { FeedbackPortal, type FeedbackSummaryStats } from './components/FeedbackPortal';
+import { CreditsPage } from './components/CreditsPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { DEFAULT_SEO_SETTINGS, resolveRouteSeo } from './lib/securityAndSeoLogic';
 import type {
@@ -425,6 +426,10 @@ export default function App() {
           directory={data.telephoneDirectory}
         />
       );
+    }
+
+    if (pathname === '/credits' || pathname === '/developer' || pathname === '/developers') {
+      return <CreditsPage settings={data.settings} onNavigate={navigate} />;
     }
 
     if (pathname === '/alumni' || pathname.startsWith('/alumni/')) {
